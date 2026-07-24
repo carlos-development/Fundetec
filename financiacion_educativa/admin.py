@@ -6,6 +6,7 @@ from .models import (
     DocumentoFinanciacion,
     HistorialEstadoSolicitud,
     ParticipanteFinanciacion,
+    RegistroIdempotenciaSolicitud,
     RolParticipanteFinanciacion,
     SolicitudFinanciacionEducativa,
 )
@@ -54,6 +55,25 @@ class SolicitudFinanciacionEducativaAdmin(admin.ModelAdmin):
         return f'{obj.nombres} {obj.apellidos}'.strip()
 
     def has_add_permission(self, request):
+        return False
+
+
+@admin.register(RegistroIdempotenciaSolicitud)
+class RegistroIdempotenciaSolicitudAdmin(admin.ModelAdmin):
+    list_display = ('institucion', 'solicitud', 'creada_en', 'ultimo_reuso_en')
+    list_filter = ('institucion', 'creada_en')
+    search_fields = ('solicitud__referencia_externa', 'clave_hash', 'payload_hash')
+    readonly_fields = tuple(
+        field.name for field in RegistroIdempotenciaSolicitud._meta.fields
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
         return False
 
 

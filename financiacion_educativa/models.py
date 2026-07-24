@@ -107,6 +107,44 @@ class SolicitudFinanciacionEducativa(models.Model):
         return f'{self.referencia_externa} - {self.institucion.nombre_comercial}'
 
 
+class RegistroIdempotenciaSolicitud(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    institucion = models.ForeignKey(
+        Institucion,
+        on_delete=models.PROTECT,
+        related_name='registros_idempotencia_financiacion',
+    )
+    clave_hash = models.CharField(max_length=64, validators=[hash_sha256_validator])
+    payload_hash = models.CharField(max_length=64, validators=[hash_sha256_validator])
+    solicitud = models.ForeignKey(
+        SolicitudFinanciacionEducativa,
+        on_delete=models.PROTECT,
+        related_name='registros_idempotencia',
+    )
+    creada_en = models.DateTimeField(auto_now_add=True)
+    ultimo_reuso_en = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-creada_en']
+        verbose_name = 'Registro de idempotencia de solicitud'
+        verbose_name_plural = 'Registros de idempotencia de solicitudes'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['institucion', 'clave_hash'],
+                name='uniq_idempotencia_clave_institucion',
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=['institucion', 'creada_en'],
+                name='idem_edu_inst_fecha_idx',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.institucion_id} - {self.solicitud_id}'
+
+
 class ParticipanteFinanciacion(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     solicitud = models.ForeignKey(

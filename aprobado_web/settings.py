@@ -217,6 +217,8 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'django.contrib.sites',
     'django.contrib.humanize',
+    'rest_framework',
+    'drf_spectacular',
     'usuarios',
     'configuraciones',
     'gestion_creditos',
@@ -225,6 +227,20 @@ INSTALLED_APPS = [
     'financiacion_educativa',
     'usuariocreditos',
 ]
+
+REST_FRAMEWORK = {
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+}
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Aprobado - API de financiacion educativa',
+    'DESCRIPTION': (
+        'API institucional versionada para originar y consultar solicitudes '
+        'de financiacion educativa.'
+    ),
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+}
 
 if ALLAUTH_AVAILABLE:
     INSTALLED_APPS.append('allauth')

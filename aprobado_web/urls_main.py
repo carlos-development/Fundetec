@@ -5,6 +5,7 @@ Scope principal: Libranza + paneles internos.
 from django.conf import settings
 from django.conf.urls.static import static
 from django.urls import include, path
+from drf_spectacular.views import SpectacularAPIView
 
 from .urls_common import common_urlpatterns
 from .views import portal_entrypoint_view
@@ -12,6 +13,13 @@ from .views import portal_entrypoint_view
 
 urlpatterns = [
     *common_urlpatterns,
+
+    # API institucional de financiacion educativa
+    path(
+        "api/v1/financiacion-educativa/",
+        include("financiacion_educativa.api.urls"),
+    ),
+    path("api/v1/schema/", SpectacularAPIView.as_view(), name="api-schema"),
 
     # Producto principal
     path("libranza/", include("usuarios.urls_libranza")),

@@ -22,7 +22,9 @@ class TransicionesEstadoTests(TestCase):
 
         self.assertEqual(actualizada.estado, Estado.PENDING_TERMS)
         self.assertEqual(actualizada.historial_estados.count(), 2)
-        ultimo = actualizada.historial_estados.last()
+        ultimo = actualizada.historial_estados.get(
+            estado_nuevo=Estado.PENDING_TERMS
+        )
         self.assertEqual(ultimo.estado_anterior, Estado.PENDING_USER_REGISTRATION)
         self.assertEqual(ultimo.estado_nuevo, Estado.PENDING_TERMS)
 
