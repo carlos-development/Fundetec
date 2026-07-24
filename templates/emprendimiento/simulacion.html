@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    {% load static %}
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aprobado</title>
+    <link rel="icon" type="image/png" href="{% static 'images/favicon.png' %}">
+    <link rel="stylesheet" href="{% static 'css/styles.css' %}">
+</head>
+<body class="body-index">
+<div class="div-body-main">
+    {% include 'base/navbar.html' %}
+
+    <main class="simulador-main">
+        <section class="simulador-hero-section">
+            <div class="simulador-container">
+                <div class="simulador-hero">
+                    <!-- SIMULADOR DE EMPRENDIMIENTO -->
+                    <div class="simulador-text-content">
+                        <h1>Una solución financiera segura para tu negocio</h1>
+                        <p>Accede a financiamiento ágil y confiable, diseñado específicamente para las necesidades de tu
+                            negocio, sin trámites complicados.</p>
+                        {# NUEVA URL - Emprendimiento #}
+                        <a href="{% url 'emprendimiento:solicitar' %}" target="_blank" class="simulador-cta-button">Aplicar ahora</a>
+                    </div>
+
+                    <div class="simulador-card">
+                        <form action="#" class="simulador-form">
+                            <div class="simulador-form-step active">
+                                <!-- Primer slider - Monto del crédito -->
+                                <div class="simulador-slider-container">
+                                    <div class="simulador-slider-title">¿Cuánto necesitas?</div>
+                                    <div class="simulador-range-container">
+                                        <div class="simulador-range-progress" id="simulador-progress-1"></div>
+                                        <input type="range" min="200000" max="800000" step="10000" value="500000"
+                                               class="simulador-range-input" id="simulador-range-1">
+                                        <div class="simulador-range-tooltip" id="simulador-tooltip-1">$ 500.000</div>
+                                    </div>
+                                    <div class="simulador-range-labels">
+                                        <span>$ 200.000</span>
+                                        <span>$ 800.000</span>
+                                    </div>
+                                </div>
+
+                                <!-- Segundo slider - Plazo (1-3 meses) -->
+                                <div class="simulador-slider-container">
+                                    <div class="simulador-slider-title">¿Cuándo lo puedes pagar?</div>
+                                    <div class="simulador-range-container">
+                                        <div class="simulador-range-progress" id="simulador-progress-2"></div>
+                                        <input type="range" min="1" max="3" step="1" value="2"
+                                               class="simulador-range-input" id="simulador-range-2">
+                                        <div class="simulador-range-tooltip" id="simulador-tooltip-2">2 meses</div>
+                                    </div>
+                                    <div class="simulador-range-labels">
+                                        <span>1 mes</span>
+                                        <span>3 meses</span>
+                                    </div>
+                                </div>
+
+                                <!-- Resultados del cálculo - EMPRENDIMIENTO -->
+                                <div class="simulador-results-container">
+                                    <div class="simulador-result-row">
+                                        <label for="total-pr-emp" class="simulador-result-label">Monto solicitado:</label>
+                                        <input type="text" id="total-pr-emp" name="total-pr-emp" value="500.000,00"
+                                               class="simulador-result-input" readonly>
+                                    </div>
+                                    <div class="simulador-result-row">
+                                        <label for="comisionEmp" class="simulador-result-label">Comisión (10%):</label>
+                                        <input type="text" id="comisionEmp" name="comisionEmp" value="50.000,00"
+                                               class="simulador-result-input" readonly>
+                                    </div>
+                                    <div class="simulador-result-row">
+                                        <label for="ivaComisionEmp" class="simulador-result-label">IVA sobre comisión (19%):</label>
+                                        <input type="text" id="ivaComisionEmp" name="ivaComisionEmp" value="9.500,00"
+                                               class="simulador-result-input" readonly>
+                                    </div>
+                                    <div class="simulador-result-row">
+                                        <label for="interesesEmp" class="simulador-result-label">Intereses (3.5% EM):</label>
+                                        <input type="text" id="interesesEmp" name="interesesEmp" value="36.044,35"
+                                               class="simulador-result-input" readonly>
+                                    </div>
+                                    <!-- Afianzadora (próximamente - estructura lista) -->
+                                    <div class="simulador-result-row" style="opacity: 0.5;">
+                                        <label for="afianzadoraEmp" class="simulador-result-label">Afianzadora (4% + IVA) - Próximamente:</label>
+                                        <input type="text" id="afianzadoraEmp" name="afianzadoraEmp" value="23.800,00"
+                                               class="simulador-result-input" readonly>
+                                    </div>
+                                    <div class="simulador-result-row">
+                                        <label for="totalPagarEmp" class="simulador-result-label">Total a pagar:</label>
+                                        <input type="text" id="totalPagarEmp" name="totalPagarEmp" value="595.500,00"
+                                               class="simulador-result-input" readonly>
+                                    </div>
+                                    <div class="simulador-result-row">
+                                        <label for="cuotaMensualEmp" class="simulador-result-label">Cuota mensual:</label>
+                                        <input type="text" id="cuotaMensualEmp" name="cuotaMensualEmp" value="297.750,00"
+                                               class="simulador-result-input" readonly>
+                                    </div>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    {% include 'base/footer.html' %}
+
+</div>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        // SCRIPT PARA SIMULADOR DE EMPRENDIMIENTO
+        const totalPrestamoInput = document.getElementById("total-pr-emp");
+        const comisionEmpInput = document.getElementById("comisionEmp");
+        const ivaComisionEmpInput = document.getElementById("ivaComisionEmp");
+        const interesesEmpInput = document.getElementById("interesesEmp");
+        const afianzadoraEmpInput = document.getElementById("afianzadoraEmp");
+        const totalPagarEmpInput = document.getElementById("totalPagarEmp");
+        const cuotaMensualEmpInput = document.getElementById("cuotaMensualEmp");
+
+        function calcularCuotaAnualidad(monto, tasaMensual, meses) {
+            if (tasaMensual === 0) {
+                return monto / meses;
+            }
+            const factor = Math.pow(1 + tasaMensual, meses);
+            const cuota = monto * (tasaMensual * factor) / (factor - 1);
+            return cuota;
+        }
+
+        function actualizarCalculosEmprendimiento() {
+            const montoSolicitado = parseFloat(slider1.value);
+            const meses = parseFloat(slider2.value);
+
+            // Calcular comisión (10% del monto solicitado)
+            const comision = montoSolicitado * 0.10;
+            const ivaComision = comision * 0.19;
+
+            // Calcular afianzadora (4% + IVA)
+            const afianzadora = montoSolicitado * 0.04;
+            const ivaAfianzadora = afianzadora * 0.19;
+            const totalAfianzadora = afianzadora + ivaAfianzadora;
+
+            // Capital financiado total (monto + comisión + IVA comisión)
+            const totalSinAfianzadora = montoSolicitado + comision + ivaComision;
+
+            // Tasa de interés mensual: 3.5% efectiva mensual para emprendimiento
+            const tasaMensual = 0.035;
+
+            // Calcular cuota mensual usando fórmula de amortización francesa
+            const cuotaMensual = calcularCuotaAnualidad(totalSinAfianzadora, tasaMensual, meses);
+
+            // Total a pagar = cuota mensual * número de meses
+            const totalPagar = cuotaMensual * meses;
+
+            // Intereses = total a pagar - capital financiado
+            const intereses = totalPagar - totalSinAfianzadora;
+
+            totalPrestamoInput.value = formatColombianNumber(montoSolicitado);
+            comisionEmpInput.value = formatColombianNumber(comision);
+            ivaComisionEmpInput.value = formatColombianNumber(ivaComision);
+            interesesEmpInput.value = formatColombianNumber(intereses);
+            afianzadoraEmpInput.value = formatColombianNumber(totalAfianzadora);
+            totalPagarEmpInput.value = formatColombianNumber(totalPagar);
+            cuotaMensualEmpInput.value = formatColombianNumber(cuotaMensual);
+        }
+
+        // Configuración común de sliders
+        const slider1 = document.getElementById("simulador-range-1");
+        const tooltip1 = document.getElementById("simulador-tooltip-1");
+        const progress1 = document.getElementById("simulador-progress-1");
+
+        const slider2 = document.getElementById("simulador-range-2");
+        const tooltip2 = document.getElementById("simulador-tooltip-2");
+        const progress2 = document.getElementById("simulador-progress-2");
+
+        function formatColombianNumber(num) {
+            return new Intl.NumberFormat('es-CO', {
+                style: 'currency',
+                currency: 'COP',
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            }).format(num);
+        }
+
+        function updateSlider1() {
+            const minVal = parseFloat(slider1.min);
+            const maxVal = parseFloat(slider1.max);
+            const val = parseFloat(slider1.value);
+            const percent = ((val - minVal) / (maxVal - minVal)) * 100;
+
+            tooltip1.innerText = formatColombianNumber(val);
+            tooltip1.style.left = `${percent}%`;
+            tooltip1.style.transform = 'translateX(-50%)';
+            progress1.style.width = `${percent}%`;
+
+            actualizarCalculosEmprendimiento();
+        }
+
+        function updateSlider2() {
+            const val = slider2.value;
+            const percent = ((val - slider2.min) / (slider2.max - slider2.min)) * 100;
+
+            tooltip2.innerText = `${val} ${val === "1" ? "mes" : "meses"}`;
+            tooltip2.style.left = `${percent}%`;
+            tooltip2.style.transform = 'translateX(-50%)';
+            progress2.style.width = `${percent}%`;
+
+            actualizarCalculosEmprendimiento();
+        }
+
+        // Event listeners
+        slider1.addEventListener("input", updateSlider1);
+        slider2.addEventListener("input", updateSlider2);
+        slider1.addEventListener("change", updateSlider1);
+        slider2.addEventListener("change", updateSlider2);
+
+        // Inicializar
+        updateSlider1();
+        updateSlider2();
+    });
+</script>
+
+</body>
+</html>

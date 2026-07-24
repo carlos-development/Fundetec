@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión de Créditos - Aprobado</title>
+    {% load static %}
+    {% load humanize %}
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="{% static 'creditos/css/base_styles.css' %}" rel="stylesheet">
+    {% include 'base/favicon.html' %}
+</head>
+<body class="theme-gestion theme-applications">
+{% include 'base/loader_global.html' %}
+    <header class="page-header">
+        <div class="container-fluid" style="max-width: 1400px;">
+            <div class="d-flex align-items-center justify-content-between">
+                <a href="{% url 'gestion:dashboard' %}" class="logo">
+                    <img src="{% static 'images/logo-dark.png' %}" alt="Aprobado Logo" style="height: 40px;" />
+                </a>
+                <div class="d-flex align-items-center gap-3">
+                    <button class="btn btn-sm btn-outline-primary position-relative">
+                        <i class="bi bi-bell"></i>
+                        <div class="notification-badge"></div>
+                    </button>
+                    <div class="user-info">
+                        <div class="user-avatar">AU</div>
+                        <div class="user-details d-none d-md-block">
+                            <h6>Admin User</h6>
+                            <small>Administrador</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <div class="container-fluid py-4" style="max-width: 1400px;">
+        <div class="d-flex align-items-center justify-content-between mb-4 px-4 flex-wrap gap-3">
+            <div>
+                <h1 class="page-title">Gestión de Créditos</h1>
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb">
+                        <li class="breadcrumb-item"><a href="{% url 'gestion:dashboard' %}"><i class="bi bi-house-door"></i> Dashboard</a></li>
+                        <li class="breadcrumb-item active" aria-current="page"><i class="bi bi-credit-card-2-front me-1"></i>Créditos Activos</li>
+                    </ol>
+                </nav>
+            </div>
+            <a href="{% url 'gestion:solicitudes' %}" class="btn btn-outline-primary">
+                <i class="bi bi-journal-text me-2"></i>Ver Solicitudes
+            </a>
+        </div>
+
+        <div class="quick-actions">
+            <a href="#" class="action-card">
+                <div class="action-icon" style="background-color: var(--success);">
+                    <i class="bi bi-credit-card"></i>
+                </div>
+                <h3 style="font-size: 1rem; font-weight: 600; margin: 0 0 0.5rem 0;">{{ total_creditos_activos|default:"0" }}</h3>
+                <p style="font-size: 0.875rem; color: var(--text-secondary); margin: 0;">Total Créditos Activos</p>
+            </a>
+            <a href="#" class="action-card">
+                <div class="action-icon" style="background-color: var(--accent-blue);">
+                    <i class="bi bi-wallet2"></i>
+                </div>
+                <h3 style="font-size: 1rem; font-weight: 600; margin: 0 0 0.5rem 0;">${{ valor_total_cartera_activa|floatformat:2|intcomma }}</h3>
+                <p style="font-size: 0.875rem; color: var(--text-secondary); margin: 0;">Valor Cartera Activa</p>
+            </a>
+            <a href="#" class="action-card">
+                <div class="action-icon" style="background-color: var(--info);">
+                    <i class="bi bi-graph-up"></i>
+                </div>
+                <h3 style="font-size: 1rem; font-weight: 600; margin: 0 0 0.5rem 0;">${{ valor_promedio_credito_activo|floatformat:2|intcomma }}</h3>
+                <p style="font-size: 0.875rem; color: var(--text-secondary); margin: 0;">Valor Promedio Crédito</p>
+            </a>
+            <a href="#" class="action-card">
+                <div class="action-icon" style="background-color: var(--orange);">
+                    <i class="bi bi-calendar-check"></i>
+                </div>
+                <h3 style="font-size: 1rem; font-weight: 600; margin: 0 0 0.5rem 0;">{{ desembolsos_hoy|default:"0" }}</h3>
+                <p style="font-size: 0.875rem; color: var(--text-secondary); margin: 0;">Desembolsos Hoy</p>
+            </a>
+        </div>
+
+        <div class="filter-section">
+            <h3 class="section-title">Filtros y Búsqueda</h3>
+            <form method="get" id="filterForm">
+                <div class="filter-grid">
+                    <div class="form-group">
+                        <label for="search" class="form-label">
+                            <i class="bi bi-search me-1"></i>Buscar Cliente
+                        </label>
+                        <input type="text" name="search" id="search" value="{{ search }}" class="form-control" placeholder="Nombre, usuario o documento...">
+                    </div>
+                    <div class="form-group">
+                        <label for="linea" class="form-label">
+                            <i class="bi bi-tag me-1"></i>Línea de Crédito
+                        </label>
+                        <select name="linea" id="linea" class="form-select">
+                            <option value="">Todas las líneas</option>
+                            {% for choice in lineas_choices %}
+                            <option value="{{ choice.0 }}" {% if linea_filter == choice.0 %}selected{% endif %}>{{ choice.1 }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="empresa" class="form-label">
+                            <i class="bi bi-buildings me-1"></i>Empresa
+                        </label>
+                        <select name="empresa" id="empresa" class="form-select">
+                            <option value="">Todas las empresas</option>
+                            {% for empresa in empresas_choices %}
+                            <option value="{{ empresa }}" {% if empresa_filter == empresa %}selected{% endif %}>{{ empresa }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-primary filter-btn">
+                                <i class="bi bi-funnel me-1"></i>Filtrar
+                            </button>
+                            <a href="{% url 'gestion:creditos_activos' %}" class="btn btn-outline-secondary">
+                                <i class="bi bi-x-lg"></i>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <div class="table-container mt-4">
+            <div class="table-header">
+                <h3 class="table-title">
+                    <i class="bi bi-table me-2"></i>Lista de créditos
+                    <span class="badge bg-primary ms-2">{{ creditos.paginator.count }}</span>
+                </h3>
+                <button class="btn btn-sm btn-outline-primary" onclick="location.reload()">
+                    <i class="bi bi-arrow-clockwise"></i>
+                </button>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-hover table-stack-mobile">
+                    <thead>
+                        <tr>
+                            <th>Cliente</th>
+                            <th>Empresa</th>
+                            <th>Línea</th>
+                            <th>Monto Aprobado</th>
+                            <th>Saldo Pendiente</th>
+                            <th>Estado</th>
+                            <th>Fecha Solicitud</th>
+                            <th style="text-align: center;">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for credito in creditos %}
+                        <tr>
+                            <td data-label="Cliente">
+                                <div class="user-info">
+                                    <div class="user-avatar">
+                                        {{ credito.usuario.first_name|first|default:"" }}{{ credito.usuario.last_name|first|default:"" }}
+                                    </div>
+                                    <div class="user-details">
+                                        <h6 class="mb-0">
+                                            {% if credito.linea == 'LIBRANZA' %}
+                                                {{ credito.detalle_libranza.nombre_completo }}
+                                            {% elif credito.linea == 'EMPRENDIMIENTO' %}
+                                                {{ credito.detalle_emprendimiento.nombre }}
+                                            {% elif credito.linea == 'ADELANTO_NOMINA' and credito.detalle_adelanto_nomina %}
+                                                {{ credito.detalle_adelanto_nomina.nombre_cliente }}
+                                            {% else %}
+                                                {{ credito.usuario.get_full_name|default:credito.usuario.username }}
+                                            {% endif %}
+                                        </h6>
+                                        <small class="text-muted">
+                                            {% if credito.linea == 'LIBRANZA' %}
+                                                {{ credito.detalle_libranza.cedula }}
+                                            {% elif credito.linea == 'EMPRENDIMIENTO' %}
+                                                {{ credito.detalle_emprendimiento.numero_cedula }}
+                                            {% elif credito.linea == 'ADELANTO_NOMINA' and credito.detalle_adelanto_nomina %}
+                                                {{ credito.detalle_adelanto_nomina.vinculo_laboral.documento_empleado }}
+                                            {% endif %}
+                                        </small>
+                                    </div>
+                                </div>
+                            </td>
+                            <td data-label="Empresa">{{ credito.empresa_relacionada.nombre|default:"SIN EMPRESA" }}</td>
+                            <td data-label="Línea"><span class="line-badge">{{ credito.get_linea_display }}</span></td>
+                            <td data-label="Monto aprobado"><strong class="text-primary">${{ credito.monto_aprobado|floatformat:2|intcomma }}</strong></td>
+                            <td data-label="Saldo pendiente"><strong class="text-dark">${{ credito.saldo_pendiente|floatformat:2|intcomma }}</strong></td>
+                            <td data-label="Estado">
+                                <span class="status-badge 
+                                    {% if credito.estado == 'ACTIVO' %}status-active
+                                    {% elif credito.estado == 'EN_MORA' %}status-overdue
+                                    {% elif credito.estado == 'PAGADO' %}status-paid
+                                    {% else %}status-pending{% endif %}">
+                                    {{ credito.get_estado_display }}
+                                </span>
+                            </td>
+                            <td data-label="Fecha solicitud">{{ credito.fecha_solicitud|date:"d/m/Y" }}</td>
+                            <td data-label="Acciones" style="text-align: center;">
+                                <a href="{% url 'gestion:credito_detalle' credito.id %}?from=activos" class="btn btn-sm btn-outline-primary">
+                                    <i class="bi bi-eye me-1"></i>Ver
+                                </a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="8">
+                                <div class="empty-state">
+                                    <i class="bi bi-credit-card-2-front"></i>
+                                    <h5>No se encontraron créditos</h5>
+                                    <p>No hay créditos que coincidan con los filtros aplicados.</p>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        {% if creditos.has_other_pages %}
+        <div class="pagination-container">
+            <nav aria-label="Pagination">
+                <ul class="pagination">
+                    {% if creditos.has_previous %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ creditos.previous_page_number }}{% if request.GET.urlencode %}&{{ request.GET.urlencode }}{% endif %}">
+                            Anterior
+                        </a>
+                    </li>
+                    {% endif %}
+                    <li class="page-item active">
+                        <span class="page-link">{{ creditos.number }} de {{ creditos.paginator.num_pages }}</span>
+                    </li>
+                    {% if creditos.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ creditos.next_page_number }}{% if request.GET.urlencode %}&{{ request.GET.urlencode }}{% endif %}">
+                            Siguiente
+                        </a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </nav>
+        </div>
+        {% endif %}
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.getElementById('linea').addEventListener('change', function() {
+            this.form.submit();
+        });
+        document.getElementById('empresa').addEventListener('change', function() {
+            this.form.submit();
+        });
+        document.getElementById('search').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                this.form.submit();
+            }
+        });
+    </script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/lottie-web/5.12.2/lottie.min.js"></script>
+<script src="{% static 'js/global_loader.js' %}"></script>
+</body>
+</html>

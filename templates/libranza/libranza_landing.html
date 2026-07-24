@@ -1,0 +1,1388 @@
+﻿{% comment %}
+=============================================================================
+LANDING PAGE DE CRÉDITO DE LIBRANZA
+=============================================================================
+Este template muestra la landing page principal para el producto de Libranza.
+
+SECCIONES PRINCIPALES (en orden de aparición):
+1. HERO SECTION - Imagen hero con título principal y CTA
+2. CARACTERÍSTICAS - Grid de beneficios del crédito de libranza
+3. SIMULADOR EMBEBIDO - Calculadora de crédito
+4. CÓMO FUNCIONA - Proceso paso a paso
+5. REQUISITOS - Documentos y condiciones necesarias
+6. PREGUNTAS FRECUENTES - FAQ sobre libranza
+7. CTA FINAL - Llamado a la acción para aplicar
+
+CÓMO MODIFICAR CADA SECCIÓN:
+-----------------------------
+► HERO SECTION (líneas 30-60)
+  - Título principal: modificar <h1> en línea ~42
+  - Descripción: modificar <p> en línea ~43
+  - Botón CTA: cambiar texto o URL en línea ~44
+  - Imagen de fondo: cambiar background-image en .libranza-hero-section (CSS inline o styles.css)
+
+► CARACTERÍSTICAS (líneas 65-140)
+  - Título de sección: línea ~70
+  - Cada tarjeta de beneficio: estructura .libranza-feature-card
+  - Íconos: cambiar emoji o usar imágenes SVG
+  - Agregar/quitar beneficios: duplicar/eliminar divs .libranza-feature-card
+
+► SIMULADOR EMBEBIDO (líneas 145-165)
+  - Título: línea ~150
+  - El simulador se carga desde {% url 'usuarios:simulador_libranza' %}
+  - Simulador exclusivo de libranza (no requiere es_empleado)
+
+► CÓMO FUNCIONA (líneas 170-230)
+  - Título: línea ~175
+  - Cada paso: estructura .libranza-step-card
+  - Números de pasos son automáticos (CSS counter)
+  - Agregar/quitar pasos: duplicar/eliminar divs .libranza-step-card
+
+► REQUISITOS (líneas 235-300)
+  - Título: línea ~240
+  - Monto mínimo/máximo: líneas ~250-260
+  - Lista de documentos: <ul> en líneas ~265-275
+  - Agregar más requisitos: añadir <li> a la lista
+
+► PREGUNTAS FRECUENTES (líneas 305-400)
+  - Título: línea ~310
+  - Cada pregunta: estructura .libranza-faq-item
+  - Agregar/eliminar FAQs: duplicar/eliminar divs .libranza-faq-item
+  - Las respuestas se expanden/colapsan con JavaScript
+
+► CTA FINAL (líneas 405-435)
+  - Título: línea ~415
+  - Descripción: línea ~416
+  - Botón principal: línea ~418
+  - Información de contacto: líneas ~420-425
+
+ESTILOS CSS:
+-----------
+Los estilos están inline en este archivo para facilitar la modificación.
+Si prefieres, puedes moverlos a styles.css y referenciarlos con clases.
+
+COLORES PRINCIPALES (basados en styles.css):
+- Azul oscuro (navy): #0a192f
+- Cyan/Turquesa: #06b6d4, #22d3ee
+- Amarillo: #fccc04
+- Blanco: #ffffff
+- Grises: #f9fafb, #4b5563, #374151
+
+AUTENTICACIÓN:
+-------------
+Esta landing es pública y el flujo recomendado es:
+Landing -> Simulador -> Aplicación.
+El acceso de cuenta queda disponible desde el CTA "Iniciar sesión".
+{% endcomment %}
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    {% load static %}
+    {% load humanize %}
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crédito estudiantil - {{ brand.name|default:"FUNDETEC" }}</title>
+    {% include 'base/favicon.html' %}
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="{% static 'css/styles.css' %}">
+</head>
+<body class="body-index">
+{% include 'base/loader_global.html' %}
+<div class="div-body-main">
+    {% include 'base/navbar_libranza.html' %}
+
+    <!-- ============================================
+         SECCIÓN 1: HERO SECTION
+         Modificar: Título, descripción, CTA, imagen de fondo
+         ============================================ -->
+    <section class="libranza-hero-section">
+        <div class="libranza-hero-container">
+            <div class="libranza-hero-content">
+                <div class="libranza-hero-text">
+                    <!-- MODIFICAR: Título principal -->
+                    <h1>Crédito estudiantil para financiar tu matrícula y avanzar en tus estudios</h1>
+                    <!-- MODIFICAR: Descripción del producto -->
+                    <p>Accede a financiación educativa para programas técnicos, tecnológicos y profesionales con un proceso digital, claro y acompañado por {{ brand.name|default:"FUNDETEC" }}.</p>
+                    <div class="libranza-hero-buttons">
+                        <a href="{% url 'libranza:simulador' %}" class="libranza-btn-primary">Simula tu crédito estudiantil</a>
+                        <a href="#requisitos" class="libranza-btn-secondary">Ver requisitos</a>
+                    </div>
+                </div>
+                <!-- MODIFICAR: Imagen o gráfico hero -->
+                <div class="libranza-hero-image">
+                    <img src="{% static 'images/foto-hero.png' %}" alt="Crédito estudiantil {{ brand.name|default:'FUNDETEC' }}">
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ============================================
+         SECCIÓN 2: CARACTERÍSTICAS Y BENEFICIOS
+         Modificar: Agregar/eliminar tarjetas, cambiar íconos y textos
+         ============================================ -->
+    <section class="libranza-features-section">
+        <div class="libranza-container">
+            <!-- MODIFICAR: Título de la sección -->
+            <h2 class="libranza-section-title">¿Por qué elegir nuestro <span class="highlight-cyan">Crédito educativo</span>?</h2>
+            <div class="libranza-features-grid">
+                <!-- MODIFICAR: Cada tarjeta representa un beneficio -->
+                <!-- Beneficio 1 -->
+                <div class="libranza-feature-card">
+                    <div class="libranza-feature-icon"><i class="bi bi-cash-stack"></i></div>
+                    <h3>Cuotas claras y predecibles</h3>
+                    <p>Conoce desde el inicio el valor estimado de tu cuota mensual y el costo total de la financiación.</p>
+                </div>
+                <!-- Beneficio 2 -->
+                <div class="libranza-feature-card">
+                    <div class="libranza-feature-icon"><i class="bi bi-lightning-charge"></i></div>
+                    <h3>Respuesta ágil</h3>
+                    <p>Solicita en línea y recibe acompañamiento durante la validación de tu crédito educativo.</p>
+                </div>
+                <!-- Beneficio 3 -->
+                <div class="libranza-feature-card">
+                    <div class="libranza-feature-icon"><i class="bi bi-phone"></i></div>
+                    <h3>100% digital</h3>
+                    <p>Todo el proceso desde tu celular o computadora. Sin filas, sin papeleo innecesario.</p>
+                </div>
+                <!-- Beneficio 4 -->
+                <div class="libranza-feature-card">
+                    <div class="libranza-feature-icon"><i class="bi bi-bank"></i></div>
+                    <h3>Montos para tu formación</h3>
+                    <p>Desde $500.000 hasta ${{ libranza_monto_maximo|floatformat:0|intcomma }} para apoyar matrícula, cursos o programas académicos.</p>
+                </div>
+                <!-- Beneficio 5 -->
+                <div class="libranza-feature-card">
+                    <div class="libranza-feature-icon"><i class="bi bi-calendar3"></i></div>
+                    <h3>Plazos flexibles</h3>
+                    <p>Elige el plazo que mejor se ajuste a tu plan financiero, de 1 a 6 meses.</p>
+                </div>
+                <!-- Beneficio 6 -->
+                <div class="libranza-feature-card">
+                    <div class="libranza-feature-icon"><i class="bi bi-shield-lock"></i></div>
+                    <h3>Acompañamiento confiable</h3>
+                    <p>Plataforma segura y respaldo de una entidad comprometida con el acceso a la educación.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ============================================
+         SECCIÓN 3: SIMULADOR EMBEBIDO
+         Modificar: Título, descripción
+         El simulador se carga automáticamente si es_empleado=True
+         ============================================ -->
+    <section class="libranza-simulator-section">
+        <div class="libranza-container">
+            <!-- MODIFICAR: Título del simulador -->
+            <h2 class="libranza-section-title">Simula tu <span class="highlight-cyan">Crédito estudiantil</span></h2>
+            <p class="libranza-section-description">Conoce cuánto puedes financiar para tus estudios y cuál sería tu cuota mensual. Es rápido, fácil y sin compromiso.</p>
+
+            <!-- Botón para ir al simulador -->
+            <div class="libranza-simulator-cta">
+                {# ✅ NUEVA URL - Libranza #}
+                <a href="{% url 'libranza:simulador' %}" class="libranza-btn-primary-large">Ir al simulador de crédito estudiantil</a>
+            </div>
+        </div>
+    </section>
+
+    <section class="libranza-contractors-section" id="contratistas">
+        <div class="libranza-container">
+            <div class="libranza-contractors-card">
+                <div class="libranza-contractors-copy">
+                    <span class="libranza-eyebrow">Convenios educativos</span>
+                    <h2 class="libranza-section-title">¿Tu institución tiene <span class="highlight-cyan">convenio educativo</span>?</h2>
+                    <p>
+                        Puedes iniciar tu solicitud si estudias o vas a matricularte en una institución aliada.
+                        Validaremos tus datos, documentos y el convenio antes de continuar con la financiación.
+                    </p>
+                    <a href="#requisitos" class="libranza-btn-primary">Ver requisitos del convenio</a>
+                    <small>Este flujo está diseñado para estudiantes o solicitantes vinculados a instituciones aliadas de {{ brand.name|default:"FUNDETEC" }}.</small>
+                </div>
+                <div class="libranza-contractors-steps" aria-label="Pasos para crédito estudiantil">
+                    <div class="libranza-contractors-step">
+                        <span>1</span>
+                        <strong>Elige tu programa</strong>
+                    </div>
+                    <div class="libranza-contractors-step">
+                        <span>2</span>
+                        <strong>Carga tus documentos</strong>
+                    </div>
+                    <div class="libranza-contractors-step">
+                        <span>3</span>
+                        <strong>Validamos el convenio</strong>
+                    </div>
+                    <div class="libranza-contractors-step">
+                        <span>4</span>
+                        <strong>Simula tu financiación</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ============================================
+         SECCIÓN 4: CÓMO FUNCIONA (PROCESO PASO A PASO)
+         Modificar: Agregar/eliminar pasos, cambiar textos
+         ============================================ -->
+    <section id="como-funciona" class="libranza-process-section">
+        <div class="libranza-container">
+            <!-- MODIFICAR: Título de la sección -->
+            <h2 class="libranza-section-title">¿Cómo funciona el <span class="highlight-cyan">proceso</span>?</h2>
+            <p class="libranza-section-description">Obtén tu crédito estudiantil en 4 pasos digitales</p>
+
+            <div class="libranza-steps-grid">
+                <!-- MODIFICAR: Cada paso del proceso -->
+                <!-- Paso 1 -->
+                <div class="libranza-step-card">
+                    <div class="libranza-step-number">1</div>
+                    <h3>Simula tu crédito</h3>
+                    <p>Ingresa el monto que necesitas y el plazo deseado en nuestro simulador. Conoce tu cuota mensual al instante.</p>
+                </div>
+                <!-- Paso 2 -->
+                <div class="libranza-step-card">
+                    <div class="libranza-step-number">2</div>
+                    <h3>Completa tu solicitud</h3>
+                    <p>Llena el formulario digital con tus datos personales y académicos. Adjunta los documentos requeridos de forma segura.</p>
+                </div>
+                <!-- Paso 3 -->
+                <div class="libranza-step-card">
+                    <div class="libranza-step-number">3</div>
+                    <h3>Recibe respuesta</h3>
+                    <p>Nuestro equipo revisará tu solicitud y te notificará por correo y WhatsApp.</p>
+                </div>
+                <!-- Paso 4 -->
+                <div class="libranza-step-card">
+                    <div class="libranza-step-number">4</div>
+                    <h3>Avanza con tu matrícula</h3>
+                    <p>Una vez aprobado, se completa el proceso operativo para que puedas continuar con tus estudios.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ============================================
+         SECCIÓN 5: REQUISITOS Y CONDICIONES
+         Modificar: Montos, plazos, documentos necesarios
+         ============================================ -->
+    <section id="requisitos" class="libranza-requirements-section">
+        <div class="libranza-container">
+            <!-- MODIFICAR: Título de la sección -->
+            <h2 class="libranza-section-title">Requisitos y <span class="highlight-cyan">condiciones</span></h2>
+
+            <div class="libranza-requirements-grid">
+                <!-- Columna 1: Condiciones del crédito -->
+                <div class="libranza-requirements-card">
+                    <h3>Condiciones del crédito</h3>
+                    <ul class="libranza-conditions-list">
+                        <!-- MODIFICAR: Monto mínimo y máximo -->
+                        <li><strong>Monto:</strong> Desde $500.000 hasta ${{ libranza_monto_maximo|floatformat:0|intcomma }}</li>
+                        <!-- MODIFICAR: Plazos disponibles -->
+                        <li><strong>Plazo:</strong> De 1 a 6 meses</li>
+                        <!-- MODIFICAR: Tipo de cuota -->
+                        <li><strong>Cuota:</strong> Fija mensual según la simulación</li>
+                        <!-- MODIFICAR: Costo de originación -->
+                        <li><strong>Costo de originación:</strong> 10% + IVA (19%) sobre el monto</li>
+                        <!-- MODIFICAR: Tasa de interés si aplica -->
+                        <li><strong>Tasa de interés:</strong> {{ libranza_tasa_mensual|default:"1.9" }}% efectiva mensual (EM)</li>
+                    </ul>
+                    <p class="libranza-note" style="margin-top: 1rem; background-color: #dbeafe; border-left: 4px solid #06b6d4;">
+                        <strong>Transparencia total:</strong> En nuestro simulador verás el desglose completo: monto, costo de originación, IVA, intereses totales y cuota mensual. Sin sorpresas, sin letra pequeña.
+                    </p>
+                </div>
+
+                <!-- Columna 2: Documentos requeridos -->
+                <div class="libranza-requirements-card">
+                    <h3>Documentos necesarios</h3>
+                    <ul class="libranza-documents-list">
+                        <!-- MODIFICAR: Lista de documentos -->
+                        <li>✓ Cédula de ciudadanía (frontal y reverso)</li>
+                        <li>✓ Certificado bancario en PDF</li>
+                        <li>✓ Estar vinculado o aplicar a una institución aliada con convenio educativo</li>
+                    </ul>
+                    <p class="libranza-note"><strong>Nota:</strong> La cédula se captura en vivo desde el dispositivo y el certificado bancario se carga en PDF para validación.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    {% if landing_trusted_companies %}
+    <section class="libranza-trusted-section" id="empresas-confian">
+        <div class="libranza-container">
+            <div class="libranza-trusted-head">
+                <span class="libranza-eyebrow">Instituciones aliadas</span>
+                <h2 class="libranza-section-title">Convenios y aliados que ya operan con <span class="highlight-cyan">{{ brand.name|default:"FUNDETEC" }}</span></h2>
+                <p class="libranza-section-description" style="margin-bottom:0;max-width:760px;">Convenios y organizaciones que facilitan el acceso a financiación educativa.</p>
+            </div>
+            <div class="libranza-trusted-grid" aria-label="Instituciones aliadas de {{ brand.name|default:'FUNDETEC' }}">
+                {% for company in landing_trusted_companies %}
+                <div class="libranza-trusted-logo-card">
+                    <img src="{{ company.logo_url }}" alt="{{ company.nombre }}" class="libranza-trusted-logo{% if company.nombre == 'DataIn' or company.nombre == 'Datain' %} is-datain{% endif %}" loading="lazy">
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </section>
+    {% endif %}
+
+    <section class="libranza-backers-section" id="quienes-nos-respaldan">
+        <div class="libranza-container">
+            <div class="libranza-backers-head">
+                <span class="libranza-eyebrow">Quiénes nos respaldan</span>
+                <h2 class="libranza-section-title">Respaldo institucional para operar con confianza</h2>
+                <p class="libranza-section-description" style="margin-bottom:0;max-width:760px;">Aliados y referencias del ecosistema que fortalecen nuestra operación, validación y tecnología.</p>
+            </div>
+            {# Placeholders seguros. Reemplazar por logos oficiales en static/images/respaldos/ con los mismos nombres de archivo. #}
+            <div class="libranza-backers-grid" aria-label="Entidades que respaldan a {{ brand.name|default:'FUNDETEC' }}">
+                {% for backer in landing_backers %}
+                <div class="libranza-backer-card">
+                    <img src="{% static backer.logo_path %}" alt="{{ backer.nombre }}" class="libranza-backer-logo" loading="lazy">
+                    <strong>{{ backer.nombre }}</strong>
+                    <small>Asset esperado: static/{{ backer.logo_path }}</small>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </section>
+
+    <section class="libranza-testimonials-section" id="testimonios">
+        <div class="libranza-container">
+            <div class="libranza-testimonials-shell">
+                <div>
+                    <span class="libranza-eyebrow">Testimonios</span>
+                    <h2 class="libranza-section-title" style="text-align:left;margin-bottom:0.75rem;">Historias reales, sección lista para activarse</h2>
+                    <p class="libranza-section-description" style="text-align:left;max-width:none;">Dejamos preparada la estructura para publicar testimonios validados de estudiantes e instituciones, sin inventar contenido ni forzar prueba social antes de tiempo.</p>
+                </div>
+                <div class="libranza-testimonials-placeholder">
+                    <i class="bi bi-chat-quote"></i>
+                    <strong>Espacio reservado para testimonios</strong>
+                    <span>Cuando tengamos casos validados, aquí se mostrarán relatos breves con nombre, programa e institución.</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ============================================
+         SECCIÓN 6: PREGUNTAS FRECUENTES (FAQ)
+         Modificar: Agregar/eliminar preguntas, cambiar respuestas
+         ============================================ -->
+    <section id="preguntas-frecuentes" class="libranza-faq-section">
+        <div class="libranza-container">
+            <!-- MODIFICAR: Título de la sección -->
+            <h2 class="libranza-section-title">Preguntas <span class="highlight-cyan">frecuentes</span></h2>
+
+            <div class="libranza-faq-container">
+                <!-- MODIFICAR: Cada pregunta y respuesta -->
+                <!-- FAQ 1 -->
+                <div class="libranza-faq-item">
+                    <button class="libranza-faq-question" onclick="toggleFAQ(this)">
+                        <span>¿Qué es un crédito estudiantil?</span>
+                        <span class="libranza-faq-icon">+</span>
+                    </button>
+                    <div class="libranza-faq-answer">
+                        <p>Es una financiación educativa diseñada para apoyar matrícula, cursos o programas académicos. Permite conocer las condiciones de pago antes de iniciar la solicitud.</p>
+                    </div>
+                </div>
+
+                <!-- FAQ 2 -->
+                <div class="libranza-faq-item">
+                    <button class="libranza-faq-question" onclick="toggleFAQ(this)">
+                        <span>¿Quiénes pueden solicitar este crédito?</span>
+                        <span class="libranza-faq-icon">+</span>
+                    </button>
+                    <div class="libranza-faq-answer">
+                        <p>Estudiantes, aspirantes o solicitantes vinculados a instituciones aliadas o programas con convenio educativo vigente.</p>
+                    </div>
+                </div>
+
+                <!-- FAQ 3 -->
+                <div class="libranza-faq-item">
+                    <button class="libranza-faq-question" onclick="toggleFAQ(this)">
+                        <span>¿Cuánto tiempo tarda la aprobación?</span>
+                        <span class="libranza-faq-icon">+</span>
+                    </button>
+                    <div class="libranza-faq-answer">
+                        <p>Generalmente respondemos en menos de 24 horas hábiles. Una vez aprobado, el desembolso se realiza en 1-2 días hábiles adicionales.</p>
+                    </div>
+                </div>
+
+                <!-- FAQ 4 -->
+                <div class="libranza-faq-item">
+                    <button class="libranza-faq-question" onclick="toggleFAQ(this)">
+                        <span>¿Puedo pagar anticipadamente mi crédito?</span>
+                        <span class="libranza-faq-icon">+</span>
+                    </button>
+                    <div class="libranza-faq-answer">
+                        <p>Sí, puedes realizar abonos extraordinarios o cancelar totalmente tu crédito en cualquier momento sin penalidades.</p>
+                    </div>
+                </div>
+
+                <!-- FAQ 5 -->
+                <div class="libranza-faq-item">
+                    <button class="libranza-faq-question" onclick="toggleFAQ(this)">
+                        <span>¿Qué pasa si cambio de programa o institución?</span>
+                        <span class="libranza-faq-icon">+</span>
+                    </button>
+                    <div class="libranza-faq-answer">
+                        <p>Debes notificarnos para revisar el caso. Dependiendo del estado del crédito y del convenio, se evaluarán las opciones disponibles.</p>
+                    </div>
+                </div>
+
+                <!-- FAQ 6 -->
+                <div class="libranza-faq-item">
+                    <button class="libranza-faq-question" onclick="toggleFAQ(this)">
+                        <span>¿Cuáles son todos los costos del crédito?</span>
+                        <span class="libranza-faq-icon">+</span>
+                    </button>
+                    <div class="libranza-faq-answer">
+                        <p><strong>Costos totales del crédito estudiantil:</strong></p>
+                        <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+                            <li><strong>Costo de originación:</strong> 10% del monto solicitado (única vez)</li>
+                            <li><strong>IVA sobre costo de originación:</strong> 19% del costo de originación</li>
+                            <li><strong>Intereses:</strong> {{ libranza_tasa_mensual|default:"1.9" }}% efectivo mensual sobre el capital financiado</li>
+                        </ul>
+                        <p style="margin-top: 0.75rem;"><strong>Ejemplo:</strong> Si solicitas $1.000.000 a 3 meses, pagarás aproximadamente $45.000 de intereses en total. Usa nuestro simulador para ver el desglose exacto de tu crédito.</p>
+                    </div>
+                </div>
+
+                <!-- FAQ 7 -->
+                <div class="libranza-faq-item">
+                    <button class="libranza-faq-question" onclick="toggleFAQ(this)">
+                        <span>¿Mi institución tiene convenio educativo?</span>
+                        <span class="libranza-faq-icon">+</span>
+                    </button>
+                    <div class="libranza-faq-answer">
+                        <p>Puedes consultarlo directamente con tu institución o contactarnos. Si aún no existe convenio, revisaremos las alternativas disponibles.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ============================================
+         SECCIÓN 7: LLAMADO A LA ACCIÓN FINAL (CTA)
+         Modificar: Título, descripción, botones
+         ============================================ -->
+    <section class="libranza-cta-section">
+        <div class="libranza-container">
+            <div class="libranza-cta-card">
+                <div class="libranza-cta-content">
+                    <!-- MODIFICAR: Título del CTA -->
+                    <h2>¿Listo para solicitar tu <span class="highlight-cyan">Crédito estudiantil</span>?</h2>
+                    <!-- MODIFICAR: Descripción -->
+                    <p>Completa tu solicitud en minutos y obtén una respuesta rápida. Es fácil, seguro y 100% digital.</p>
+                    <div class="libranza-cta-buttons">
+                        <!-- MODIFICAR: Botones de acción -->
+                        {# ✅ NUEVAS URLs - Libranza #}
+                        <a href="{% url 'libranza:simulador' %}" class="libranza-btn-primary-large">Simular crédito estudiantil</a>
+                        <a href="#requisitos" class="libranza-btn-secondary-large">Ver requisitos</a>
+                    </div>
+                    <!-- MODIFICAR: Información de contacto -->
+                    <p class="libranza-contact-info">
+                        ¿Tienes dudas? Contáctanos por WhatsApp:
+                        <a href="{{ whatsapp_support_href }}" class="libranza-whatsapp-link" target="_blank" rel="noopener">
+                            {{ whatsapp_support_display }}
+                        </a>
+                    </p>
+                    <p class="libranza-social-intro">Conecta con {{ brand.name|default:"FUNDETEC" }} en nuestras redes</p>
+                    <div class="libranza-social-links" aria-label="Redes sociales de {{ brand.name|default:'FUNDETEC' }}">
+                        {% for social in landing_social_links %}
+                        <a href="{{ social.url }}" target="_blank" rel="noopener" class="libranza-social-link">
+                            <i class="bi {{ social.icon }}"></i>
+                            <span>{{ social.label }}</span>
+                        </a>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    {% include 'base/footer_libranza.html' %}
+</div>
+{% include 'base/public_whatsapp_button.html' %}
+
+<!-- ============================================
+     ESTILOS CSS INLINE
+     NOTA: Puedes mover estos estilos a styles.css si prefieres
+     ============================================ -->
+<style>
+    /* ESTILOS GENERALES DE LA LANDING */
+    .libranza-container {
+        max-width: 1300px;
+        margin: 0 auto;
+        padding: 0 1rem;
+    }
+
+    .libranza-section-title {
+        font-size: 2.5rem;
+        font-weight: 700;
+        text-align: center;
+        margin-bottom: 1rem;
+        color: #1e293b;
+    }
+
+    .libranza-section-description {
+        text-align: center;
+        font-size: 1.125rem;
+        color: #4b5563;
+        margin-bottom: 3rem;
+        max-width: 700px;
+        margin-left: auto;
+        margin-right: auto;
+    }
+
+    .highlight-cyan {
+        color: #06b6d4;
+    }
+
+    /* HERO SECTION */
+    .libranza-hero-section {
+        background: #0a192f;
+        padding: 4rem 1rem;
+        min-height: 600px;
+        display: flex;
+        align-items: center;
+    }
+
+    .libranza-hero-container {
+        max-width: 1300px;
+        margin: 0 auto;
+        width: 100%;
+    }
+
+    .libranza-hero-content {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 3rem;
+        align-items: center;
+    }
+
+    @media (min-width: 768px) {
+        .libranza-hero-content {
+            grid-template-columns: 1fr 1fr;
+        }
+    }
+
+    .libranza-hero-text h1 {
+        font-size: 2.5rem;
+        font-weight: 700;
+        color: white;
+        margin-bottom: 1.5rem;
+        line-height: 1.2;
+    }
+
+    .libranza-hero-text p {
+        font-size: 1.25rem;
+        color: #d1d5db;
+        margin-bottom: 2rem;
+        line-height: 1.6;
+    }
+
+    .libranza-trusted-section,
+    .libranza-backers-section,
+    .libranza-testimonials-section {
+        padding: 4.5rem 0;
+        background: #f8fafc;
+    }
+
+    .libranza-backers-section {
+        background: #ffffff;
+    }
+
+    .libranza-trusted-head,
+    .libranza-backers-head {
+        margin-bottom: 2rem;
+    }
+
+    .libranza-testimonials-placeholder {
+        background: #ffffff;
+        border: 1px solid rgba(15, 23, 42, 0.08);
+        border-radius: 1.25rem;
+        padding: 1.4rem;
+        box-shadow: 0 16px 40px rgba(15, 23, 42, 0.05);
+    }
+
+    .libranza-trusted-grid {
+        display: grid;
+        grid-auto-flow: column;
+        grid-template-rows: repeat(2, minmax(104px, auto));
+        grid-auto-columns: minmax(210px, 1fr);
+        gap: 1rem;
+        margin-top: 2rem;
+        padding: 1rem;
+        border-radius: 1.25rem;
+        border: 1px solid rgba(15, 23, 42, 0.08);
+        background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+        box-shadow: 0 16px 40px rgba(15, 23, 42, 0.05);
+        overflow-x: auto;
+        scrollbar-width: thin;
+        scroll-snap-type: x proximity;
+    }
+
+    .libranza-trusted-logo-card {
+        min-height: 104px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 1rem 1.2rem;
+        border-radius: 1rem;
+        background: rgba(255, 255, 255, 0.92);
+        border: 1px solid rgba(148, 163, 184, 0.18);
+        overflow: hidden;
+        scroll-snap-align: start;
+    }
+
+    .libranza-trusted-logo {
+        max-width: 170px;
+        max-height: 44px;
+        width: auto;
+        height: auto;
+        object-fit: contain;
+        filter: saturate(0.96);
+    }
+
+    .libranza-trusted-logo.is-datain {
+        max-width: 208px;
+        max-height: 58px;
+    }
+
+    .libranza-backers-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 1rem;
+        margin-top: 2rem;
+    }
+
+    .libranza-backer-card {
+        min-height: 178px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 0.75rem;
+        padding: 1.35rem;
+        border-radius: 1rem;
+        border: 1px solid #dbe7f3;
+        background: #f8fafc;
+        box-shadow: 0 14px 34px rgba(15, 23, 42, 0.05);
+    }
+
+    .libranza-backer-logo {
+        width: 100%;
+        max-width: 210px;
+        height: 54px;
+        object-fit: contain;
+        object-position: left center;
+    }
+
+    .libranza-backer-card strong {
+        color: #0a192f;
+        font-size: 1rem;
+    }
+
+    .libranza-backer-card small {
+        color: #64748b;
+        font-size: 0.78rem;
+        line-height: 1.35;
+    }
+
+    .libranza-testimonials-shell {
+        display: grid;
+        grid-template-columns: 1.2fr 0.8fr;
+        gap: 1.25rem;
+        align-items: stretch;
+    }
+
+    .libranza-testimonials-placeholder {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 0.6rem;
+        color: #475569;
+    }
+
+    .libranza-testimonials-placeholder i {
+        font-size: 1.6rem;
+        color: #0891b2;
+    }
+
+    .libranza-social-links {
+        display: flex;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+        margin-top: 1.25rem;
+        justify-content: center;
+        align-items: center;
+    }
+
+    .libranza-social-intro {
+        margin: 1.75rem 0 0;
+        color: #d7e0ea;
+        font-size: 0.96rem;
+        font-weight: 600;
+    }
+
+    .libranza-social-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.7rem 1rem;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.09);
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        color: #fff;
+        text-decoration: none;
+        transition: transform 0.2s ease, background-color 0.2s ease;
+    }
+
+    .libranza-social-link:hover {
+        transform: translateY(-1px);
+        background: rgba(255, 255, 255, 0.18);
+    }
+
+    @media (max-width: 960px) {
+        .libranza-testimonials-shell {
+            grid-template-columns: 1fr;
+        }
+
+        .libranza-trusted-grid {
+            grid-auto-flow: row;
+            grid-template-rows: none;
+            grid-template-columns: repeat(2, minmax(150px, 1fr));
+            overflow-x: visible;
+        }
+
+        .libranza-backers-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .libranza-trusted-logo {
+            max-width: 148px;
+            max-height: 40px;
+        }
+
+        .libranza-trusted-logo.is-datain {
+            max-width: 176px;
+            max-height: 50px;
+        }
+    }
+
+    @media (max-width: 520px) {
+        .libranza-trusted-grid {
+            grid-template-columns: 1fr;
+            padding: 0.75rem;
+        }
+    }
+
+    .libranza-hero-buttons {
+        display: flex;
+        gap: 1rem;
+        flex-wrap: wrap;
+    }
+
+    .libranza-btn-primary {
+        background-color: #06b6d4;
+        color: white;
+        padding: 1rem 2rem;
+        border-radius: 0.5rem;
+        text-decoration: none;
+        font-weight: 600;
+        transition: all 0.3s;
+        display: inline-block;
+    }
+
+    .libranza-btn-primary:hover {
+        background-color: #0891b2;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(6, 182, 212, 0.3);
+    }
+
+    .libranza-btn-secondary {
+        background-color: transparent;
+        color: white;
+        padding: 1rem 2rem;
+        border-radius: 0.5rem;
+        text-decoration: none;
+        font-weight: 600;
+        border: 2px solid white;
+        transition: all 0.3s;
+        display: inline-block;
+    }
+
+    .libranza-btn-secondary:hover {
+        background-color: white;
+        color: #0a192f;
+    }
+
+    .libranza-hero-image {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+    }
+
+    .libranza-hero-image img {
+        max-width: 100%;
+        height: auto;
+        border-radius: 1rem;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    }
+
+    /* FEATURES SECTION */
+    .libranza-features-section {
+        padding: 4rem 1rem;
+        background-color: #f9fafb;
+    }
+
+    .libranza-features-grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 2rem;
+    }
+
+    @media (min-width: 768px) {
+        .libranza-features-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+
+    }
+
+    @media (min-width: 1024px) {
+        .libranza-features-grid {
+            grid-template-columns: repeat(3, 1fr);
+        }
+    }
+
+    .libranza-feature-card {
+        background: white;
+        padding: 2rem;
+        border-radius: 1rem;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        transition: all 0.3s;
+    }
+
+    .libranza-feature-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+    }
+
+    .libranza-feature-icon {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+        width: 72px;
+        height: 72px;
+        border-radius: 20px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: #06b6d4;
+        background: linear-gradient(135deg, rgba(6, 182, 212, 0.12), rgba(34, 211, 238, 0.18));
+        box-shadow: inset 0 0 0 1px rgba(6, 182, 212, 0.18);
+    }
+
+    .libranza-feature-card:nth-child(2n) .libranza-feature-icon {
+        color: #2563eb;
+        background: linear-gradient(135deg, rgba(37, 99, 235, 0.12), rgba(59, 130, 246, 0.18));
+        box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.18);
+    }
+
+    .libranza-feature-card:nth-child(3n) .libranza-feature-icon {
+        color: #0f766e;
+        background: linear-gradient(135deg, rgba(13, 148, 136, 0.12), rgba(20, 184, 166, 0.18));
+        box-shadow: inset 0 0 0 1px rgba(13, 148, 136, 0.18);
+    }
+
+    .libranza-feature-card h3 {
+        font-size: 1.25rem;
+        font-weight: 600;
+        margin-bottom: 0.75rem;
+        color: #1e293b;
+    }
+
+    .libranza-feature-card p {
+        color: #4b5563;
+        line-height: 1.6;
+    }
+
+    /* SIMULATOR SECTION */
+    .libranza-simulator-section {
+        padding: 4rem 1rem;
+        background-color: white;
+    }
+
+    .libranza-simulator-cta {
+        text-align: center;
+        margin-top: 2rem;
+    }
+
+    .libranza-btn-primary-large {
+        background-color: #06b6d4;
+        color: white;
+        padding: 1.25rem 3rem;
+        border-radius: 0.5rem;
+        text-decoration: none;
+        font-weight: 600;
+        font-size: 1.125rem;
+        transition: all 0.3s;
+        display: inline-block;
+    }
+
+    .libranza-btn-primary-large:hover {
+        background-color: #0891b2;
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px rgba(6, 182, 212, 0.3);
+    }
+
+    .libranza-eyebrow {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.45rem 0.9rem;
+        border-radius: 999px;
+        background: rgba(6, 182, 212, 0.12);
+        color: #0c4a6e;
+        font-weight: 700;
+        font-size: 0.8rem;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+    }
+
+    .libranza-contractors-section {
+        padding: 4.5rem 1rem;
+        background: #f8fafc;
+    }
+
+    .libranza-contractors-card {
+        display: grid;
+        grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+        gap: 2rem;
+        align-items: center;
+        background: #ffffff;
+        border: 1px solid #e5edf5;
+        border-radius: 24px;
+        padding: 2rem;
+        box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08);
+    }
+
+    .libranza-contractors-copy .libranza-section-title {
+        text-align: left;
+        margin: 1rem 0 0.9rem;
+    }
+
+    .libranza-contractors-copy p {
+        color: #334155;
+        line-height: 1.65;
+        font-size: 1.05rem;
+        margin-bottom: 1.4rem;
+    }
+
+    .libranza-contractors-copy small {
+        display: block;
+        color: #64748b;
+        margin-top: 1rem;
+        line-height: 1.45;
+    }
+
+    .libranza-contractors-steps {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 1rem;
+    }
+
+    .libranza-contractors-step {
+        min-height: 118px;
+        background: #f8fbff;
+        border: 1px solid #dbeafe;
+        border-radius: 18px;
+        padding: 1.1rem;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 0.75rem;
+    }
+
+    .libranza-contractors-step span {
+        width: 34px;
+        height: 34px;
+        border-radius: 999px;
+        background: #16b8d3;
+        color: #ffffff;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 800;
+    }
+
+    .libranza-contractors-step strong {
+        color: #0a192f;
+        font-size: 1rem;
+        line-height: 1.3;
+    }
+
+    @media (max-width: 960px) {
+        .libranza-contractors-card {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    @media (max-width: 480px) {
+        .libranza-contractors-steps {
+            grid-template-columns: 1fr;
+        }
+
+        .libranza-contractors-card {
+            padding: 1.25rem;
+        }
+    }
+
+    /* PROCESS SECTION */
+    .libranza-process-section {
+        padding: 4rem 1rem;
+        background-color: #f9fafb;
+    }
+
+    .libranza-steps-grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 2rem;
+    }
+
+    @media (min-width: 768px) {
+        .libranza-steps-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+
+    @media (min-width: 1024px) {
+        .libranza-steps-grid {
+            grid-template-columns: repeat(4, 1fr);
+        }
+    }
+
+    .libranza-step-card {
+        background: white;
+        padding: 2rem;
+        border-radius: 1rem;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        position: relative;
+        text-align: center;
+    }
+
+    .libranza-step-number {
+        width: 60px;
+        height: 60px;
+        background: linear-gradient(135deg, #06b6d4, #0891b2);
+        color: white;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+        font-weight: 700;
+        margin: 0 auto 1.5rem;
+    }
+
+    .libranza-step-card h3 {
+        font-size: 1.125rem;
+        font-weight: 600;
+        margin-bottom: 0.75rem;
+        color: #1e293b;
+    }
+
+    .libranza-step-card p {
+        color: #4b5563;
+        line-height: 1.6;
+        font-size: 0.95rem;
+    }
+
+    /* REQUIREMENTS SECTION */
+    .libranza-requirements-section {
+        padding: 4rem 1rem;
+        background-color: white;
+    }
+
+    .libranza-requirements-grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 2rem;
+    }
+
+    @media (min-width: 768px) {
+        .libranza-requirements-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+
+    .libranza-requirements-card {
+        background: #f9fafb;
+        padding: 2rem;
+        border-radius: 1rem;
+        border-left: 4px solid #06b6d4;
+    }
+
+    .libranza-requirements-card h3 {
+        font-size: 1.5rem;
+        font-weight: 600;
+        margin-bottom: 1.5rem;
+        color: #1e293b;
+    }
+
+    .libranza-conditions-list,
+    .libranza-documents-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+
+    .libranza-conditions-list li,
+    .libranza-documents-list li {
+        padding: 0.75rem 0;
+        color: #4b5563;
+        border-bottom: 1px solid #e5e7eb;
+        line-height: 1.6;
+    }
+
+    .libranza-conditions-list li:last-child,
+    .libranza-documents-list li:last-child {
+        border-bottom: none;
+    }
+
+    .libranza-note {
+        margin-top: 1.5rem;
+        padding: 1rem;
+        background-color: #e0f2fe;
+        border-radius: 0.5rem;
+        color: #0c4a6e;
+        font-size: 0.875rem;
+    }
+
+    /* FAQ SECTION */
+    .libranza-faq-section {
+        padding: 4rem 1rem;
+        background-color: #f9fafb;
+    }
+
+    .libranza-faq-container {
+        max-width: 900px;
+        margin: 0 auto;
+    }
+
+    .libranza-faq-item {
+        background: white;
+        margin-bottom: 1rem;
+        border-radius: 0.5rem;
+        overflow: hidden;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    }
+
+    .libranza-faq-question {
+        width: 100%;
+        padding: 1.5rem;
+        background: white;
+        border: none;
+        text-align: left;
+        font-size: 1.125rem;
+        font-weight: 600;
+        color: #1e293b;
+        cursor: pointer;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        transition: background-color 0.2s;
+    }
+
+    .libranza-faq-question:hover {
+        background-color: #f9fafb;
+    }
+
+    .libranza-faq-icon {
+        font-size: 1.5rem;
+        color: #06b6d4;
+        transition: transform 0.3s;
+    }
+
+    .libranza-faq-item.active .libranza-faq-icon {
+        transform: rotate(45deg);
+    }
+
+    .libranza-faq-answer {
+        max-height: 0;
+        overflow: hidden;
+        transition: max-height 0.3s ease-out;
+    }
+
+    .libranza-faq-item.active .libranza-faq-answer {
+        max-height: 500px;
+    }
+
+    .libranza-faq-answer p {
+        padding: 0 1.5rem 1.5rem;
+        color: #4b5563;
+        line-height: 1.6;
+    }
+
+    /* CTA SECTION */
+    .libranza-cta-section {
+        padding: 4rem 1rem;
+        background: #0a192f;
+    }
+
+    .libranza-cta-card {
+        max-width: 900px;
+        margin: 0 auto;
+        text-align: center;
+    }
+
+    .libranza-cta-content h2 {
+        font-size: 2.5rem;
+        font-weight: 700;
+        color: white;
+        margin-bottom: 1rem;
+    }
+
+    .libranza-cta-content p {
+        font-size: 1.25rem;
+        color: #d1d5db;
+        margin-bottom: 2rem;
+    }
+
+    .libranza-cta-buttons {
+        display: flex;
+        gap: 1rem;
+        justify-content: center;
+        flex-wrap: wrap;
+        margin-bottom: 2rem;
+    }
+
+    .libranza-btn-secondary-large {
+        background-color: transparent;
+        color: white;
+        padding: 1.25rem 3rem;
+        border-radius: 0.5rem;
+        text-decoration: none;
+        font-weight: 600;
+        font-size: 1.125rem;
+        border: 2px solid white;
+        transition: all 0.3s;
+        display: inline-block;
+    }
+
+    .libranza-btn-secondary-large:hover {
+        background-color: white;
+        color: #0a192f;
+    }
+
+    .libranza-contact-info {
+        color: #d1d5db;
+        font-size: 1rem;
+    }
+
+    .libranza-whatsapp-link {
+        color: #22d3ee;
+        text-decoration: none;
+        font-weight: 600;
+    }
+
+    .libranza-whatsapp-link:hover {
+        text-decoration: underline;
+    }
+
+    /* Marca FUNDETEC */
+    .highlight-cyan,
+    .libranza-faq-icon,
+    .libranza-whatsapp-link {
+        color: #FFC400;
+    }
+
+    .libranza-hero-section,
+    .libranza-cta-section {
+        background: #083B7A;
+    }
+
+    .libranza-btn-primary,
+    .libranza-btn-primary-large,
+    .libranza-contractors-step span,
+    .libranza-step-number {
+        background: #0B4EA2;
+    }
+
+    .libranza-btn-primary:hover,
+    .libranza-btn-primary-large:hover {
+        background: #083B7A;
+        box-shadow: 0 8px 20px rgba(11, 78, 162, 0.28);
+    }
+
+    .libranza-btn-secondary:hover,
+    .libranza-btn-secondary-large:hover {
+        color: #083B7A;
+    }
+
+    .libranza-feature-icon,
+    .libranza-testimonials-placeholder i {
+        color: #0B4EA2;
+        background: linear-gradient(135deg, rgba(11, 78, 162, 0.1), rgba(255, 196, 0, 0.18));
+        box-shadow: inset 0 0 0 1px rgba(11, 78, 162, 0.16);
+    }
+
+    .libranza-feature-card:nth-child(2n) .libranza-feature-icon {
+        color: #083B7A;
+        background: linear-gradient(135deg, rgba(8, 59, 122, 0.1), rgba(11, 78, 162, 0.14));
+        box-shadow: inset 0 0 0 1px rgba(8, 59, 122, 0.16);
+    }
+
+    .libranza-feature-card:nth-child(3n) .libranza-feature-icon {
+        color: #E7191A;
+        background: linear-gradient(135deg, rgba(231, 25, 26, 0.08), rgba(255, 196, 0, 0.18));
+        box-shadow: inset 0 0 0 1px rgba(231, 25, 26, 0.14);
+    }
+
+    .libranza-requirements-card {
+        border-left-color: #0B4EA2;
+    }
+
+    .libranza-note {
+        background-color: #FFF7D6;
+        color: #083B7A;
+    }
+
+</style>
+
+<!-- ============================================
+     JAVASCRIPT PARA FUNCIONALIDAD INTERACTIVA
+     ============================================ -->
+<script>
+    // Función para expandir/colapsar FAQs
+    function toggleFAQ(button) {
+        const faqItem = button.parentElement;
+        const isActive = faqItem.classList.contains('active');
+
+        // Cerrar todas las FAQs abiertas
+        document.querySelectorAll('.libranza-faq-item').forEach(item => {
+            item.classList.remove('active');
+        });
+
+        // Si no estaba activa, abrirla
+        if (!isActive) {
+            faqItem.classList.add('active');
+        }
+    }
+
+    // Animación de scroll suave para enlaces internos
+    document.addEventListener('DOMContentLoaded', function() {
+        const links = document.querySelectorAll('a[href^="#"]');
+        links.forEach(link => {
+            link.addEventListener('click', function(e) {
+                e.preventDefault();
+                const targetId = this.getAttribute('href');
+                const targetElement = document.querySelector(targetId);
+                if (targetElement) {
+                    targetElement.scrollIntoView({ behavior: 'smooth' });
+                }
+            });
+        });
+
+    });
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/lottie-web/5.12.2/lottie.min.js"></script>
+<script src="{% static 'js/global_loader.js' %}"></script>
+</body>
+</html>

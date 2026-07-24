@@ -1,0 +1,1219 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aprobado - Billetera Virtual</title>
+    {% load static %}
+    {% load humanize %}
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <!-- Fintech Base Styles -->
+    <link href="{% static 'css/billetera_digital.css' %}" rel="stylesheet">
+    <style>
+        :root {
+            --azul-colombia: #003893;
+            --azul-cielo: #4A90E2;
+            --amarillo-colombia: #FFCD00;
+            --rojo-colombia: #CE1126;
+            --gris-claro: #F8F9FA;
+            --gris-medio: #E9ECEF;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--gris-claro);
+            min-height: 100vh;
+            font-size: 14px;
+        }
+
+        /* NAVBAR PROFESIONAL MEJORADO */
+        .navbar-professional {
+            background: white;
+            border-bottom: none;
+            padding: 1rem 0;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            backdrop-filter: blur(10px);
+        }
+
+        .navbar-brand {
+            font-weight: 600;
+            color: var(--azul-colombia) !important;
+            font-size: 1.25rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .brand-logo {
+            height: 40px;
+        }
+
+        .nav-link {
+            color: #6B7280 !important;
+            font-weight: 500;
+            font-size: 0.95rem;
+            padding: 0.625rem 1.25rem !important;
+            transition: all 0.2s;
+            border-radius: 10px;
+            position: relative;
+        }
+
+        .nav-link:hover {
+            color: var(--azul-cielo) !important;
+            background: #F0F9FF;
+        }
+
+        .nav-link.active {
+            color: var(--azul-cielo) !important;
+            background: linear-gradient(135deg, #E0F2FE 0%, #BAE6FD 100%);
+            font-weight: 600;
+        }
+
+        .nav-link.active::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 30px;
+            height: 3px;
+            background: var(--azul-cielo);
+            border-radius: 3px 3px 0 0;
+        }
+
+        .notification-badge {
+            position: relative;
+            cursor: pointer;
+        }
+
+        .notification-icon {
+            font-size: 1.2rem;
+            color: #6c757d;
+        }
+
+        .notification-badge .badge {
+            position: absolute;
+            top: -5px;
+            right: -5px;
+            background: var(--rojo-colombia);
+            font-size: 0.65rem;
+            padding: 0.25rem 0.4rem;
+        }
+
+        /* USER DROPDOWN MODERNO */
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.5rem 1rem;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            background: #F9FAFB;
+        }
+
+        .user-info:hover {
+            background: #F0F9FF;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+        }
+
+        .user-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--azul-cielo), var(--azul-colombia));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 700;
+            font-size: 0.9rem;
+            flex-shrink: 0;
+        }
+
+        .user-details {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            min-width: 0;
+        }
+
+        .user-name {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: #111827;
+            line-height: 1.2;
+            max-width: 220px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .user-role {
+            font-size: 0.75rem;
+            color: #6c757d;
+            display: block;
+            max-width: 220px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .user-dropdown {
+            position: relative;
+        }
+
+        .user-menu {
+            border-radius: 16px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+            min-width: 320px;
+            padding: 20px;
+            border: 1px solid var(--gris-medio);
+            margin-top: 0.5rem;
+        }
+
+        .wallet-dropdown-menu {
+            width: min(92vw, 400px);
+            min-width: 0;
+        }
+
+        .wallet-nav-actions {
+            margin-left: auto;
+            min-width: 0;
+        }
+
+        .wallet-mobile-session {
+            display: none;
+        }
+
+        .dropdown-menu.show {
+            animation: fadeInDropdown 0.3s ease-out;
+        }
+
+        @keyframes fadeInDropdown {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .user-menu-header {
+            padding-bottom: 12px;
+            border-bottom: 2px solid var(--gris-medio);
+            margin-bottom: 12px;
+        }
+
+        .user-menu-header h6 {
+            color: var(--azul-colombia);
+            font-size: 1rem;
+        }
+
+        .user-menu-item {
+            padding: 12px;
+            border-radius: 10px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .user-menu-item:hover {
+            background: linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 50%);
+            transform: translateX(4px);
+        }
+
+        .user-menu-item i {
+            font-size: 1.1rem;
+        }
+
+        .user-menu-item a {
+            text-decoration: none;
+            color: inherit;
+        }
+
+        .user-menu-item.logout-item {
+            border-top: 2px solid var(--gris-medio);
+            margin-top: 8px;
+            padding-top: 12px;
+        }
+
+        .user-menu-item.logout-item:hover {
+            background: linear-gradient(135deg, #FFEBEE 0%, #FFCDD2 50%);
+        }
+
+        /* TOAST STYLES */
+        .toast {
+            min-width: 320px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+            backdrop-filter: blur(10px);
+            font-weight: 500;
+        }
+
+        .toast-body {
+            font-size: 0.9rem;
+            padding: 1rem;
+        }
+
+        .toast.bg-success {
+            background: #28a745 !important;
+        }
+
+        .toast.bg-danger {
+            background: linear-gradient(135deg, #dc3545 0%, #fd7e14 100%) !important;
+        }
+
+        .toast.bg-warning {
+            background: linear-gradient(135deg, #ffc107 0%, #fd7e14 100%) !important;
+            color: #000 !important;
+        }
+
+        .toast.bg-info {
+            background: linear-gradient(135deg, #17a2b8 0%, #6610f2 100%) !important;
+        }
+
+        @media (max-width: 991.98px) {
+            .navbar-professional {
+                padding: 0.75rem 0;
+            }
+
+            .navbar-professional .container {
+                padding-left: 0.9rem;
+                padding-right: 0.9rem;
+            }
+
+            .navbar-collapse {
+                padding-top: 0.75rem;
+                overflow-x: hidden;
+            }
+
+            .navbar-nav {
+                width: 100%;
+                margin-bottom: 0.5rem;
+            }
+
+            .navbar-nav .nav-link {
+                padding-left: 0.75rem !important;
+                padding-right: 0.75rem !important;
+            }
+
+            .wallet-nav-actions {
+                width: 100%;
+                margin-left: 0;
+                display: flex !important;
+                flex-direction: column;
+                align-items: stretch !important;
+                gap: 0.75rem !important;
+            }
+
+            .wallet-mobile-session {
+                width: 100%;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 0.75rem;
+                padding: 0.6rem 0.15rem 0.9rem;
+            }
+
+            .wallet-mobile-user {
+                min-width: 0;
+                display: flex;
+                align-items: center;
+                gap: 0.55rem;
+            }
+
+            .wallet-mobile-user-name {
+                display: block;
+                font-size: 0.85rem;
+                font-weight: 600;
+                color: #0f172a;
+                line-height: 1.2;
+                max-width: 140px;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+
+            .wallet-mobile-user-email {
+                display: block;
+                font-size: 0.74rem;
+                color: #64748b;
+                max-width: 140px;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+
+            .wallet-mobile-logout {
+                border: 1px solid rgba(220, 38, 38, 0.25);
+                color: #dc2626;
+                background: #fff;
+                border-radius: 999px;
+                padding: 0.38rem 0.72rem;
+                font-size: 0.75rem;
+                font-weight: 600;
+                line-height: 1;
+                white-space: nowrap;
+            }
+
+            .wallet-nav-actions .dropdown {
+                width: 100%;
+            }
+
+            .wallet-nav-actions .dropdown-menu {
+                left: 0 !important;
+                right: auto !important;
+            }
+
+            .wallet-nav-actions .notification-badge {
+                display: inline-flex;
+                align-items: center;
+                justify-content: flex-start;
+                width: max-content;
+            }
+
+            .wallet-desktop-user {
+                display: none !important;
+            }
+
+            #desktopUserDropdown,
+            #desktopUserDropdown .user-info,
+            #desktopUserDropdown .dropdown-menu {
+                display: none !important;
+                visibility: hidden !important;
+                pointer-events: none !important;
+            }
+
+            .user-info {
+                width: 100%;
+                justify-content: space-between;
+                padding: 0.6rem 0.75rem;
+            }
+
+            .user-menu {
+                width: min(92vw, 360px);
+                min-width: 0;
+                padding: 14px;
+            }
+
+            .wallet-dropdown-menu {
+                width: min(92vw, 360px);
+            }
+
+            #toastContainer .toast {
+                min-width: min(92vw, 320px);
+            }
+        }
+
+        @media (max-width: 768px) {
+            .savings-card {
+                padding: 20px 18px;
+                border-radius: 20px;
+            }
+
+            .savings-main-amount {
+                font-size: 2rem;
+            }
+
+            .savings-percent-mobile {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                min-width: 52px;
+                height: 32px;
+                border-radius: 999px;
+                font-size: 0.88rem;
+                font-weight: 700;
+                background: rgba(255, 255, 255, 0.18);
+                border: 1px solid rgba(255, 255, 255, 0.3);
+            }
+
+            .action-buttons-row {
+                gap: 10px;
+                margin-top: 20px;
+            }
+
+            .action-btn {
+                width: 100%;
+                justify-content: center;
+                border-radius: 12px;
+                padding: 11px 14px;
+                font-size: 0.95rem;
+                line-height: 1.15;
+            }
+
+            #consignarOptions .action-btn {
+                width: 100%;
+            }
+
+            .content-card {
+                padding: 20px;
+                border-radius: 16px;
+            }
+
+            .movement-item {
+                padding: 12px;
+                gap: 10px;
+                margin-bottom: 10px;
+                border-radius: 12px;
+            }
+
+            .movement-icon {
+                width: 40px;
+                height: 40px;
+                border-radius: 10px;
+                font-size: 1rem;
+            }
+
+            .movement-description {
+                font-size: 0.96rem;
+            }
+
+            .movement-date {
+                font-size: 0.8rem;
+            }
+
+            .movement-details small {
+                font-size: 0.82rem;
+            }
+
+            .movement-amount {
+                font-size: 1.08rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Navbar -->
+    <nav class="navbar navbar-expand-lg navbar-professional sticky-top">
+        <div class="container">
+            <a class="navbar-brand" href="{{ billetera_home_url|default:'/' }}">
+                <img src="{% static 'images/logo-dark.png' %}" alt="Aprobado" class="brand-logo">
+            </a>
+
+            <button class="navbar-toggler border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <div class="wallet-mobile-session d-lg-none">
+                    <div class="wallet-mobile-user">
+                        <div class="user-avatar">{{ user.first_name|first|default:"U" }}{{ user.last_name|first|default:"" }}</div>
+                        <div>
+                            <span class="wallet-mobile-user-name">{{ user.get_full_name|default:user.username }}</span>
+                            <small class="wallet-mobile-user-email">{{ user.email }}</small>
+                        </div>
+                    </div>
+                    <form method="post" action="{{ billetera_logout_url|default:'/' }}">
+                        {% csrf_token %}
+                        <button type="submit" class="wallet-mobile-logout">Cerrar sesión</button>
+                    </form>
+                </div>
+                <ul class="navbar-nav mx-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ billetera_dashboard_url|default:'/' }}">
+                            <i class="bi bi-speedometer2 me-1"></i> {{ billetera_dashboard_label|default:'Mi panel' }}
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="{% url 'billetera:dashboard' %}">
+                            <i class="bi bi-wallet2 me-1"></i> Billetera
+                        </a>
+                    </li>
+                </ul>
+
+                <div class="d-flex align-items-center gap-3 wallet-nav-actions">
+                    {% if count_notificaciones > 0 %}
+                    <div id="desktopUserDropdown" class="dropdown wallet-desktop-user d-none d-lg-block" data-notifications-dropdown data-mark-read-url="{% url 'billetera:marcar_notificaciones_leidas' %}">
+                        <div class="notification-badge" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="bi bi-bell notification-icon"></i>
+                            <span class="badge">{{ count_notificaciones }}</span>
+                        </div>
+
+                        <div class="dropdown-menu dropdown-menu-end p-0 wallet-dropdown-menu">
+                            <div class="p-3 border-bottom">
+                                <h6 class="mb-0 fw-bold">Notificaciones</h6>
+                                <small class="text-muted">Tienes {{ count_notificaciones }} notificación{{ count_notificaciones|pluralize:"es" }} nueva{{ count_notificaciones|pluralize }}</small>
+                            </div>
+                            <div style="max-height: 400px; overflow-y: auto;">
+                                {% for notif in notificaciones_no_leidas %}
+                                <a href="{{ notif.url|default:'#' }}" class="dropdown-item p-3 border-bottom" style="white-space: normal;">
+                                    <div class="d-flex gap-2">
+                                        <i class="bi bi-circle-fill text-primary" style="font-size: 0.5rem; margin-top: 0.5rem;"></i>
+                                        <div class="flex-grow-1">
+                                            <div class="fw-semibold">{{ notif.titulo }}</div>
+                                            <small class="text-muted d-block">{{ notif.mensaje|truncatewords:15 }}</small>
+                                            <small class="text-muted">{{ notif.fecha_creacion|timesince }} atrás</small>
+                                        </div>
+                                    </div>
+                                </a>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <div class="dropdown d-none d-lg-block">
+                        <div class="user-info" data-bs-toggle="dropdown">
+                            <div class="user-avatar">{{ user.first_name|first|default:"U" }}{{ user.last_name|first|default:"" }}</div>
+                            <div class="user-details d-none d-md-block">
+                                <span class="user-name">{{ user.get_full_name|default:"Usuario" }}</span>
+                                <span class="user-role">{{ user.email }}</span>
+                            </div>
+                            <i class="bi bi-chevron-down ms-2"></i>
+                        </div> 
+
+                        <!-- Desplegable mejorado -->
+                        <div class="dropdown-menu dropdown-menu-end user-menu wallet-dropdown-menu" aria-labelledby="userDropdown">
+                            <div class="user-menu-header">
+                                <h6 class="mb-1 fw-bold">Mi Cuenta</h6>
+                                <small class="text-muted d-block">{{ user.email }}</small>
+                            </div>
+
+                            <div class="user-menu-item">
+                                <i class="bi bi-person-circle text-primary"></i>
+                                <div class="flex-grow-1">
+                                    <div class="fw-semibold" style="font-size: 0.85rem;">Nombre completo</div>
+                                    <small class="text-muted">{{ user.get_full_name|default:"Usuario" }}</small>
+                                </div>
+                            </div>
+
+                            <div class="user-menu-item">
+                                <i class="bi bi-envelope-fill text-info"></i>
+                                <div class="flex-grow-1">
+                                    <div class="fw-semibold" style="font-size: 0.85rem;">Correo electrónico</div>
+                                    <small class="text-muted">{{ user.email }}</small>
+                                </div>
+                            </div>
+
+                            <div class="user-menu-item">
+                                <i class="bi bi-wallet2 text-warning"></i>
+                                <div class="flex-grow-1">
+                                    <div class="fw-semibold" style="font-size: 0.85rem;">Sección actual</div>
+                                    <small class="text-muted">Billetera Digital</small>
+                                </div>
+                            </div>
+
+                            <div class="user-menu-item logout-item">
+                                <i class="bi bi-box-arrow-right text-danger"></i>
+                                <form id="logout-form-billetera" method="post" action="{{ billetera_logout_url|default:'/' }}" style="display: inline;">
+                                    {% csrf_token %}
+                                    <a href="#" onclick="event.preventDefault(); document.getElementById('logout-form-billetera').submit();" class="text-decoration-none text-danger fw-semibold">Cerrar sesión</a>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Toast Container (Fixed Position) - Unified -->
+    <div id="toastContainer" class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 9999;">
+        {% if messages %}
+        {% for message in messages %}
+        <div class="toast align-items-center text-white bg-{{ message.tags }} border-0" role="alert" aria-live="assertive" aria-atomic="true" data-bs-autohide="true" data-bs-delay="5000">
+            <div class="d-flex">
+                <div class="toast-body">
+                    <i class="bi bi-check-circle-fill me-2"></i>
+                    {{ message }}
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+        </div>
+        {% endfor %}
+        {% endif %}
+    </div>
+
+    <div class="container-fluid py-4" style="max-width: 1400px;">
+        <div class="row">
+            <!-- Main Content -->
+            <div class="col-lg-12">
+                <!-- Balance and Savings Cards -->
+                <div class="row mb-4">
+                    <div class="col-lg-6 mb-3">
+                        <div class="balance-section animate-fade-in">
+                            <h6 class="opacity-75 mb-3">Saldo Disponible</h6>
+                            <div class="balance-amount">
+                                <h2 id="balanceValue">${{ saldo_disponible|floatformat:2|intcomma }}</h2>
+                                <span class="currency-tag">COP</span>
+                                <i class="bi bi-eye" id="toggleBalance"></i>
+                            </div>
+                            <small class="opacity-75 mt-3 d-block">Último movimiento: {{ cuenta.fecha_actualizacion|date:"d/m/Y H:i" }}</small>
+                        </div>
+                    </div>
+                    <div class="col-lg-6 mb-3">
+                        <div class="savings-card animate-fade-in" style="--progress: {{ progreso_porcentaje }}">
+                            <div class="d-flex align-items-center justify-content-between gap-2">
+                                <h6 class="opacity-75 mb-2">Ahorros Acumulados</h6>
+                                <span class="savings-percent-mobile d-md-none">{{ progreso_porcentaje|floatformat:0 }}%</span>
+                            </div>
+                            <h2 class="mb-0 fw-bold savings-main-amount">${{ saldo_disponible|floatformat:2|intcomma }}</h2>
+                            <small class="opacity-75">Meta: ${{ saldo_objetivo|floatformat:2|intcomma }}</small>
+                            
+                            <div class="savings-progress-bar">
+                                <div class="savings-progress-fill" style="width: {{ progreso_porcentaje }}%"></div>
+                            </div>
+
+                            <div class="progress-circle-wrapper d-none d-md-block">
+                                <div class="progress-circle">
+                                    <div class="progress-text">{{ progreso_porcentaje|floatformat:0 }}%</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="action-buttons-row animate-fade-in">
+                    <button class="action-btn btn-receive" id="consignarBtn">
+                        <i class="bi bi-download"></i>
+                        Recibir Dinero
+                    </button>
+                    <button class="action-btn btn-save" disabled>
+                        <i class="bi bi-piggy-bank"></i>
+                        Ahorrar
+                    </button>
+                    <button class="action-btn btn-transfer" disabled>
+                        <i class="bi bi-send"></i>
+                        Transferir
+                    </button>
+                </div>
+
+                <div id="consignarOptions" class="d-none mt-3">
+                    <div class="d-flex justify-content-center gap-3 flex-wrap">
+                        <button class="action-btn btn-receive" disabled>
+                            <i class="bi bi-credit-card"></i>
+                            Consignación Online (Próximamente)
+                        </button>
+                        <button class="action-btn btn-transfer" data-bs-toggle="modal" data-bs-target="#consignarModal">
+                            <i class="bi bi-upload"></i>
+                            Consignación Offline
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Stats Grid -->
+                <div class="stats-grid animate-fade-in" style="margin-top: 30px;">
+                    <div class="stat-card">
+                        <i class="bi bi-graph-up {% if crecimiento_porcentaje >= 0 %}text-success{% else %}text-danger{% endif %}"></i>
+                        <p class="stat-title">Crecimiento</p>
+                        <p class="stat-value {% if crecimiento_porcentaje >= 0 %}text-success{% else %}text-danger{% endif %}">
+                            {% if crecimiento_porcentaje >= 0 %}+{% endif %}{{ crecimiento_porcentaje|floatformat:1 }}%
+                        </p>
+                    </div>
+                    <div class="stat-card">
+                        <i class="bi bi-calendar-event" style="color: var(--color-blue)"></i>
+                        <p class="stat-title">Días Ahorrando</p>
+                        <p class="stat-value" style="color: var(--color-blue)">{{ dias_ahorrando }}</p>
+                    </div>
+                    <div class="stat-card">
+                        <i class="bi bi-shop" style="color: var(--color-yellow)"></i>
+                        <p class="stat-title">Emprendimientos</p>
+                        <p class="stat-value" style="color: var(--color-yellow)">{{ emprendimientos_financiados }}</p>
+                    </div>
+                    <div class="stat-card">
+                        <i class="bi bi-people" style="color: var(--color-red)"></i>
+                        <p class="stat-title">Mujeres Apoyadas</p>
+                        <p class="stat-value" style="color: var(--color-red)">{{ familias_beneficiadas }}</p>
+                    </div>
+                </div>
+
+                <!-- Savings Chart and Impact -->
+                <div class="row g-4 mb-4">
+                    <div class="col-lg-7">
+                        <div class="content-card animate-fade-in">
+                            <div class="chart-header">
+                                <h3 class="card-title mb-0">Ahorros Acumulados</h3>
+                                <div class="chart-meta">
+                                    <p class="chart-meta-label">Meta:</p>
+                                    <p class="chart-meta-value">${{ saldo_objetivo|floatformat:2|intcomma }}</p>
+                                </div>
+                            </div>
+                            
+                            <div class="chart-container">
+                                <canvas id="savingsChart"></canvas>
+                            </div>
+
+                            <div class="interest-section">
+                                <p class="stat-title">Intereses Generados (Estimado)</p>
+                                <p class="interest-value">+ ${{ interes_estimado|floatformat:2|intcomma }}</p>
+                                {% if tasa_actual %}
+                                <p class="interest-rate">Tasa EA: {{ tasa_actual.tasa_anual_efectiva }}%</p>
+                                {% else %}
+                                <p class="interest-rate">Tasa EA: Pendiente de definición</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-lg-5">
+                        <div class="content-card impact-card animate-fade-in">
+                            <h3 class="card-title">Tu Impacto Social</h3>
+                            <p class="text-secondary mb-4">Con tus ahorros estás transformando vidas.</p>
+                            <div class="impact-item">
+                                <div class="impact-icon-wrapper">
+                                    <i class="bi bi-shop impact-icon"></i>
+                                </div>
+                                <div>
+                                    <p class="impact-value">{{ emprendimientos_financiados }}</p>
+                                    <p class="impact-title">Emprendimientos financiados</p>
+                                </div>
+                            </div>
+                            <div class="impact-item">
+                                <div class="impact-icon-wrapper">
+                                    <i class="bi bi-people impact-icon"></i>
+                                </div>
+                                <div>
+                                    <p class="impact-value">{{ familias_beneficiadas }}</p>
+                                    <p class="impact-title">Familias beneficiadas</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recent Movements -->
+                <div class="content-card animate-fade-in">
+                    <h3 class="card-title">Movimientos Recientes</h3>
+                    {% if movimientos_recientes %}
+                    <ul class="movements-list" id="movementsList">
+                        {% for movimiento in movimientos_recientes %}
+                        <li class="movement-item">
+                            <div class="movement-icon 
+                                {% if movimiento.tipo == 'DEPOSITO_ONLINE' or movimiento.tipo == 'DEPOSITO_OFFLINE' or movimiento.tipo == 'AJUSTE_ADMIN' %}
+                                    bg-success
+                                {% elif movimiento.tipo == 'RETIRO' %}
+                                    bg-danger
+                                {% else %}
+                                    bg-primary
+                                {% endif %} text-white">
+                                <i class="bi 
+                                    {% if movimiento.tipo == 'DEPOSITO_ONLINE' or movimiento.tipo == 'DEPOSITO_OFFLINE' or movimiento.tipo == 'AJUSTE_ADMIN' %}
+                                        bi-arrow-down
+                                    {% elif movimiento.tipo == 'RETIRO' %}
+                                        bi-arrow-up
+                                    {% else %}
+                                        bi-arrow-left-right
+                                    {% endif %}"></i>
+                            </div>
+                            <div class="movement-details">
+                                <p class="movement-description">
+                                    {% if movimiento.tipo == 'DEPOSITO_ONLINE' %}
+                                        Deposito Online
+                                    {% elif movimiento.tipo == 'DEPOSITO_OFFLINE' %}
+                                        Consignacion Offline
+                                    {% elif movimiento.tipo == 'RETIRO' %}
+                                        Retiro
+                                    {% elif movimiento.tipo == 'INTERES' %}
+                                        Interes Generado
+                                    {% elif movimiento.tipo == 'AJUSTE_ADMIN' %}
+                                        Ajuste Administrativo
+                                    {% else %}
+                                        Movimiento
+                                    {% endif %}
+                                    {% if movimiento.estado == 'PENDIENTE' %}
+                                    <span class="badge bg-warning text-dark ms-2">Pendiente</span>
+                                    {% elif movimiento.estado == 'RECHAZADO' %}
+                                    <span class="badge bg-danger ms-2">Rechazado</span>
+                                    {% endif %}
+                                </p>
+                                <p class="movement-date">{{ movimiento.fecha_creacion|date:"d/m/Y H:i" }}</p>
+                                {% if movimiento.descripcion %}
+                                <small class="text-muted">{{ movimiento.descripcion }}</small>
+                                {% endif %}
+                            </div>
+                            <p class="movement-amount 
+                                {% if movimiento.tipo == 'DEPOSITO_ONLINE' or movimiento.tipo == 'DEPOSITO_OFFLINE' or movimiento.tipo == 'AJUSTE_ADMIN' %}
+                                    text-success
+                                {% elif movimiento.tipo == 'RETIRO' %}
+                                    text-danger
+                                {% else %}
+                                    text-primary
+                                {% endif %}">
+                                {% if movimiento.tipo == 'RETIRO' %}-{% else %}+{% endif %}${{ movimiento.monto|floatformat:2|intcomma }}
+                            </p>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <div class="text-center py-5 text-muted">
+                        <i class="bi bi-inbox fa-3x mb-3"></i>
+                        <p>No hay movimientos registrados aún</p>
+                        <p class="small">Realiza tu primera consignación para comenzar a ahorrar</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Consignación Offline -->
+    <div class="modal fade" id="consignarModal" tabindex="-1" aria-labelledby="consignarModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="consignarModalLabel">
+                        <i class="bi bi-upload me-2"></i>
+                        Consignación Offline
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                {# NUEVA URL - Billetera #}
+                <form id="offlineConsignmentForm" method="post" action="{% url 'billetera:consignar' %}" enctype="multipart/form-data">
+                    {% csrf_token %}
+                    <div class="modal-body">
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle me-2"></i>
+                            Sube tu comprobante de pago y lo procesaremos pronto.
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="id_monto_display" class="form-label fw-semibold">
+                                <i class="bi bi-currency-dollar me-2"></i>
+                                Monto Consignado
+                            </label>
+                            <input type="text" class="form-control" id="id_monto_display" required placeholder="Ej: 50.000" inputmode="numeric">
+                            <input type="hidden" id="id_monto" name="monto">
+                            <small class="text-muted">Monto mínimo: $1.000</small>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="id_comprobante" class="form-label fw-semibold">
+                                <i class="bi bi-paperclip me-2"></i>
+                                Adjuntar Comprobante
+                            </label>
+                            <input class="form-control" type="file" id="id_comprobante" name="comprobante" 
+                                   accept=".pdf,.jpg,.jpeg,.png">
+                            <small class="text-muted">Formatos permitidos: PDF, JPG, PNG (Máx. 5MB)</small>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="id_descripcion" class="form-label fw-semibold">
+                                Descripción (Opcional)
+                            </label>
+                            <textarea class="form-control" id="id_descripcion" name="descripcion" 
+                                      rows="2" placeholder="Ej: Consignación desde Bancolombia"></textarea>
+                        </div>
+
+                        <div id="upload-feedback" class="d-none"></div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                            <i class="bi bi-x me-2"></i>Cancelar
+                        </button>
+                        <button type="submit" class="btn btn-primary" id="submitComprobante">
+                            <i class="bi bi-upload me-2"></i>Enviar Comprobante
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+
+        // Función para mostrar toasts dinámicos
+        function showToast(message, type = 'success') {
+            const toastContainer = document.getElementById('toastContainer');
+            const toastId = 'toast-' + Date.now();
+
+            // Mapeo de tipos a clases de Bootstrap y iconos
+            const typeConfig = {
+                'success': { class: 'bg-success', icon: 'bi-check-circle-fill' },
+                'error': { class: 'bg-danger', icon: 'bi-x-circle-fill' },
+                'warning': { class: 'bg-warning', icon: 'bi-exclamation-triangle-fill' },
+                'info': { class: 'bg-info', icon: 'bi-info-circle-fill' }
+            };
+
+            const config = typeConfig[type] || typeConfig['success'];
+
+            const toastHTML = `
+                <div id="${toastId}" class="toast align-items-center text-white ${config.class} border-0 mb-2" role="alert" aria-live="assertive" aria-atomic="true">
+                    <div class="d-flex">
+                        <div class="toast-body">
+                            <i class="bi ${config.icon} me-2"></i>
+                            ${message}
+                        </div>
+                        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                    </div>
+                </div>
+            `;
+
+            toastContainer.insertAdjacentHTML('beforeend', toastHTML);
+
+            const toastElement = document.getElementById(toastId);
+            const toast = new bootstrap.Toast(toastElement, { delay: 5000 });
+            toast.show();
+
+            // Remover el elemento del DOM después de que se oculte
+            toastElement.addEventListener('hidden.bs.toast', () => {
+                toastElement.remove();
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            // Mostrar toasts de Django messages al cargar
+            const djangoToasts = document.querySelectorAll('#toastContainer .toast');
+            djangoToasts.forEach(toastEl => {
+                const toast = new bootstrap.Toast(toastEl);
+                toast.show();
+            });
+
+            const getCookie = (name) => {
+                const cookieValue = `; ${document.cookie}`;
+                const parts = cookieValue.split(`; ${name}=`);
+                return parts.length === 2 ? parts.pop().split(';').shift() : '';
+            };
+
+            const notificationsDropdown = document.querySelector('[data-notifications-dropdown]');
+            if (notificationsDropdown) {
+                let notificationsMarked = false;
+                notificationsDropdown.addEventListener('show.bs.dropdown', function () {
+                    if (notificationsMarked) {
+                        return;
+                    }
+
+                    const markReadUrl = notificationsDropdown.dataset.markReadUrl;
+                    if (!markReadUrl) {
+                        return;
+                    }
+
+                    fetch(markReadUrl, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': getCookie('csrftoken'),
+                            'X-Requested-With': 'XMLHttpRequest'
+                        },
+                        body: JSON.stringify({})
+                    })
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error('No se pudieron actualizar las notificaciones.');
+                        }
+                        return response.json();
+                    })
+                    .then(() => {
+                        notificationsMarked = true;
+                        const badge = notificationsDropdown.querySelector('.badge');
+                        if (badge) {
+                            badge.remove();
+                        }
+                        notificationsDropdown.querySelectorAll('.dropdown-item .bi-circle-fill').forEach(dot => {
+                            dot.classList.remove('text-primary');
+                            dot.classList.add('text-muted');
+                        });
+                    })
+                    .catch(error => console.error(error));
+                });
+            }
+
+            // Datos del gráfico desde Django
+            const chartData = {{ chart_data|safe }};
+
+            // Toggle balance visibility
+            let balanceVisible = true;
+            const toggleBalanceBtn = document.getElementById('toggleBalance');
+            if (toggleBalanceBtn) {
+                toggleBalanceBtn.addEventListener('click', function() {
+                    const balanceValue = document.getElementById('balanceValue');
+                    if (balanceVisible) {
+                        balanceValue.innerHTML = '<h2>••••••••</h2>';
+                        this.classList.remove('bi-eye');
+                        this.classList.add('bi-eye-slash');
+                    } else {
+                        balanceValue.innerHTML = `<h2>${{ saldo_disponible|floatformat:2|intcomma }}</h2>`;
+                        this.classList.remove('bi-eye-slash');
+                        this.classList.add('bi-eye');
+                    }
+                    balanceVisible = !balanceVisible;
+                });
+            }
+
+            // Toggle consignar options
+            const consignarBtn = document.getElementById('consignarBtn');
+            if (consignarBtn) {
+                consignarBtn.addEventListener('click', function() {
+                    const options = document.getElementById('consignarOptions');
+                    options.classList.toggle('d-none');
+                });
+            }
+
+            // Chart.js configuration
+            if (chartData && chartData.labels && chartData.data) {
+                const ctx = document.getElementById('savingsChart').getContext('2d');
+                new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: chartData.labels,
+                        datasets: [{
+                            label: 'Ahorros Mensuales',
+                            data: chartData.data,
+                            borderColor: '#003893',
+                            backgroundColor: 'rgba(0, 56, 147, 0.1)',
+                            borderWidth: 3,
+                            fill: true,
+                            tension: 0.4,
+                            pointRadius: 5,
+                            pointHoverRadius: 7,
+                            pointBackgroundColor: '#003893',
+                            pointBorderColor: '#fff',
+                            pointBorderWidth: 2
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                display: false
+                            },
+                            tooltip: {
+                                backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                                padding: 12,
+                                titleFont: { size: 14, weight: 'bold' },
+                                bodyFont: { size: 12 },
+                                displayColors: false,
+                                callbacks: {
+                                    label: function(context) {
+                                        let value = context.parsed.y;
+                                        return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(value);
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                grid: {
+                                    color: 'rgba(0, 0, 0, 0.05)',
+                                    drawBorder: false
+                                },
+                                ticks: {
+                                    callback: function(value) {
+                                        return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(value);
+                                    },
+                                    color: '#6c757d',
+                                    font: { size: 11 }
+                                }
+                            },
+                            x: {
+                                grid: {
+                                    display: false
+                                },
+                                ticks: {
+                                    color: '#6c757d',
+                                    font: { size: 11 }
+                                }
+                            }
+                        },
+                        interaction: {
+                            intersect: false,
+                            mode: 'index'
+                        }
+                    }
+                });
+            }
+
+            // Form submission via AJAX
+            const offlineForm = document.getElementById('offlineConsignmentForm');
+            if(offlineForm) {
+                offlineForm.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    const formData = new FormData(this);
+                    const submitBtn = document.getElementById('submitComprobante');
+                    const feedbackDiv = document.getElementById('upload-feedback');
+
+                    submitBtn.disabled = true;
+                    submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Enviando...';
+
+                    fetch(this.action, {
+                        method: 'POST',
+                        body: formData,
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest'
+                        }
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            // Cerrar el modal
+                            const modal = bootstrap.Modal.getInstance(document.getElementById('consignarModal'));
+                            modal.hide();
+
+                            // Mostrar toast de éxito
+                            showToast(
+                                `¡Consignación enviada exitosamente! Referencia: ${data.referencia}. Tu consignación será revisada pronto.`,
+                                'success'
+                            );
+
+                            // Limpiar el formulario
+                            offlineForm.reset();
+                            feedbackDiv.classList.add('d-none');
+
+                            // Recargar después de 2 segundos
+                            setTimeout(() => {
+                                location.reload();
+                            }, 2000);
+                        } else {
+                            let errorMsg = 'Ocurrió un error. Por favor, revise los datos.';
+                            if (data.errors) {
+                                errorMsg = Object.entries(data.errors).map(([field, errors]) => `${field}: ${errors.join(', ')}`).join('\n');
+                            } else if (data.error) {
+                                errorMsg = data.error;
+                            }
+                            feedbackDiv.className = 'alert alert-danger';
+                            feedbackDiv.textContent = errorMsg;
+                            feedbackDiv.classList.remove('d-none');
+                        }
+                    })
+                    .catch(error => {
+                        feedbackDiv.className = 'alert alert-danger';
+                        feedbackDiv.textContent = 'Error de conexión. Por favor, inténtalo de nuevo.';
+                        feedbackDiv.classList.remove('d-none');
+                        console.error('Error:', error);
+                    })
+                    .finally(() => {
+                        submitBtn.disabled = false;
+                        submitBtn.innerHTML = '<i class="bi bi-upload me-2"></i>Enviar Comprobante';
+                    });
+                });
+            }
+
+            // Currency formatting for modal input
+            const montoDisplay = document.getElementById('id_monto_display');
+            const montoHidden = document.getElementById('id_monto');
+
+            if (montoDisplay && montoHidden) {
+                montoDisplay.addEventListener('input', function(e) {
+                    // 1. Get raw number by removing non-digit characters
+                    let rawValue = e.target.value.replace(/[^0-9]/g, '');
+                    
+                    // 2. Update hidden input's value
+                    montoHidden.value = rawValue;
+
+                    // 3. Format the value for display
+                    if (rawValue) {
+                        const numberValue = parseInt(rawValue, 10);
+                        // Format using Colombian locale for thousand separators
+                        const formattedValue = new Intl.NumberFormat('es-CO').format(numberValue);
+                        e.target.value = formattedValue;
+                    } else {
+                        e.target.value = '';
+                    }
+                });
+            }
+        });
+    </script>
+</body>
+</html>
+
+

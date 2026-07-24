@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    {% load static %}
+    {% load humanize %}
+    {% load l10n %}
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulador contratistas - Aprobado</title>
+    {% include 'base/favicon.html' %}
+    <link rel="stylesheet" href="{% static 'css/styles.css' %}">
+    <style>
+        .simulador-legal-note {
+            margin-top: 0.85rem;
+            font-size: 0.8rem;
+            line-height: 1.5;
+            color: #64748b;
+        }
+
+        .simulador-post-actions {
+            display: flex;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+            margin-top: 1rem;
+        }
+
+        .simulador-card form {
+            margin: 0;
+        }
+    </style>
+</head>
+<body class="body-index">
+{% include 'base/loader_global.html' %}
+<div class="div-body-main">
+    {% include 'base/navbar_contractors.html' %}
+
+    <main class="simulador-main">
+        <section class="simulador-hero-section">
+            <div class="simulador-container">
+                <div class="simulador-hero">
+                    <div class="simulador-text-content">
+                        <h1>Simulador de credito para contratistas</h1>
+                        <p>{{ branding.nombre_visual }} - Calcula una cuota estimada usando la informacion de tu solicitud {{ solicitud.id }}, tu contrato vigente y las condiciones activas del portal.</p>
+                        <a href="{% url 'contractors:documentos_solicitud_contratista' solicitud.id %}" class="simulador-cta-button">Volver a documentos</a>
+                    </div>
+
+                    <div class="simulador-card">
+                        <form method="post" class="simulador-form" id="formularioSimuladorContratista">
+                            {% csrf_token %}
+                            {{ formulario.non_field_errors }}
+                            <div class="simulador-form-step active">
+                                <div class="simulador-slider-container">
+                                    <div class="simulador-slider-title">Monto a simular</div>
+                                    <div class="simulador-range-container">
+                                        <div class="simulador-range-progress" id="simulador-progress-1"></div>
+                                        <input type="range"
+                                               min="{{ configuracion_producto.min_amount|unlocalize }}"
+                                               max="{{ configuracion_producto.max_amount|unlocalize }}"
+                                               step="50000"
+                                               value="{{ formulario.monto.value|default:solicitud.requested_amount|unlocalize }}"
+                                               class="simulador-range-input"
+                                               id="simulador-range-1"
+                                               name="monto">
+                                        <div class="simulador-range-tooltip" id="simulador-tooltip-1">$ {{ solicitud.requested_amount|floatformat:0|intcomma }}</div>
+                                    </div>
+                                    <div class="simulador-range-labels">
+                                        <span>$ {{ configuracion_producto.min_amount|floatformat:0|intcomma }}</span>
+                                        <span>$ {{ configuracion_producto.max_amount|floatformat:0|intcomma }}</span>
+                                    </div>
+                                    {{ formulario.monto.errors }}
+                                </div>
+
+                                <div class="simulador-slider-container">
+                                    <div class="simulador-slider-title">Plazo en meses</div>
+                                    <div class="simulador-range-container">
+                                        <div class="simulador-range-progress" id="simulador-progress-2"></div>
+                                        <input type="range"
+                                               min="{{ configuracion_producto.min_term_months }}"
+                                               max="{{ configuracion_producto.max_term_months }}"
+                                               step="1"
+                                               value="{{ formulario.plazo_meses.value|default:solicitud.term_months }}"
+                                               class="simulador-range-input"
+                                               id="simulador-range-2"
+                                               name="plazo_meses">
+                                        <div class="simulador-range-tooltip" id="simulador-tooltip-2">{{ solicitud.term_months }} meses</div>
+                                    </div>
+                                    <div class="simulador-range-labels">
+                                        <span>{{ configuracion_producto.min_term_months }} meses</span>
+                                        <span>{{ configuracion_producto.max_term_months }} meses</span>
+                                    </div>
+                                    {{ formulario.plazo_meses.errors }}
+                                </div>
+
+                                <div class="simulador-results-container">
+                                    <div class="simulador-result-row">
+                                        <label class="simulador-result-label">Monto solicitado:</label>
+                                        <input type="text" id="total-pr" value="{% if resultado %}$ {{ resultado.monto_solicitado|floatformat:2|intcomma }}{% else %}$ {{ solicitud.requested_amount|floatformat:0|intcomma }}{% endif %}" class="simulador-result-input" readonly>
+                                    </div>
+                                    <div class="simulador-result-row">
+                                        <label class="simulador-result-label">Capital financiado:</label>
+                                        <input type="text" value="{% if resultado %}$ {{ resultado.capital_financiado|floatformat:2|intcomma }}{% else %}-{% endif %}" class="simulador-result-input" readonly>
+                                    </div>
+                                    <div class="simulador-result-row">
+                                        <label class="simulador-result-label">Comision:</label>
+                                        <input type="text" value="{% if resultado %}$ {{ resultado.comision|floatformat:2|intcomma }}{% else %}-{% endif %}" class="simulador-result-input" readonly>
+                                    </div>
+                                    <div class="simulador-result-row">
+                                        <label class="simulador-result-label">Tasa mensual:</label>
+                                        <input type="text" value="{% if resultado %}{{ resultado.tasa_mensual|floatformat:4 }}%{% else %}-{% endif %}" class="simulador-result-input" readonly>
+                                    </div>
+                                    <div class="simulador-result-row">
+                                        <label class="simulador-result-label">IVA sobre comision:</label>
+                                        <input type="text" value="{% if resultado %}$ {{ resultado.iva_comision|floatformat:2|intcomma }}{% else %}-{% endif %}" class="simulador-result-input" readonly>
+                                    </div>
+                                    <div class="simulador-result-row">
+                                        <label class="simulador-result-label">Intereses estimados:</label>
+                                        <input type="text" value="{% if resultado %}$ {{ resultado.interes_estimado|floatformat:2|intcomma }}{% else %}-{% endif %}" class="simulador-result-input" readonly>
+                                    </div>
+                                    <div class="simulador-result-row" style="border-top: 2px solid #06b6d4; padding-top: 10px; margin-top: 10px;">
+                                        <label class="simulador-result-label" style="font-weight: 700;">Total estimado:</label>
+                                        <input type="text" value="{% if resultado %}$ {{ resultado.total_a_pagar|floatformat:2|intcomma }}{% else %}-{% endif %}" class="simulador-result-input" style="font-weight: 700;" readonly>
+                                    </div>
+                                    <div class="simulador-result-row">
+                                        <label class="simulador-result-label" style="font-weight: 700; color: #06b6d4;">Cuota mensual:</label>
+                                        <input type="text" value="{% if resultado %}$ {{ resultado.cuota_mensual|floatformat:2|intcomma }}{% else %}-{% endif %}" class="simulador-result-input" style="font-weight: 700; color: #06b6d4;" readonly>
+                                    </div>
+                                </div>
+                                <p class="simulador-legal-note">
+                                    La simulacion es informativa y depende de la revision documental, contrato vigente, capacidad contractual y reglas internas de riesgo.
+                                </p>
+                                <div class="simulador-post-actions">
+                                    <button type="submit" class="simulador-cta-button">Simular credito</button>
+                                    {% if resultado %}
+                                        <span class="simulador-legal-note">Resultado de simulacion generado para la solicitud {{ solicitud.id }}.</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    {% include 'base/footer_contractors.html' %}
+</div>
+{% include 'base/public_whatsapp_button.html' %}
+
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        const sliderMonto = document.getElementById("simulador-range-1");
+        const tooltipMonto = document.getElementById("simulador-tooltip-1");
+        const progresoMonto = document.getElementById("simulador-progress-1");
+        const sliderPlazo = document.getElementById("simulador-range-2");
+        const tooltipPlazo = document.getElementById("simulador-tooltip-2");
+        const progresoPlazo = document.getElementById("simulador-progress-2");
+
+        function formatoMoneda(valor) {
+            return new Intl.NumberFormat('es-CO', {
+                style: 'currency',
+                currency: 'COP',
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 0,
+            }).format(Number(valor || 0));
+        }
+
+        function actualizarSlider(slider, tooltip, progreso, formateador) {
+            const minimo = Number(slider.min);
+            const maximo = Number(slider.max);
+            const valor = Number(slider.value);
+            const porcentaje = maximo === minimo ? 0 : ((valor - minimo) / (maximo - minimo)) * 100;
+            tooltip.innerText = formateador(valor);
+            tooltip.style.left = `${porcentaje}%`;
+            tooltip.style.transform = 'translateX(-50%)';
+            progreso.style.width = `${porcentaje}%`;
+        }
+
+        function actualizarMonto() {
+            actualizarSlider(sliderMonto, tooltipMonto, progresoMonto, formatoMoneda);
+        }
+
+        function actualizarPlazo() {
+            actualizarSlider(sliderPlazo, tooltipPlazo, progresoPlazo, function (valor) {
+                return `${valor} ${valor === 1 ? 'mes' : 'meses'}`;
+            });
+        }
+
+        sliderMonto.addEventListener("input", actualizarMonto);
+        sliderPlazo.addEventListener("input", actualizarPlazo);
+        actualizarMonto();
+        actualizarPlazo();
+    });
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/lottie-web/5.12.2/lottie.min.js"></script>
+<script src="{% static 'js/global_loader.js' %}"></script>
+</body>
+</html>

@@ -1,0 +1,337 @@
+﻿{% comment %}
+=============================================================================
+SIMULADOR EXCLUSIVO DE CRÉDITO DE LIBRANZA
+=============================================================================
+Este simulador es exclusivo para el producto de Libranza.
+Utiliza el navbar y footer de Libranza (sin enlaces a emprendimiento).
+
+CARACTERÍSTICAS:
+- Monto: $500.000 - $3.000.000
+- Plazo: 1 - 6 meses
+- Costo de originación: 10% + IVA (19%)
+- Tasa de interés: {{ libranza_tasa_mensual|default:"1.9" }}% EM (Efectiva Mensual)
+
+MODIFICAR:
+- Rangos de monto: Líneas 58-60
+- Rangos de plazo: Líneas 75-77
+- Tasa de interés: Línea 182 (tasaMensual dinámico desde configuración)
+- Cálculos (costo de originación, IVA, etc.): Líneas 167-201
+{% endcomment %}
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    {% load static %}
+    {% load humanize %}
+    {% load l10n %}
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulador de crédito estudiantil - {{ brand.name|default:"FUNDETEC" }}</title>
+    {% include 'base/favicon.html' %}
+    <link rel="stylesheet" href="{% static 'css/styles.css' %}">
+    <style>
+        .simulador-mobile-cta {
+            display: none;
+            margin-top: 1rem;
+            width: 100%;
+            text-align: center;
+        }
+        .simulador-legal-note {
+            margin-top: 0.85rem;
+            font-size: 0.8rem;
+            line-height: 1.5;
+            color: #64748b;
+        }
+        .simulador-hero-section {
+            background: #083B7A;
+        }
+        .simulador-range-progress,
+        .simulador-cta-button {
+            background: #0B4EA2;
+        }
+        .simulador-cta-button:hover {
+            background: #083B7A;
+        }
+        .simulador-range-tooltip,
+        .simulador-result-row label[for="cuotaMensual"] {
+            color: #0B4EA2 !important;
+        }
+        .simulador-results-container .simulador-result-row[style*="border-top"] {
+            border-top-color: #FFC400 !important;
+        }
+        @media (max-width: 768px) {
+            .simulador-mobile-cta {
+                display: inline-flex;
+                justify-content: center;
+                align-items: center;
+            }
+        }
+    </style>
+</head>
+<body class="body-index">
+{% include 'base/loader_global.html' %}
+<div class="div-body-main">
+    <!-- Navbar exclusivo de Libranza -->
+    {% include 'base/navbar_libranza.html' %}
+
+    <main class="simulador-main">
+        <section class="simulador-hero-section">
+            <div class="simulador-container">
+                <div class="simulador-hero">
+                    <!-- SIMULADOR DE LIBRANZA -->
+                    <div class="simulador-text-content">
+                        <!-- MODIFICAR: Título y descripción del simulador -->
+                        <h1>Simulador de crédito estudiantil</h1>
+                        <p>Calcula tu cuota mensual y conoce las condiciones estimadas de tu financiación educativa
+                           para matrícula, cursos o programas académicos.</p>
+                        {# NUEVA URL - Libranza #}
+                        <a href="{% url 'libranza:solicitar' %}" class="simulador-cta-button" id="simulador-aplicar-ahora">Solicitar crédito estudiantil</a>
+                    </div>
+
+                    <div class="simulador-card">
+                        <form action="#" class="simulador-form">
+                            <div class="simulador-form-step active">
+                                <!-- Primer slider - Monto del crédito -->
+                                <div class="simulador-slider-container">
+                                    <div class="simulador-slider-title">¿Cuánto necesitas financiar?</div>
+                                    <div class="simulador-range-container">
+                                        <div class="simulador-range-progress" id="simulador-progress-1"></div>
+                                        <!-- MODIFICAR: Monto mínimo, máximo y paso -->
+                                        <input type="range" min="{{ libranza_monto_minimo_publico|unlocalize }}" max="{{ libranza_monto_maximo|unlocalize }}" step="50000" value="{{ libranza_monto_maximo|unlocalize }}"
+                                               class="simulador-range-input" id="simulador-range-1">
+                                        <div class="simulador-range-tooltip" id="simulador-tooltip-1">$ {{ libranza_monto_maximo|floatformat:0|intcomma }}</div>
+                                    </div>
+                                    <div class="simulador-range-labels">
+                                        <!-- MODIFICAR: Etiquetas de rango -->
+                                        <span>$ 500.000</span>
+                                        <span>$ {{ libranza_monto_maximo|floatformat:0|intcomma }}</span>
+                                    </div>
+                                </div>
+
+                                <!-- Segundo slider - Plazo (1-6 meses) -->
+                                <div class="simulador-slider-container">
+                                    <div class="simulador-slider-title">¿En cuántos meses deseas pagarlo?</div>
+                                    <div class="simulador-range-container">
+                                        <div class="simulador-range-progress" id="simulador-progress-2"></div>
+                                        <!-- MODIFICAR: Plazo mínimo, máximo -->
+                                        <input type="range" min="1" max="6" step="1" value="6"
+                                               class="simulador-range-input" id="simulador-range-2">
+                                        <div class="simulador-range-tooltip" id="simulador-tooltip-2">6 meses</div>
+                                    </div>
+                                    <div class="simulador-range-labels">
+                                        <!-- MODIFICAR: Etiquetas de plazo -->
+                                        <span>1 mes</span>
+                                        <span>6 meses</span>
+                                    </div>
+                                </div>
+
+                                <!-- Resultados del cálculo - LIBRANZA -->
+                                <div class="simulador-results-container">
+                                    <div class="simulador-result-row">
+                                        <label for="total-pr" class="simulador-result-label">Monto solicitado:</label>
+                                        <input type="text" id="total-pr" name="total-pr" value="$ {{ libranza_monto_maximo|floatformat:0|intcomma }},00"
+                                               class="simulador-result-input" readonly>
+                                    </div>
+                                    <div class="simulador-result-row">
+                                        <label for="comision" class="simulador-result-label">Costo de originación (10%):</label>
+                                        <input type="text" id="comision" name="comision" value="$ 200.000,00"
+                                               class="simulador-result-input" readonly>
+                                    </div>
+                                    <div class="simulador-result-row">
+                                        <label for="ivaComision" class="simulador-result-label">IVA sobre costo de originación (19%):</label>
+                                        <input type="text" id="ivaComision" name="ivaComision" value="$ 38.000,00"
+                                               class="simulador-result-input" readonly>
+                                    </div>
+                                    <div class="simulador-result-row">
+                                        <label for="totalIntereses" class="simulador-result-label">Intereses ({{ libranza_tasa_mensual|default:"1.9" }}% EM):</label>
+                                        <input type="text" id="totalIntereses" name="totalIntereses" value="$ 151.160,81"
+                                               class="simulador-result-input" readonly>
+                                    </div>
+                                    <div class="simulador-result-row" style="border-top: 2px solid #06b6d4; padding-top: 10px; margin-top: 10px;">
+                                        <label for="totalPagar" class="simulador-result-label" style="font-weight: 700;">Total a pagar:</label>
+                                        <input type="text" id="totalPagar" name="totalPagar" value="$ 2.389.160,81"
+                                               class="simulador-result-input" style="font-weight: 700;" readonly>
+                                    </div>
+                                    <div class="simulador-result-row">
+                                        <label for="cuotaMensual" class="simulador-result-label" style="font-weight: 700; color: #06b6d4;">Cuota mensual:</label>
+                                        <input type="text" id="cuotaMensual" name="cuotaMensual" value="$ 398.193,47"
+                                               class="simulador-result-input" style="font-weight: 700; color: #06b6d4;" readonly>
+                                    </div>
+                                </div>
+                                <p class="simulador-legal-note">
+                                    El costo de originación corresponde a la gestión, análisis y operación del crédito a través de la plataforma {{ brand.name|default:"FUNDETEC" }}.
+                                    Este valor genera IVA según la normatividad vigente.
+                                </p>
+                                <a href="{% url 'libranza:solicitar' %}" class="simulador-cta-button simulador-mobile-cta">Solicitar con esta simulación</a>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer exclusivo de Libranza -->
+    {% include 'base/footer_libranza.html' %}
+
+</div>
+{% include 'base/public_whatsapp_button.html' %}
+
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        // SCRIPT PARA SIMULADOR DE LIBRANZA
+        const totalPrestamoInput = document.getElementById("total-pr");
+        const comisionInput = document.getElementById("comision");
+        const ivaComisionInput = document.getElementById("ivaComision");
+        const totalInteresesInput = document.getElementById("totalIntereses");
+        const totalPagarInput = document.getElementById("totalPagar");
+        const cuotaMensualInput = document.getElementById("cuotaMensual");
+        const aplicarAhora = document.getElementById("simulador-aplicar-ahora");
+        const solicitudBaseUrl = "{% url 'libranza:solicitar' %}";
+        const enlacesSolicitud = Array.from(
+            document.querySelectorAll(`a[href="${solicitudBaseUrl}"]`)
+        );
+
+        /**
+         * Calcula la cuota usando la fórmula de anualidad (amortización francesa)
+         * MODIFICAR: Si cambias la tasa de interés, ajusta tasaMensual
+         */
+        function calcularCuotaAnualidad(monto, tasaMensual, meses) {
+            if (tasaMensual === 0) {
+                return monto / meses;
+            }
+            const factor = Math.pow(1 + tasaMensual, meses);
+            const cuota = monto * (tasaMensual * factor) / (factor - 1);
+            return cuota;
+        }
+
+        /**
+         * Actualiza todos los cálculos del simulador
+         */
+        function actualizarCalculosLibranza() {
+            const montoSolicitado = parseFloat(slider1.value);
+            const meses = parseFloat(slider2.value);
+
+            // MODIFICAR: Porcentajes aquí
+            const comision = montoSolicitado * 0.10;           // 10% de comisión
+            const ivaComision = comision * 0.19;                // 19% de IVA sobre costo de originación
+
+            // Capital financiado = monto + comisión + IVA (esto es lo que se financia en cuotas)
+            const capitalFinanciado = montoSolicitado + comision + ivaComision;
+
+            // Tasa de interés mensual parametrizable para Libranza
+            const tasaMensual = parseFloat('{{ libranza_tasa_decimal_js|default:"0.019" }}');
+
+            // Calcular cuota mensual sobre el capital financiado
+            const cuotaMensual = calcularCuotaAnualidad(capitalFinanciado, tasaMensual, meses);
+
+            // Total a pagar = suma de todas las cuotas
+            const totalAPagar = cuotaMensual * meses;
+
+            // Total de intereses = Total a pagar - Capital financiado
+            const totalIntereses = totalAPagar - capitalFinanciado;
+
+            // Actualizar valores en el formulario
+            totalPrestamoInput.value = formatColombianNumber(montoSolicitado);
+            comisionInput.value = formatColombianNumber(comision);
+ivaComisionInput.value = formatColombianNumber(ivaComision);
+            totalInteresesInput.value = formatColombianNumber(totalIntereses);
+            totalPagarInput.value = formatColombianNumber(totalAPagar);
+            cuotaMensualInput.value = formatColombianNumber(cuotaMensual);
+
+            actualizarAplicarLink();
+        }
+
+        // Configuración de sliders
+        const slider1 = document.getElementById("simulador-range-1");
+        const tooltip1 = document.getElementById("simulador-tooltip-1");
+        const progress1 = document.getElementById("simulador-progress-1");
+
+        const slider2 = document.getElementById("simulador-range-2");
+        const tooltip2 = document.getElementById("simulador-tooltip-2");
+        const progress2 = document.getElementById("simulador-progress-2");
+
+        /**
+         * Formatea números en formato colombiano ($ 1.000.000,00)
+         */
+        function formatColombianNumber(num) {
+            return new Intl.NumberFormat('es-CO', {
+                style: 'currency',
+                currency: 'COP',
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            }).format(num);
+        }
+
+        /**
+         * Actualiza el slider de monto
+         */
+        function updateSlider1() {
+            const minVal = parseFloat(slider1.min);
+            const maxVal = parseFloat(slider1.max);
+            const val = parseFloat(slider1.value);
+            const percent = ((val - minVal) / (maxVal - minVal)) * 100;
+
+            tooltip1.innerText = formatColombianNumber(val);
+            tooltip1.style.left = `${percent}%`;
+            tooltip1.style.transform = 'translateX(-50%)';
+            progress1.style.width = `${percent}%`;
+
+            actualizarCalculosLibranza();
+        }
+
+        /**
+         * Actualiza el slider de plazo
+         */
+        function updateSlider2() {
+            const val = slider2.value;
+            const percent = ((val - slider2.min) / (slider2.max - slider2.min)) * 100;
+
+            tooltip2.innerText = `${val} ${val === "1" ? "mes" : "meses"}`;
+            tooltip2.style.left = `${percent}%`;
+            tooltip2.style.transform = 'translateX(-50%)';
+            progress2.style.width = `${percent}%`;
+
+            actualizarCalculosLibranza();
+        }
+
+        function actualizarAplicarLink() {
+            if (!aplicarAhora || !enlacesSolicitud.length) {
+                return;
+            }
+
+            const monto = parseInt(slider1.value, 10);
+            const plazo = parseInt(slider2.value, 10);
+
+            if (Number.isNaN(monto) || Number.isNaN(plazo)) {
+                enlacesSolicitud.forEach((link) => {
+                    link.href = solicitudBaseUrl;
+                });
+                return;
+            }
+
+            const targetUrl = `${solicitudBaseUrl}?monto=${monto}&plazo=${plazo}`;
+            enlacesSolicitud.forEach((link) => {
+                link.href = targetUrl;
+            });
+        }
+
+        // Event listeners para los sliders
+        slider1.addEventListener("input", updateSlider1);
+        slider2.addEventListener("input", updateSlider2);
+        slider1.addEventListener("change", updateSlider1);
+        slider2.addEventListener("change", updateSlider2);
+
+        // Inicializar sliders y cálculos
+        updateSlider1();
+        updateSlider2();
+    });
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/lottie-web/5.12.2/lottie.min.js"></script>
+<script src="{% static 'js/global_loader.js' %}"></script>
+</body>
+</html>
+
+
+

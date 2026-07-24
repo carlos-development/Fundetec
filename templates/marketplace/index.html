@@ -1,0 +1,248 @@
+{% load static contact_tags %}
+{% contact_mailto as support_mailto %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vitrina Empresa - Aprobado</title>
+    <link rel="stylesheet" href="{% static 'css/marketplace.css' %}">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    {% include 'base/favicon.html' %}
+</head>
+<body class="marketplace">
+    <div class="mp-orb orb-1"></div>
+    <div class="mp-orb orb-2"></div>
+
+    <form id="mp-logout-form" method="post" action="{% url 'marketplace:logout' %}" style="display:none;">
+        {% csrf_token %}
+    </form>
+
+    <header class="mp-header mp-container">
+        <a href="/" class="mp-brand">
+            <img src="{% static 'images/logo-dark.png' %}" alt="Aprobado">
+            Aliados Aprobado
+        </a>
+        <div class="mp-header-meta">
+            {% if marketplace_is_authenticated %}
+                {% if marketplace_is_admin_user %}
+                <span class="mp-company-pill">
+                    <i class="bi bi-shield-lock"></i>
+                    Acceso administrativo
+                </span>
+                {% else %}
+                <span class="mp-company-pill">
+                    <i class="bi bi-person-circle"></i>
+                    {{ marketplace_display_name }}
+                </span>
+                <a href="{% url 'marketplace:orders' %}" class="mp-btn ghost mp-btn-sm">Mis pedidos</a>
+                {% endif %}
+                <a href="#" class="mp-btn primary mp-btn-sm" onclick="event.preventDefault();document.getElementById('mp-logout-form').submit();">Cerrar sesion</a>
+            {% else %}
+            <a href="{% url 'marketplace:login' %}?next={{ request.get_full_path|urlencode }}" class="mp-btn ghost mp-btn-sm">Iniciar sesion</a>
+            <a href="{% url 'marketplace:register' %}?next={{ request.get_full_path|urlencode }}" class="mp-btn primary mp-btn-sm">Crear cuenta</a>
+            {% endif %}
+            <span class="mp-company-pill">
+                <i class="bi bi-buildings"></i>
+                Empresa aliada
+            </span>
+            <span class="mp-trust">
+                <i class="bi bi-shield-check"></i>
+                Respaldo Aprobado
+            </span>
+        </div>
+    </header>
+
+    <section class="mp-hero mp-container">
+        <div>
+            <span class="mp-hero-badge">
+                <i class="bi bi-stars"></i>
+                Beneficios exclusivos de esta empresa
+            </span>
+            <h1>Vitrina de beneficios de <span class="mp-company-name">{{ empresa.nombre }}</span></h1>
+            <p>
+                {{ empresa.descripcion_marketplace|default:"Productos, servicios y publicidad publicados por esta empresa aliada." }}
+                Contacta directo por WhatsApp con el interes exacto del producto.
+            </p>
+            <div class="mp-hero-actions">
+                <a href="#explorar" class="mp-btn primary">
+                    <i class="bi bi-grid-3x3-gap"></i>Ver publicaciones
+                </a>
+                <a href="#contacto" class="mp-btn ghost">
+                    <i class="bi bi-whatsapp"></i>Contactar empresa
+                </a>
+                {% if marketplace_is_authenticated %}
+                <a href="{% url 'marketplace:orders' %}" class="mp-btn ghost">
+                    <i class="bi bi-bag-check"></i>Mis pedidos
+                </a>
+                {% else %}
+                <a href="{% url 'marketplace:login' %}?next={{ request.get_full_path|urlencode }}" class="mp-btn ghost">
+                    <i class="bi bi-person-circle"></i>Iniciar sesion
+                </a>
+                {% endif %}
+            </div>
+        </div>
+        <div class="mp-hero-card">
+            {% if empresa.logo_marketplace_url or empresa.logo_marketplace_static %}
+            <div class="mp-company-hero-logo">
+                {% if empresa.logo_marketplace_url %}
+                <img src="{{ empresa.logo_marketplace_url }}" alt="{{ empresa.nombre }}">
+                {% else %}
+                <img src="{% static empresa.logo_marketplace_static %}" alt="{{ empresa.nombre }}">
+                {% endif %}
+            </div>
+            {% endif %}
+            <h3 style="margin:0; font-family:'Space Grotesk', sans-serif;">Sobre la empresa</h3>
+            <p style="margin:8px 0 0; color: var(--mp-muted);">
+                {{ empresa.descripcion_marketplace|default:"Empresa aliada a Aprobado con beneficios especiales para la comunidad." }}
+            </p>
+            <div class="mp-stats">
+                <div class="mp-stat"><span>Publicaciones activas</span><strong>{{ items|length }}</strong></div>
+                <div class="mp-stat"><span>Beneficios vigentes</span><strong>{{ items|length }}</strong></div>
+                <div class="mp-stat"><span>Respuesta promedio</span><strong>&lt; 2h</strong></div>
+            </div>
+        </div>
+    </section>
+
+    <section class="mp-container mp-filters" id="explorar">
+        <div class="mp-search">
+            <i class="bi bi-search"></i>
+            <input type="text" id="mpSearch" placeholder="Buscar producto, servicio o beneficio">
+        </div>
+        <div class="mp-chip-group" role="tablist">
+            <button class="mp-chip active" data-filter="all">Todos</button>
+            <button class="mp-chip" data-filter="producto">Productos</button>
+            <button class="mp-chip" data-filter="servicio">Servicios</button>
+            <button class="mp-chip" data-filter="publicidad">Publicidad</button>
+        </div>
+    </section>
+
+    <section class="mp-container mp-grid" id="beneficios">
+        {% if items %}
+            {% for item in items %}
+            <article class="mp-card" data-type="{{ item.tipo }}" data-company="{{ empresa.nombre }}" data-title="{{ item.titulo }}" data-whatsapp="{{ item.whatsapp_contacto|default:empresa.whatsapp_contacto }}">
+                <div class="mp-card-media" {% if item.imagen %}style="background-image: url('{{ item.imagen.url }}');"{% else %}style="background-image: url('https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=900&q=80');"{% endif %}>
+                    <span class="mp-card-tag">{{ item.get_tipo_display }}</span>
+                </div>
+                <div class="mp-card-body">
+                    <h3 class="mp-card-title">{{ item.titulo }}</h3>
+                    <p class="mp-card-desc">{{ item.descripcion|linebreaksbr }}</p>
+                    <div class="mp-card-benefit">Beneficio: {{ item.beneficio }}</div>
+                    <div class="mp-card-meta">
+                        <span class="mp-price">{{ item.precio|default:"Precio especial" }}</span>
+                        <a href="{% url 'marketplace:empresa' empresa.slug %}" class="mp-company-link mp-company-link-brand">
+                            {% if empresa.logo_marketplace_url %}
+                            <span class="mp-company-mini-logo">
+                                <img src="{{ empresa.logo_marketplace_url }}" alt="{{ empresa.nombre }}">
+                            </span>
+                            {% elif empresa.logo_marketplace_static %}
+                            <span class="mp-company-mini-logo">
+                                <img src="{% static empresa.logo_marketplace_static %}" alt="{{ empresa.nombre }}">
+                            </span>
+                            {% else %}
+                            <span class="mp-company-mini-badge">{{ empresa.nombre|slice:":2"|upper }}</span>
+                            {% endif %}
+                            <span>{{ empresa.nombre }}</span>
+                        </a>
+                    </div>
+                    {% if item.precio %}
+                    <a class="mp-btn ghost" href="{% url 'marketplace:checkout' item.id %}" style="width:100%;justify-content:center;">
+                        <i class="bi bi-bag"></i>Solicitar pedido
+                    </a>
+                    {% endif %}
+                    <a class="mp-cta" href="https://wa.me/{{ item.whatsapp_contacto|default:empresa.whatsapp_contacto }}" target="_blank" rel="noopener">
+                        <i class="bi bi-whatsapp"></i>Escribir por WhatsApp
+                    </a>
+                </div>
+            </article>
+            {% endfor %}
+        {% else %}
+            <article class="mp-card" data-type="producto" data-company="{{ empresa.nombre }}" data-title="Kit de productividad smart" data-whatsapp="{{ empresa.whatsapp_contacto }}">
+                <div class="mp-card-media" style="background-image: url('https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=900&q=80');">
+                    <span class="mp-card-tag">Producto</span>
+                </div>
+                <div class="mp-card-body">
+                    <h3 class="mp-card-title">Kit de productividad smart</h3>
+                    <p class="mp-card-desc">Accesorios esenciales para tu dia: organizador, soporte y cargador rapido.</p>
+                    <div class="mp-card-benefit">Beneficio: 18% de descuento</div>
+                    <div class="mp-card-meta">
+                        <span class="mp-price">$159.000</span>
+                        <a href="{% url 'marketplace:empresa' empresa.slug %}" class="mp-company-link mp-company-link-brand">
+                            <span class="mp-company-mini-badge">{{ empresa.nombre|slice:":2"|upper }}</span>
+                            <span>{{ empresa.nombre }}</span>
+                        </a>
+                    </div>
+                    <a class="mp-cta" href="https://wa.me/{{ empresa.whatsapp_contacto }}" target="_blank" rel="noopener">
+                        <i class="bi bi-whatsapp"></i>Escribir por WhatsApp
+                    </a>
+                </div>
+            </article>
+        {% endif %}
+    </section>
+
+    <section class="mp-container mp-highlight" id="contacto">
+        <h3>Quieres hablar con la empresa?</h3>
+        <p>
+            Este espacio es gestionado por Aprobado como vitrina exclusiva. Al contactar,
+            tu mensaje ira directamente a la empresa aliada.
+        </p>
+        <div class="mp-hero-actions">
+            <a class="mp-btn primary" href="https://wa.me/{{ empresa.whatsapp_contacto }}" target="_blank" rel="noopener">
+                <i class="bi bi-whatsapp"></i>Escribir por WhatsApp
+            </a>
+            <a class="mp-btn ghost" href="{{ support_mailto }}">
+                <i class="bi bi-envelope"></i>Contactar Aprobado
+            </a>
+        </div>
+    </section>
+
+    <footer class="mp-footer mp-container">
+        Vitrina de empresa aliada · Respaldo y confianza por Aprobado
+    </footer>
+
+    <script>
+        const chips = document.querySelectorAll('.mp-chip');
+        const cards = document.querySelectorAll('.mp-card');
+        const searchInput = document.getElementById('mpSearch');
+
+        const applyFilters = () => {
+            const activeChip = document.querySelector('.mp-chip.active');
+            const typeFilter = activeChip ? activeChip.dataset.filter : 'all';
+            const searchValue = searchInput.value.toLowerCase();
+
+            cards.forEach(card => {
+                const type = card.dataset.type || '';
+                const text = card.innerText.toLowerCase();
+
+                const matchesType = typeFilter === 'all' || type === typeFilter;
+                const matchesSearch = text.includes(searchValue);
+
+                card.style.display = matchesType && matchesSearch ? 'flex' : 'none';
+            });
+        };
+
+        chips.forEach(chip => {
+            chip.addEventListener('click', () => {
+                chips.forEach(c => c.classList.remove('active'));
+                chip.classList.add('active');
+                applyFilters();
+            });
+        });
+
+        searchInput.addEventListener('input', applyFilters);
+
+        cards.forEach(card => {
+            const title = card.dataset.title || card.querySelector('.mp-card-title')?.innerText || 'una publicacion';
+            const company = card.dataset.company || 'esta empresa';
+            const whatsapp = card.dataset.whatsapp || '{{ empresa.whatsapp_contacto }}';
+            const cta = card.querySelector('.mp-cta');
+            if (cta && whatsapp) {
+                const baseUrl = `https://wa.me/${whatsapp}`;
+                const message = `Hola, me interesa "${title}" publicado por ${company} en Aprobado.`;
+                cta.setAttribute('href', `${baseUrl}?text=${encodeURIComponent(message)}`);
+            }
+        });
+    </script>
+    {% include 'base/public_whatsapp_button.html' %}
+</body>
+</html>

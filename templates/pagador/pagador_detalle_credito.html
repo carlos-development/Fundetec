@@ -1,0 +1,553 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Detalle de Crédito - {{ brand.name|default:"FUNDETEC" }}</title>
+    {% load static %}
+    {% load humanize %}
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link href="{% static 'creditos/css/base_styles.css' %}" rel="stylesheet">
+    {% include 'base/favicon.html' %}
+</head>
+<body class="theme-details">
+{% include 'base/loader_global.html' %}
+    <header class="page-header">
+        <div class="container-fluid" style="max-width: 1400px;">
+            <div class="d-flex align-items-center justify-content-between">
+                <a href="{% url 'pagador:dashboard' %}" class="logo">
+                    <img src="{% static brand.logo_dark|default:'images/fundetec-logo.png' %}" alt="{{ brand.name|default:'FUNDETEC' }} Logo" style="height: 40px;" />
+                </a>
+                <div class="d-flex align-items-center gap-3">
+                    <div class="user-info">
+                        <div class="user-details">
+                            <h6 class="mb-0">{{ request.user.get_full_name|default:request.user.username }}</h6>
+                            <small>Administrador del convenio: {{ empresa_credito.nombre }}</small>
+                        </div>
+                        <div class="user-avatar">{{ request.user.username|slice:":1"|upper }}</div>
+                    </div>
+                    <form method="post" action="{% url 'pagador:logout' %}">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-outline">
+                            <i class="bi bi-box-arrow-right"></i>
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <div class="container-fluid py-4" style="max-width: 1400px;">
+        <!-- Page Title & Breadcrumb -->
+        <div class="d-flex align-items-center justify-content-between mb-4 px-4">
+            <div>
+                <h1 class="page-title">Detalle del Crédito</h1>
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb">
+                        <li class="breadcrumb-item"><a href="{% url 'pagador:dashboard' %}"><i class="bi bi-house-door"></i> Dashboard</a></li>
+                        <li class="breadcrumb-item active" aria-current="page">Detalle del Crédito</li>
+                    </ol>
+                </nav>
+            </div>
+            <a href="{% url 'pagador:dashboard' %}" class="btn btn-outline-primary">
+                <i class="bi bi-arrow-left me-2"></i>Volver al Dashboard
+            </a>
+        </div>
+
+        {% if credito.tipo_regla_credito == 'ESPECIAL' %}
+        <div class="alert alert-info mx-4 mb-4">
+            Este credito usa una regla especial. Revisa la fecha de primera cuota, el plazo aplicado y la trazabilidad operativa antes de aprobar cambios.
+        </div>
+        {% endif %}
+        <div class="main-grid">
+            <div class="table-container">
+                <div class="table-header">
+                    <h3 class="table-title"><i class="bi bi-clock-history me-2"></i>Historial de Pagos</h3>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-stack-mobile">
+                        <thead>
+                            <tr>
+                                <th>Fecha aplicación</th>
+                                <th>Referencia</th>
+                                <th>Método</th>
+                                <th class="text-end">Monto</th>
+                                <th class="text-center">Soporte</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for pago in historial_pagos %}
+                            <tr>
+                                <td class="date-display" data-label="Fecha aplicación">{{ pago.fecha_aplicacion|default:pago.fecha_pago|date:"d/m/Y" }}</td>
+                                <td data-label="Referencia">{{ pago.referencia_pago }}</td>
+                                <td data-label="Método">{{ pago.get_metodo_pago_display|default:"-" }}</td>
+                                <td class="text-end amount-display" data-label="Monto">${{ pago.monto|intcomma }}</td>
+                                <td class="text-center" data-label="Soporte">
+                                    {% if pago.comprobante %}
+                                    <a href="{{ pago.comprobante.url }}" class="btn btn-sm btn-outline-primary" target="_blank">Ver</a>
+                                    {% elif pago.lote_pago and pago.lote_pago.comprobante %}
+                                    <a href="{{ pago.lote_pago.comprobante.url }}" class="btn btn-sm btn-outline-primary" target="_blank">Carga</a>
+                                    {% else %}
+                                    <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="5" class="empty-row">
+                                    <div class="empty-state">
+                                        <i class="bi bi-receipt"></i>
+                                        <p>No se han registrado pagos.</p>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="d-flex flex-column gap-4">
+                {% if credito.estado == 'EN_REVISION' and not pagador_decision %}
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title"><i class="bi bi-check2-circle me-2"></i>Decidir Solicitud</h3>
+                    </div>
+                    <div class="card-content">
+                        <p class="text-muted">Revise la solicitud y confirme si desea aprobarla o rechazarla.</p>
+                        <form method="post" action="{% url 'pagador:decidir_solicitud' credito.id %}">
+                            {% csrf_token %}
+                            <div class="form-group mb-3">
+                                <label for="motivo-detalle" class="form-label">Campo de estudio (opcional)</label>
+                                <textarea id="motivo-detalle" name="motivo" class="form-control" rows="3"
+                                          placeholder="Ej: Aceptado por convenio educativo / Rechazado por validación documental"></textarea>
+                            </div>
+                            <div class="d-flex gap-2">
+                                <button type="submit" name="action" value="reject" class="btn btn-outline-danger btn-decision">
+                                    <i class="bi bi-x-circle"></i>
+                                    <span>Rechazar</span>
+                                </button>
+                                <button type="submit" name="action" value="approve" class="btn btn-success btn-decision"
+                                        data-loader-type="check" data-loader-text="Aprobando solicitud...">
+                                    <i class="bi bi-check-circle"></i>
+                                    <span>Aprobar</span>
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+                {% endif %}
+                {% if capacidad_descuento %}
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title"><i class="bi bi-calculator me-2"></i>Validación del convenio</h3>
+                    </div>
+                    <div class="card-content">
+                        <div class="row g-3 text-center">
+                            <div class="col-6">
+                                <div class="info-item">
+                                    <span class="info-label">Ingreso base usado</span>
+                                    <span class="info-value">${{ capacidad_descuento.ingreso_base|floatformat:0|intcomma }}</span>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="info-item">
+                                    <span class="info-label">Obligaciones consideradas</span>
+                                    <span class="info-value">${{ capacidad_descuento.descuentos_considerados|floatformat:0|intcomma }}</span>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="info-item">
+                                    <span class="info-label">Ingreso neto</span>
+                                    <span class="info-value">${{ capacidad_descuento.ingreso_neto|floatformat:0|intcomma }}</span>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="info-item">
+                                    <span class="info-label">Capacidad disponible</span>
+                                    <span class="info-value">${{ capacidad_descuento.capacidad_disponible|floatformat:0|intcomma }}</span>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="info-item">
+                                    <span class="info-label">Monto solicitado</span>
+                                    <span class="info-value">${{ capacidad_descuento.monto_solicitado|floatformat:0|intcomma }}</span>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="info-item">
+                                    <span class="info-label">Resultado preliminar</span>
+                                    <span class="info-value {% if capacidad_descuento.decision_preliminar == 'APLICA' %}text-success{% elif capacidad_descuento.decision_preliminar == 'NO_APLICA' %}text-danger{% endif %}">
+                                        {{ capacidad_descuento.decision_preliminar }}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                        <p class="text-muted mt-3 mb-0 small">
+                            Este cálculo usa la información registrada, obligaciones consideradas y el porcentaje operativo configurado del {{ capacidad_descuento.porcentaje_aplicado|floatformat:0 }}%.
+                        </p>
+                    </div>
+                </div>
+                {% endif %}
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title"><i class="bi bi-file-text me-2"></i>Resumen del Crédito</h3>
+                    </div>
+                    <div class="card-content">
+                        {% if credito.estado == 'EN_REVISION' or credito.estado == 'PENDIENTE_FIRMA' or credito.estado == 'PENDIENTE_TRANSFERENCIA' %}
+                        {% if pagador_aprobado %}
+                        <div class="alert alert-success text-center">
+                            <i class="bi bi-check-circle-fill me-2"></i>
+                            <strong>Solicitud aprobada por el convenio</strong>
+                            <p class="mb-0 mt-2">La decisión ya quedó registrada. Ahora el crédito fue enviado al flujo de firma del pagaré.</p>
+                            {% if pagador_decision.motivo %}
+                            <p class="mb-0 mt-2 small">Motivo: {{ pagador_decision.motivo }}</p>
+                            {% endif %}
+                        </div>
+                        {% elif pagador_rechazado %}
+                        <div class="alert alert-danger text-center">
+                            <i class="bi bi-x-circle-fill me-2"></i>
+                            <strong>Solicitud rechazada por el convenio</strong>
+                            <p class="mb-0 mt-2">La decisión ya quedó registrada y no se permiten nuevas acciones sobre esta solicitud.</p>
+                            {% if pagador_decision.motivo %}
+                            <p class="mb-0 mt-2 small">Motivo: {{ pagador_decision.motivo }}</p>
+                            {% endif %}
+                        </div>
+                        {% else %}
+                        <div class="alert alert-info text-center">
+                            <i class="bi bi-hourglass-split me-2"></i>
+                            <strong>Solicitud pendiente de aprobación</strong>
+                            <p class="mb-0 mt-2">Esta solicitud requiere decisión del administrador del convenio. Revisa el monto y el plazo antes de aprobar o rechazar.</p>
+                        </div>
+                        {% endif %}
+                        <div class="row text-center mt-3">
+                            <div class="col-6">
+                                <div class="info-item">
+                                    <span class="info-label">Monto Solicitado</span>
+                                    <span class="info-value">${{ credito.monto_solicitado|intcomma }}</span>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="info-item">
+                                    <span class="info-label">Plazo Solicitado</span>
+                                    <span class="info-value">{{ credito.plazo_solicitado }} meses</span>
+                                </div>
+                            </div>
+                        </div>
+                        {% else %}
+                        <div class="row text-center">
+                            <div class="col-6">
+                                <div class="info-item">
+                                    <span class="info-label">Monto Original</span>
+                                    <span class="info-value">
+                                        {% if credito.monto_aprobado %}
+                                            ${{ credito.monto_aprobado|intcomma }}
+                                        {% else %}
+                                            <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="info-item">
+                                    <span class="info-label">Comisión aplicada</span>
+                                    <span class="info-value">
+                                        {% if credito.comision %}
+                                            ${{ credito.comision|intcomma }}
+                                        {% else %}
+                                            <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row text-center">
+                            <div class="col-6">
+                                <div class="info-item">
+                                    <span class="info-label">IVA (19%)</span>
+                                    <span class="info-value">
+                                        {% if credito.iva_comision %}
+                                            ${{ credito.iva_comision|intcomma }}
+                                        {% else %}
+                                            <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="info-item">
+                                    <span class="info-label">Total Financiado</span>
+                                    <span class="info-value fw-bold">
+                                        {% if credito.capital_financiado %}
+                                            ${{ credito.capital_financiado|intcomma }}
+                                        {% else %}
+                                            <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                        <hr class="my-3">
+                        <div class="row text-center">
+                            <div class="col-6">
+                                <div class="info-item">
+                                    <span class="info-label">Saldo Pendiente</span>
+                                    <span class="info-value">
+                                        {% if saldo_pendiente %}
+                                            ${{ saldo_pendiente|intcomma }}
+                                        {% else %}
+                                            <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="info-item">
+                                    <span class="info-label">Valor Cuota</span>
+                                    <span class="info-value">
+                                        {% if credito.valor_cuota %}
+                                            ${{ credito.valor_cuota|floatformat:2|intcomma }}
+                                        {% else %}
+                                            <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                        <hr class="my-3">
+                        <div class="row text-center">
+                            <div class="col-6">
+                                <div class="info-item">
+                                    <span class="info-label">Plazo Original</span>
+                                    <span class="info-value">
+                                        {% if credito.plazo %}
+                                            {{ credito.plazo }} meses
+                                        {% else %}
+                                            <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="info-item">
+                                    <span class="info-label">Tasa de Interés</span>
+                                    <span class="info-value">
+                                        {% if credito.tasa_interes %}
+                                            {{ credito.tasa_interes }}% mensual
+                                        {% else %}
+                                            <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row text-center">
+                            <div class="col-6">
+                                <div class="info-item">
+                                    <span class="info-label">Próximo Vencimiento</span>
+                                    <span class="info-value">
+                                        {% if fecha_proximo_pago %}
+                                            {{ fecha_proximo_pago|date:"d/m/Y" }}
+                                        {% else %}
+                                            <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="info-item">
+                                    <span class="info-label">Cuotas Pagadas</span>
+                                    <span class="info-value">
+                                        {% if cuotas_pagadas is not None %}
+                                            {{ cuotas_pagadas }}
+                                        {% else %}
+                                            <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row text-center">
+                            <div class="col-6">
+                                <div class="info-item">
+                                    <span class="info-label">Cuotas Restantes</span>
+                                    <span class="info-value">
+                                        {% if cuotas_restantes is not None %}
+                                            {{ cuotas_restantes }}
+                                        {% else %}
+                                            <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="info-item">
+                                    <span class="info-label">Total Pagado</span>
+                                    <span class="info-value text-success">
+                                        {% if total_pagado %}
+                                            ${{ total_pagado|floatformat:2|intcomma }}
+                                        {% else %}
+                                            <span class="text-muted">$0</span>
+                                        {% endif %}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+                        <hr class="my-3">
+                        <div class="info-item text-center">
+                            <span class="info-label">Estado</span>
+                            <div class="info-value">
+                                <span class="status-badge 
+                                    {% if credito.estado == 'ACTIVO' %}status-active
+                                    {% elif credito.estado == 'EN_MORA' %}status-overdue
+                                    {% elif credito.estado == 'PAGADO' %}status-paid
+                                    {% else %}status-pending{% endif %}">
+                                    {{ credito.get_estado_display }}
+                                </span>
+                            </div>
+                        </div>
+
+                        {% if credito.estado == 'ACTIVO' or credito.estado == 'EN_MORA' %}
+                        <div class="mt-4">
+                            <div class="card border-0 bg-light">
+                                <div class="card-body">
+                                    <h4 class="h6 mb-3"><i class="bi bi-bank me-2"></i>Registrar pago offline</h4>
+                                    <form method="post" action="{% url 'pagador:registrar_pago_offline' credito.id %}" enctype="multipart/form-data" class="row g-3">
+                                        {% csrf_token %}
+                                        <div class="col-md-6">
+                                            <label for="id_monto_pago_offline" class="form-label">Monto a aplicar</label>
+                                            <input type="number" step="0.01" min="0.01" class="form-control" id="id_monto_pago_offline" name="monto" value="{{ pago_offline_form.monto.value|default_if_none:'' }}" required>
+                                            <div class="form-text">Valor sugerido para la próxima cuota: ${{ monto_sugerido_pago|floatformat:2|intcomma }}</div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label for="id_referencia_pago_offline" class="form-label">Referencia de pago</label>
+                                            <input type="text" class="form-control" id="id_referencia_pago_offline" name="referencia_pago" placeholder="Ej: TRANSF-FERTOBRA-20260331">
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label for="id_metodo_pago_offline" class="form-label">Método</label>
+                                            <select class="form-select" id="id_metodo_pago_offline" name="metodo_pago">
+                                                <option value="TRANSFERENCIA_DIRECTA">Transferencia directa</option>
+                                                <option value="OFFLINE_MANUAL">Registro offline manual</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label for="id_comprobante_pago_offline" class="form-label">Comprobante (opcional)</label>
+                                            <input type="file" class="form-control" id="id_comprobante_pago_offline" name="comprobante" accept=".pdf,.jpg,.jpeg,.png,.webp">
+                                        </div>
+                                        <div class="col-12">
+                                            <label for="id_nota_pago_offline" class="form-label">Motivo o contexto del pago</label>
+                                            <textarea class="form-control" id="id_nota_pago_offline" name="nota" rows="2" placeholder="Ej: Transferencia confirmada por tesorería de la institución." required>{{ pago_offline_form.nota.value|default_if_none:'' }}</textarea>
+                                            <div class="form-text">Deja una nota breve para que el equipo pueda identificar este pago después.</div>
+                                        </div>
+                                        <div class="col-12">
+                                            <button type="submit" class="btn btn-outline-primary w-100">
+                                                <i class="bi bi-check-circle me-2"></i>Aplicar pago offline
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mt-4">
+                            <a href="{% url 'pagador:pagar_wompi' credito.id %}" class="btn btn-pagar w-100">
+                                <i class="bi bi-credit-card me-2"></i>Pagar Cuota con WOMPI (${{ credito.valor_cuota|intcomma }})
+                            </a>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            <i class="bi bi-lightning me-2"></i>
+                            Acciones Rápidas
+                        </h2>
+                    </div>
+                    <div class="card-content">
+                        <button type="button" class="btn btn-outline w-100" data-bs-toggle="modal" data-bs-target="#infoCompletaModal">
+                            <i class="bi bi-search me-2"></i>
+                            Ver Información Completa
+                        </button>
+                        <a href="{% url 'pagador:credito_documentacion' credito.id %}" class="btn btn-outline w-100 mt-2">
+                            <i class="bi bi-folder2-open me-2"></i>
+                            Ver documentación
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Info Completa -->
+    <div class="modal fade" id="infoCompletaModal" tabindex="-1" aria-labelledby="infoCompletaModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="infoCompletaModalLabel">Información Completa de la Solicitud</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    {% if credito.linea == 'LIBRANZA' and credito.detalle_libranza %}
+                        {% with detalle=credito.detalle_libranza %}
+                            <h4>Detalles del crédito estudiantil</h4>
+                            <p><strong>Nombres:</strong> {{ detalle.nombres }}</p>
+                            <p><strong>Apellidos:</strong> {{ detalle.apellidos }}</p>
+                            <p><strong>Cédula:</strong> {{ detalle.cedula }}</p>
+                            <p><strong>Dirección:</strong> {{ detalle.direccion }}</p>
+                            <p><strong>Teléfono:</strong> {{ detalle.telefono }}</p>
+                            <p><strong>Correo:</strong> {{ detalle.correo_electronico }}</p>
+                            <p><strong>Institución aliada:</strong> {{ detalle.empresa.nombre }}</p>
+                            <p><strong>Valor Solicitado:</strong> ${{ credito.monto_solicitado|intcomma }}</p>
+                            <p><strong>Plazo:</strong> {{ credito.plazo_solicitado }} meses</p>
+                        {% endwith %}
+                    {% elif credito.linea == 'ADELANTO_NOMINA' and credito.detalle_adelanto_nomina %}
+                        {% with detalle=credito.detalle_adelanto_nomina %}
+                            <h4>Detalles del apoyo educativo complementario</h4>
+                            <p><strong>Solicitante:</strong> {{ detalle.vinculo_laboral.nombre_empleado }}</p>
+                            <p><strong>Documento:</strong> {{ detalle.vinculo_laboral.documento_empleado }}</p>
+                            <p><strong>Correo:</strong> {{ detalle.vinculo_laboral.correo_empleado }}</p>
+                            <p><strong>Tel&eacute;fono:</strong> {{ detalle.vinculo_laboral.telefono_empleado }}</p>
+                            <p><strong>Institución aliada:</strong> {{ detalle.vinculo_laboral.empresa.nombre }}</p>
+                            <p><strong>Base operativa usada:</strong> ${{ detalle.salario_base_usado|intcomma }}</p>
+                            <p><strong>Monto m&aacute;ximo calculado:</strong> ${{ detalle.monto_maximo_calculado|intcomma }}</p>
+                            <p><strong>Monto solicitado:</strong> ${{ detalle.monto_solicitado|intcomma }}</p>
+                            <p><strong>D&iacute;as considerados:</strong> {{ detalle.dias_adelanto }}</p>
+                        {% endwith %}
+                    {% elif credito.linea == 'EMPRENDIMIENTO' and credito.detalle_emprendimiento %}
+                        {% with detalle=credito.detalle_emprendimiento %}
+                            <h4>Detalles del Crédito de Emprendimiento</h4>
+                            <p><strong>Nombre Completo:</strong> {{ detalle.nombre }}</p>
+                            <p><strong>Cédula:</strong> {{ detalle.numero_cedula }}</p>
+                            <p><strong>Fecha de Nacimiento:</strong> {{ detalle.fecha_nac }}</p>
+                            <p><strong>Celular:</strong> {{ detalle.celular_wh }}</p>
+                            <p><strong>Dirección:</strong> {{ detalle.direccion }}</p>
+                            <p><strong>Estado Civil:</strong> {{ detalle.estado_civil }}</p>
+                            <p><strong>Personas a Cargo:</strong> {{ detalle.numero_personas_cargo }}</p>
+                            <hr>
+                            <h5>Negocio</h5>
+                            <p><strong>Nombre:</strong> {{ detalle.nombre_negocio }}</p>
+                            <p><strong>Ubicación:</strong> {{ detalle.ubicacion_negocio }}</p>
+                            <p><strong>Tiempo Operando:</strong> {{ detalle.tiempo_operando }}</p>
+                            <p><strong>Días Trabajados/Semana:</strong> {{ detalle.dias_trabajados_sem }}</p>
+                            <p><strong>Productos/Servicios:</strong> {{ detalle.prod_serv_ofrec }}</p>
+                            <p><strong>Ingresos Promedio/Mes:</strong> {{ detalle.ingresos_prom_mes }}</p>
+                            <p><strong>Clientes Atendidos/Día:</strong> {{ detalle.cli_aten_day }}</p>
+                        {% endwith %}
+                    {% endif %}
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/lottie-web/5.12.2/lottie.min.js"></script>
+<script src="{% static 'js/global_loader.js' %}"></script>
+</body>
+</html>
+

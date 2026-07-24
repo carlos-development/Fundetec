@@ -1,0 +1,738 @@
+﻿<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Dashboard de Administrador - Aprobado</title>
+    {% load static %}
+    {% load humanize %}
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="{% static 'creditos/css/base_styles.css' %}" rel="stylesheet">
+    {% include 'base/favicon.html' %}
+    <style>
+        .table-dashboard tbody td {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+        .table-dashboard tbody strong {
+            color: var(--text-primary);
+        }
+        .dashboard-toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            gap: 1rem;
+            flex-wrap: wrap;
+            padding: 1rem 1.25rem;
+            border: 1px solid rgba(15, 23, 42, 0.08);
+            border-radius: 1rem;
+            background: #fff;
+            box-shadow: 0 10px 30px rgba(15, 23, 42, 0.04);
+        }
+        .dashboard-toolbar .toolbar-form {
+            display: flex;
+            align-items: end;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+            margin-left: auto;
+        }
+        .dashboard-toolbar .toolbar-field {
+            min-width: 190px;
+        }
+        .dashboard-toolbar .toolbar-label {
+            display: block;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            margin-bottom: 0.25rem;
+            font-weight: 600;
+        }
+        .accounting-section-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            gap: 1rem;
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
+        }
+        .accounting-section-head p {
+            margin: 0;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+        .accounting-card .metric-value {
+            font-size: 1.18rem;
+        }
+        .accounting-card .metric-label {
+            font-size: 0.74rem;
+        }
+        .accounting-cards-grid {
+            display: grid;
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+            gap: 0.6rem;
+            margin-bottom: 0.75rem;
+        }
+        .accounting-cards-grid .accounting-card {
+            margin: 0;
+        }
+        .accounting-note {
+            margin-top: 0;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+        .dashboard-top-grid {
+            margin-bottom: 1rem;
+        }
+        .compact-metric {
+            padding: 0.85rem 0.9rem 0.8rem;
+            min-height: auto;
+        }
+        .compact-metric .metric-icon {
+            width: 2.35rem;
+            height: 2.35rem;
+            margin-bottom: 0.55rem;
+        }
+        .compact-metric .metric-value {
+            font-size: 1.2rem;
+            line-height: 1.1;
+            margin-bottom: 0.15rem;
+        }
+        .compact-metric .metric-label {
+            font-size: 0.74rem;
+            letter-spacing: 0.01em;
+        }
+        .compact-actions {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 0.75rem;
+            margin-bottom: 1.25rem;
+        }
+        .compact-actions .action-card {
+            padding: 0.85rem 1rem;
+            min-height: auto;
+            border-radius: 0.9rem;
+        }
+        .compact-actions .action-icon {
+            width: 2.4rem;
+            height: 2.4rem;
+            margin-bottom: 0.65rem;
+        }
+        .compact-actions h3 {
+            font-size: 0.92rem !important;
+            margin-bottom: 0.2rem !important;
+        }
+        .compact-actions p {
+            font-size: 0.78rem !important;
+            line-height: 1.35;
+        }
+        .chart-card-compact .card-body {
+            padding-top: 0.9rem;
+        }
+        .chart-card-compact .chart-container {
+            min-height: 290px;
+        }
+        .executive-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+        .chart-summary-list {
+            display: grid;
+            gap: 0.55rem;
+            margin-top: 0.85rem;
+        }
+        .chart-summary-item {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 0.75rem;
+            align-items: center;
+            font-size: 0.82rem;
+            color: var(--text-secondary);
+        }
+        .chart-summary-item strong {
+            color: var(--text-primary);
+            font-weight: 700;
+        }
+        .impact-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+            gap: 0.85rem;
+        }
+        .impact-card {
+            border: 1px solid rgba(15, 23, 42, 0.08);
+            border-radius: 0.75rem;
+            padding: 0.95rem;
+            background: #fff;
+        }
+        .impact-card-header {
+            display: flex;
+            justify-content: space-between;
+            gap: 0.75rem;
+            align-items: flex-start;
+            margin-bottom: 0.65rem;
+        }
+        .impact-card h4 {
+            font-size: 0.95rem;
+            margin: 0;
+            color: var(--text-primary);
+        }
+        .impact-card small,
+        .empty-dashboard-state {
+            color: var(--text-secondary);
+            font-size: 0.82rem;
+        }
+        .impact-metrics {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 0.55rem;
+        }
+        .impact-metrics span {
+            display: block;
+            color: var(--text-secondary);
+            font-size: 0.72rem;
+        }
+        .impact-metrics strong {
+            color: var(--text-primary);
+            font-size: 0.88rem;
+        }
+        @media (max-width: 991px) {
+            .accounting-cards-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+            .compact-actions {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+            .executive-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        @media (max-width: 767px) {
+            .accounting-cards-grid {
+                grid-template-columns: 1fr;
+            }
+            .compact-actions {
+                grid-template-columns: 1fr;
+            }
+            .chart-card-compact .chart-container {
+                min-height: 240px;
+            }
+        }
+    </style>
+</head>
+<body class="theme-gestion theme-dashboard">
+{% include 'base/loader_global.html' %}
+    <header class="page-header">
+        <div class="container-fluid" style="max-width: 1400px;">
+            <div class="d-flex align-items-center justify-content-between">
+                <a href="#" class="logo">
+                    <img src="{% static 'images/logo-dark.png' %}" alt="Aprobado Logo" style="height: 40px;" />
+                </a>
+                <div class="d-flex align-items-center gap-3">
+                    <button class="btn btn-sm btn-outline-primary position-relative">
+                        <i class="bi bi-bell"></i>
+                        <div class="notification-badge"></div>
+                    </button>
+                    <div class="user-info">
+                        <div class="user-avatar">AU</div>
+                        <div class="user-details d-none d-md-block">
+                            <h6>Admin User</h6>
+                            <small>Administrador</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <div class="container-fluid py-4" style="max-width: 1400px;">
+        <div class="dashboard-toolbar mb-4">
+            <div>
+                <h1 class="page-title">Dashboard de Administrador</h1>
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb">
+                        <li class="breadcrumb-item active" aria-current="page"><i class="bi bi-house-door"></i> Dashboard</li>
+                    </ol>
+                </nav>
+            </div>
+            <form method="get" class="toolbar-form">
+                <div class="toolbar-field">
+                    <label for="empresaFilter" class="toolbar-label">Empresa</label>
+                    <select id="empresaFilter" name="empresa" class="form-select form-select-sm">
+                        <option value="">Todas las empresas</option>
+                        {% for empresa in empresas_choices %}
+                        <option value="{{ empresa }}" {% if empresa_filter == empresa %}selected{% endif %}>{{ empresa }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="toolbar-field">
+                    <label for="asesorFilter" class="toolbar-label">Ejecutivo</label>
+                    <select id="asesorFilter" name="asesor" class="form-select form-select-sm">
+                        <option value="">Todos los ejecutivos</option>
+                        {% for asesor in asesores_choices %}
+                        <option value="{{ asesor.id }}" {% if asesor_filter == asesor.id|stringformat:"s" %}selected{% endif %}>{{ asesor.nombre }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="d-flex gap-2 flex-wrap">
+                    <button type="submit" class="btn btn-sm btn-outline-primary">
+                        <i class="bi bi-funnel me-1"></i>Aplicar
+                    </button>
+                    {% if empresa_filter or asesor_filter %}
+                    <a href="{% url 'gestion:dashboard' %}" class="btn btn-sm btn-outline-secondary">Limpiar</a>
+                    {% endif %}
+                    <a href="{% url 'gestion:dashboard_export' %}{% if empresa_filter or asesor_filter %}?{% endif %}{% if empresa_filter %}empresa={{ empresa_filter|urlencode }}{% endif %}{% if empresa_filter and asesor_filter %}&{% endif %}{% if asesor_filter %}asesor={{ asesor_filter|urlencode }}{% endif %}" class="btn btn-sm btn-primary" data-download="true">
+                        <i class="bi bi-file-earmark-spreadsheet me-1"></i>Exportar reporte Excel
+                    </a>
+                </div>
+            </form>
+        </div>
+
+        <div class="quick-actions compact-actions">
+            <a href="{% url 'gestion:solicitudes' %}" class="action-card">
+                <div class="action-icon" style="background-color: var(--accent-blue);">
+                    <i class="bi bi-clipboard-check"></i>
+                </div>
+                <h3 style="font-size: 1rem; font-weight: 600; margin: 0 0 0.5rem 0;">Gestionar Solicitudes</h3>
+                <p style="font-size: 0.875rem; color: var(--text-secondary); margin: 0;">Revisar y aprobar solicitudes pendientes</p>
+            </a>
+            <a href="{% url 'gestion:creditos_activos' %}" class="action-card">
+                <div class="action-icon" style="background-color: var(--success);">
+                    <i class="bi bi-credit-card"></i>
+                </div>
+                <h3 style="font-size: 1rem; font-weight: 600; margin: 0 0 0.5rem 0;">Créditos Activos</h3>
+                <p style="font-size: 0.875rem; color: var(--text-secondary); margin: 0;">Monitorear cartera activa</p>
+            </a>
+            <a href="{% url 'gestion:cartera_mora' %}" class="action-card">
+                <div class="action-icon" style="background-color: var(--warning);">
+                    <i class="bi bi-exclamation-triangle"></i>
+                </div>
+                <h3 style="font-size: 1rem; font-weight: 600; margin: 0 0 0.5rem 0;">Gestión de Mora</h3>
+                <p style="font-size: 0.875rem; color: var(--text-secondary); margin: 0;">Seguimiento a pagos vencidos</p>
+            </a>
+            <a href="#" class="action-card">
+                <div class="action-icon" style="background-color: var(--info);">
+                    <i class="bi bi-graph-up"></i>
+                </div>
+                <h3 style="font-size: 1rem; font-weight: 600; margin: 0 0 0.5rem 0;">Análisis Financiero</h3>
+                <p style="font-size: 0.875rem; color: var(--text-secondary); margin: 0;">Reportes y métricas avanzadas</p>
+            </a>
+            <a href="{% url 'billetera:gestion_dashboard' %}" class="action-card">
+                <div class="action-icon" style="background-color: var(--purple);">
+                    <i class="bi bi-wallet2"></i>
+                </div>
+                <h3 style="font-size: 1rem; font-weight: 600; margin: 0 0 0.5rem 0;">Billetera Digital</h3>
+                <p style="font-size: 0.875rem; color: var(--text-secondary); margin: 0;">Gestionar cuentas de ahorro</p>
+            </a>
+            <a href="{% url 'gestion:ejecutivos' %}" class="action-card">
+                <div class="action-icon" style="background-color: #0f766e;">
+                    <i class="bi bi-person-workspace"></i>
+                </div>
+                <h3 style="font-size: 1rem; font-weight: 600; margin: 0 0 0.5rem 0;">Gestión de Ejecutivos</h3>
+                <p style="font-size: 0.875rem; color: var(--text-secondary); margin: 0;">Seguimiento de ejecutivos y empresas referidas</p>
+            </a>
+        </div>
+
+        <div class="row g-3 dashboard-top-grid">
+            <div class="col-12 col-md-6 col-xl-3">
+                <div class="card metric-card compact-metric">
+                    <div class="metric-icon" style="background-color: var(--accent-blue);">
+                        <i class="bi bi-wallet2"></i>
+                    </div>
+                    <div class="metric-value">${{ saldo_cartera_total|floatformat:2|intcomma }}</div>
+                    <div class="metric-label">Saldo Total de Cartera</div>
+                </div>
+            </div>
+            <div class="col-12 col-md-6 col-xl-3">
+                <div class="card metric-card compact-metric">
+                    <div class="metric-icon" style="background-color: var(--danger);">
+                        <i class="bi bi-exclamation-triangle"></i>
+                    </div>
+                    <div class="metric-value text-danger">${{ monto_total_en_mora|floatformat:2|intcomma }}</div>
+                    <div class="metric-label">Total en Mora</div>
+                </div>
+            </div>
+            <div class="col-12 col-md-6 col-xl-3">
+                <div class="card metric-card compact-metric">
+                    <div class="metric-icon" style="background-color: var(--success);">
+                        <i class="bi bi-credit-card-2-front"></i>
+                    </div>
+                    <div class="metric-value">{{ total_creditos }}</div>
+                    <div class="metric-label">Total de Créditos</div>
+                </div>
+            </div>
+            <div class="col-12 col-md-6 col-xl-3">
+                <div class="card metric-card compact-metric">
+                    <div class="metric-icon" style="background-color: var(--warning);">
+                        <i class="bi bi-clock-history"></i>
+                    </div>
+                    <div class="metric-value text-warning">{{ proximos_vencer }}</div>
+                    <div class="metric-label">Próximos a Vencer</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="accounting-section-head">
+            <div>
+                <h2 class="section-title mb-1">Recaudo consolidado</h2>
+                <p>Métrica agregada sobre créditos desembolsados{% if empresa_filter %} para {{ empresa_filter }}{% endif %}{% if selected_asesor %} vinculados al ejecutivo {{ selected_asesor.nombre }}{% endif %}.</p>
+            </div>
+        </div>
+
+        <div class="accounting-cards-grid">
+            <div>
+                <div class="card metric-card accounting-card compact-metric">
+                    <div class="metric-icon" style="background-color: #0f766e;">
+                        <i class="bi bi-cash-coin"></i>
+                    </div>
+                    <div class="metric-value">${{ total_recaudado|floatformat:2|intcomma }}</div>
+                    <div class="metric-label">Total recaudado</div>
+                </div>
+            </div>
+            <div>
+                <div class="card metric-card accounting-card compact-metric">
+                    <div class="metric-icon" style="background-color: #2563eb;">
+                        <i class="bi bi-bank"></i>
+                    </div>
+                    <div class="metric-value">${{ capital_recuperado|floatformat:2|intcomma }}</div>
+                    <div class="metric-label">Capital recuperado</div>
+                </div>
+            </div>
+            <div>
+                <div class="card metric-card accounting-card compact-metric">
+                    <div class="metric-icon" style="background-color: #7c3aed;">
+                        <i class="bi bi-percent"></i>
+                    </div>
+                    <div class="metric-value">${{ interes_recuperado|floatformat:2|intcomma }}</div>
+                    <div class="metric-label">Interés recuperado</div>
+                </div>
+            </div>
+            <div>
+                <div class="card metric-card accounting-card compact-metric">
+                    <div class="metric-icon" style="background-color: #f59e0b;">
+                        <i class="bi bi-receipt"></i>
+                    </div>
+                    <div class="metric-value">${{ comision_recuperada|floatformat:2|intcomma }}</div>
+                    <div class="metric-label">Comisión recuperada</div>
+                </div>
+            </div>
+            <div>
+                <div class="card metric-card accounting-card compact-metric">
+                    <div class="metric-icon" style="background-color: #dc2626;">
+                        <i class="bi bi-calculator"></i>
+                    </div>
+                    <div class="metric-value">${{ iva_recuperado|floatformat:2|intcomma }}</div>
+                    <div class="metric-label">IVA recuperado</div>
+                </div>
+            </div>
+            <div style="grid-column: 1 / -1;">
+                <div class="accounting-note">
+                    Cobertura actual: {{ creditos_con_trazabilidad_contable }} créditos y {{ pagos_con_trazabilidad_contable }} pagos con detalle contable registrado o backfilleado.<br>
+                    El desglose visible sale de <strong>DetalleContablePago</strong> para pagos nuevos y para el histórico backfilleado de créditos desembolsados por plataforma.
+                    
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-3 mb-3">
+            <div class="col-12 col-lg-8">
+                <div class="card chart-card-compact">
+                    <div class="table-header">
+                        <h3 class="section-title">Evolución de Cartera (Saldo Mensual)</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="chart-container">
+                            <canvas id="portfolioChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-12 col-lg-4">
+                <div class="card h-100 chart-card-compact">
+                    <div class="table-header d-flex align-items-center justify-content-between gap-2">
+                        <h3 class="section-title">Montos por empresa</h3>
+                        <div class="btn-group btn-group-sm" role="group" aria-label="Métrica por empresa">
+                            <button type="button" class="btn btn-primary" data-company-chart-mode="monto">Monto</button>
+                            <button type="button" class="btn btn-outline-primary" data-company-chart-mode="creditos">Cantidad</button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        {% if empresas_chart_rows %}
+                        <div class="chart-container">
+                            <canvas id="distributionChart"></canvas>
+                        </div>
+                        <div class="chart-summary-list">
+                            {% for item in empresas_chart_rows %}
+                            <div class="chart-summary-item">
+                                <span>{{ item.empresa_nombre }}</span>
+                                <strong>
+                                    <span data-company-summary="monto">{{ item.porcentaje|floatformat:1 }}% · ${{ item.monto_acumulado|floatformat:0|intcomma }}</span>
+                                    <span data-company-summary="creditos" hidden>{{ item.porcentaje_creditos|floatformat:1 }}% · {{ item.creditos_count }} créditos</span>
+                                </strong>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <div class="empty-dashboard-state">No hay datos de empresas para el filtro actual.</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="executive-grid">
+            <div class="table-container">
+                <div class="table-header">
+                    <h3 class="table-title">Top empresas</h3>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-dashboard table-stack-mobile">
+                        <thead>
+                            <tr>
+                                <th>Empresa</th>
+                                <th>Créditos / clientes</th>
+                                <th class="text-end">Monto aprobado/colocado</th>
+                                <th class="text-end">Saldo capital</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in top_empresas|slice:":8" %}
+                            <tr>
+                                <td data-label="Empresa"><strong>{{ item.empresa_nombre }}</strong></td>
+                                <td data-label="Créditos / clientes">{{ item.creditos_count }} / {{ item.clientes_count }}</td>
+                                <td class="text-end" data-label="Monto aprobado/colocado">${{ item.monto_acumulado|floatformat:0|intcomma }}</td>
+                                <td class="text-end" data-label="Saldo capital"><strong>${{ item.saldo_capital|floatformat:0|intcomma }}</strong></td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="4" class="text-center text-muted">No hay datos de empresas para mostrar</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="table-container">
+                <div class="table-header">
+                    <h3 class="table-title">Presencia nacional</h3>
+                </div>
+                {% if impacto_departamentos %}
+                <div class="impact-grid">
+                    {% for item in impacto_departamentos|slice:":6" %}
+                    <div class="impact-card">
+                        <div class="impact-card-header">
+                            <h4>{{ item.departamento }}</h4>
+                            <span class="status-badge status-active">{{ item.creditos_count }}</span>
+                        </div>
+                        <div class="impact-metrics">
+                            <div>
+                                <span>Clientes</span>
+                                <strong>{{ item.clientes_count }}</strong>
+                            </div>
+                            <div>
+                                <span>Monto acumulado</span>
+                                <strong>${{ item.monto_acumulado|floatformat:0|intcomma }}</strong>
+                            </div>
+                        </div>
+                        <small>Empresas principales: {{ item.empresas_principales }}</small>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="empty-dashboard-state">{{ impacto_geografico_diagnostic.empty_message }}</div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="row g-3">
+            <div class="col-12 col-lg-6">
+                <div class="table-container">
+                    <div class="table-header">
+                        <h3 class="table-title">Cartera por Línea de Crédito</h3>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-dashboard table-stack-mobile">
+                            <thead>
+                                <tr>
+                                    <th>Línea de Crédito</th>
+                                    <th>Créditos Activos</th>
+                                    <th class="text-end">Saldo Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in creditos_por_linea %}
+                                <tr>
+                                    <td data-label="Línea de crédito">{{ item.linea_label|default:item.linea }}</td>
+                                    <td data-label="Créditos activos"><strong>{{ item.count }}</strong></td>
+                                    <td class="text-end" data-label="Saldo total"><strong>${{ item.saldo_total|floatformat:2|intcomma }}</strong></td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="3" class="text-center text-muted">No hay créditos activos</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="col-12 col-lg-6">
+                <div class="table-container">
+                    <div class="table-header">
+                        <h3 class="table-title">Créditos por estado</h3>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-dashboard table-stack-mobile">
+                            <thead>
+                                <tr>
+                                    <th>Estado</th>
+                                    <th>Cantidad</th>
+                                    <th>Porcentaje</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in creditos_por_estado %}
+                                <tr>
+                                    <td data-label="Estado">
+                                        <span class="status-badge 
+                                            {% if item.estado == 'ACTIVO' %}status-active
+                                            {% elif item.estado == 'EN_MORA' %}status-overdue
+                                            {% elif item.estado == 'PAGADO' %}status-paid
+                                            {% else %}status-pending{% endif %}">
+                                            {{ item.estado }}
+                                        </span>
+                                    </td>
+                                    <td data-label="Cantidad"><strong>{{ item.count }}</strong></td>
+                                    <td data-label="Porcentaje">{{ item.porcentaje|floatformat:1 }}%</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const portfolioCtx = document.getElementById('portfolioChart').getContext('2d');
+        new Chart(portfolioCtx, {
+            type: 'line',
+            data: {
+                labels: {{ portfolio_labels|safe }},
+                datasets: [{
+                    label: 'Saldo Cartera Emprendimiento',
+                    data: {{ emprendimiento_data|safe }},
+                    borderColor: '#3b82f6',
+                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                    fill: true,
+                    tension: 0.3
+                }, {
+                    label: 'Saldo Cartera Libranza',
+                    data: {{ libranza_data|safe }},
+                    borderColor: '#f59e0b',
+                    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                    fill: true,
+                    tension: 0.3
+                }, {
+                    label: 'Saldo Cartera Adelanto de Nómina',
+                    data: {{ adelanto_data|safe }},
+                    borderColor: '#8b5cf6',
+                    backgroundColor: 'rgba(139, 92, 246, 0.1)',
+                    fill: true,
+                    tension: 0.3
+                }, {
+                    label: 'Saldo Total',
+                    data: {{ total_data|safe }},
+                    borderColor: '#10b981',
+                    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                    fill: true,
+                    tension: 0.3
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+
+        const distributionCanvas = document.getElementById('distributionChart');
+        if (distributionCanvas) {
+            const currencyFormatter = new Intl.NumberFormat('es-CO', {
+                style: 'currency',
+                currency: 'COP',
+                maximumFractionDigits: 0
+            });
+            const integerFormatter = new Intl.NumberFormat('es-CO', {
+                maximumFractionDigits: 0
+            });
+            const distributionCtx = distributionCanvas.getContext('2d');
+            const companyLabels = {{ distribution_labels|safe }};
+            const companyAmountData = {{ distribution_data|safe }};
+            const companyCreditData = {{ distribution_creditos_data|safe }};
+            const companyChart = new Chart(distributionCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: companyLabels,
+                    datasets: [{
+                        data: companyAmountData,
+                        backgroundColor: ['#f59e0b', '#10b981', '#3b82f6', '#ef4444', '#8b5cf6', '#06b6d4', '#14b8a6', '#f97316', '#6366f1']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const value = context.raw || 0;
+                                    if (distributionCanvas.dataset.mode === 'creditos') {
+                                        return `${context.label}: ${integerFormatter.format(value)} créditos`;
+                                    }
+                                    return `${context.label}: ${currencyFormatter.format(value)}`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+            distributionCanvas.dataset.mode = 'monto';
+            document.querySelectorAll('[data-company-chart-mode]').forEach(function(button) {
+                button.addEventListener('click', function() {
+                    const mode = this.dataset.companyChartMode;
+                    distributionCanvas.dataset.mode = mode;
+                    companyChart.data.datasets[0].data = mode === 'creditos' ? companyCreditData : companyAmountData;
+                    companyChart.update();
+                    document.querySelectorAll('[data-company-chart-mode]').forEach(function(btn) {
+                        btn.classList.toggle('btn-primary', btn.dataset.companyChartMode === mode);
+                        btn.classList.toggle('btn-outline-primary', btn.dataset.companyChartMode !== mode);
+                    });
+                    document.querySelectorAll('[data-company-summary]').forEach(function(item) {
+                        item.hidden = item.dataset.companySummary !== mode;
+                    });
+                });
+            });
+        }
+    </script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/lottie-web/5.12.2/lottie.min.js"></script>
+<script src="{% static 'js/global_loader.js' %}"></script>
+</body>
+</html>
+
+

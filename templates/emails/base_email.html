@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+{% load brand_tags %}
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>{% block title %}{% brand_value 'name' %}{% endblock %}</title>
+    <!--[if mso]>
+    <noscript>
+        <xml>
+            <o:OfficeDocumentSettings>
+                <o:PixelsPerInch>96</o:PixelsPerInch>
+            </o:OfficeDocumentSettings>
+        </xml>
+    </noscript>
+    <![endif]-->
+    <style>
+        /* Reset */
+        body, table, td, p, a, li, blockquote {
+            -webkit-text-size-adjust: 100%;
+            -ms-text-size-adjust: 100%;
+        }
+        table, td {
+            mso-table-lspace: 0pt;
+            mso-table-rspace: 0pt;
+        }
+        img {
+            -ms-interpolation-mode: bicubic;
+            border: 0;
+            height: auto;
+            line-height: 100%;
+            outline: none;
+            text-decoration: none;
+        }
+
+        /* Base */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: #f3f4f6;
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* Container */
+        .email-wrapper {
+            width: 100%;
+            background-color: #f3f4f6;
+            padding: 40px 20px;
+        }
+        .email-container {
+            max-width: 480px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+
+        /* Header */
+        .email-header {
+            padding: 24px 32px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+        .logo {
+            height: 32px;
+            width: auto;
+        }
+        .header-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Badge */
+        .status-badge {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin: 0 32px 16px 32px;
+        }
+        .badge-red { background-color: #FEE2E2; color: #DC2626; }
+        .badge-green { background-color: #D1FAE5; color: #059669; }
+        .badge-blue { background-color: #E8F1FF; color: #0B4EA2; }
+        .badge-yellow { background-color: #FFF3BF; color: #083B7A; }
+        .badge-gray { background-color: #F3F4F6; color: #6B7280; }
+
+        /* Content */
+        .email-content {
+            padding: 0 32px 32px 32px;
+        }
+        .greeting {
+            font-size: 28px;
+            font-weight: 700;
+            color: #111827;
+            margin: 0 0 8px 0;
+            line-height: 1.2;
+        }
+        .subtitle {
+            font-size: 15px;
+            color: #6B7280;
+            margin: 0 0 24px 0;
+            line-height: 1.5;
+        }
+
+        /* Info Card */
+        .info-card {
+            background-color: #F9FAFB;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 24px;
+        }
+        .info-label {
+            font-size: 12px;
+            color: #6B7280;
+            margin: 0 0 4px 0;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+        .info-amount {
+            font-size: 32px;
+            font-weight: 700;
+            color: #111827;
+            margin: 0 0 4px 0;
+        }
+        .info-amount.green { color: #059669; }
+        .info-amount.red { color: #DC2626; }
+        .info-sublabel {
+            font-size: 13px;
+            color: #9CA3AF;
+            margin: 0;
+        }
+
+        /* Info Table */
+        .info-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 16px;
+        }
+        .info-table td {
+            padding: 12px 0;
+            border-bottom: 1px solid #E5E7EB;
+            font-size: 14px;
+        }
+        .info-table tr:last-child td {
+            border-bottom: none;
+        }
+        .info-table .label {
+            color: #6B7280;
+        }
+        .info-table .value {
+            color: #111827;
+            font-weight: 600;
+            text-align: right;
+        }
+
+        /* CTA Box */
+        .cta-box {
+            border-radius: 12px;
+            padding: 24px;
+            text-align: center;
+            margin: 24px 0;
+        }
+        .cta-box.green { background-color: #059669; }
+        .cta-box.red { background-color: #DC2626; }
+        .cta-box.blue { background-color: #0B4EA2; }
+        .cta-box.yellow { background-color: #D97706; }
+        .cta-box.gray { background-color: #374151; }
+
+        .cta-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: #ffffff;
+            margin: 0 0 8px 0;
+        }
+        .cta-subtitle {
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.85);
+            margin: 0 0 16px 0;
+            line-height: 1.4;
+        }
+        .cta-button {
+            display: inline-block;
+            padding: 12px 32px;
+            background-color: #ffffff;
+            color: #111827 !important;
+            text-decoration: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        /* Saldo Box */
+        .saldo-box {
+            background-color: #F9FAFB;
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            margin: 24px 0;
+        }
+        .saldo-label {
+            font-size: 12px;
+            color: #6B7280;
+            margin: 0 0 4px 0;
+        }
+        .saldo-amount {
+            font-size: 28px;
+            font-weight: 700;
+            color: #111827;
+            margin: 0 0 4px 0;
+        }
+        .saldo-sublabel {
+            font-size: 12px;
+            color: #9CA3AF;
+            margin: 0;
+        }
+
+        /* Steps */
+        .steps {
+            margin: 24px 0;
+        }
+        .step-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #111827;
+            margin: 0 0 16px 0;
+        }
+        .step-item {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 16px;
+        }
+        .step-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 12px;
+            flex-shrink: 0;
+        }
+        .step-icon.green { background-color: #D1FAE5; color: #059669; }
+        .step-icon.gray { background-color: #F3F4F6; color: #9CA3AF; }
+        .step-icon.blue { background-color: #DBEAFE; color: #2563EB; }
+        .step-content h4 {
+            font-size: 14px;
+            font-weight: 600;
+            color: #111827;
+            margin: 0 0 2px 0;
+        }
+        .step-content p {
+            font-size: 12px;
+            color: #6B7280;
+            margin: 0;
+        }
+
+        /* Contact */
+        .contact-section {
+            text-align: center;
+            padding: 24px 0;
+            border-top: 1px solid #E5E7EB;
+            margin-top: 24px;
+        }
+        .contact-label {
+            font-size: 13px;
+            color: #6B7280;
+            margin: 0 0 12px 0;
+        }
+        .contact-links {
+            display: flex;
+            justify-content: center;
+            gap: 24px;
+        }
+        .contact-link {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+            color: #374151;
+            text-decoration: none;
+        }
+
+        /* Footer */
+        .email-footer {
+            padding: 24px 32px;
+            text-align: center;
+            border-top: 1px solid #E5E7EB;
+        }
+        .footer-logo {
+            height: 24px;
+            margin-bottom: 12px;
+        }
+        .footer-company {
+            font-size: 12px;
+            color: #6B7280;
+            margin: 0 0 4px 0;
+        }
+        .footer-address {
+            font-size: 12px;
+            color: #9CA3AF;
+            margin: 0 0 16px 0;
+        }
+        .footer-links {
+            font-size: 12px;
+            color: #6B7280;
+        }
+        .footer-links a {
+            color: #6B7280;
+            text-decoration: none;
+            margin: 0 8px;
+        }
+        .footer-unsubscribe {
+            font-size: 11px;
+            color: #9CA3AF;
+            margin-top: 12px;
+        }
+        .footer-unsubscribe a {
+            color: #9CA3AF;
+            text-decoration: underline;
+        }
+
+        /* Helper Text */
+        .helper-text {
+            font-size: 12px;
+            color: #6B7280;
+            text-align: center;
+            margin-top: 12px;
+        }
+
+        /* Responsive */
+        @media only screen and (max-width: 520px) {
+            .email-wrapper {
+                padding: 20px 12px;
+            }
+            .email-header, .email-content, .email-footer {
+                padding-left: 20px;
+                padding-right: 20px;
+            }
+            .greeting {
+                font-size: 24px;
+            }
+            .info-amount {
+                font-size: 28px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="email-wrapper">
+        <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+            <tr>
+                <td align="center">
+                    <div class="email-container">
+                        {% block email_content %}{% block content %}{% endblock %}{% endblock %}
+                        {% block email_footer %}
+                            {% include "emails/partials/footer_full.html" %}
+                        {% endblock %}
+                    </div>
+                </td>
+            </tr>
+        </table>
+    </div>
+</body>
+</html>

@@ -1,0 +1,893 @@
+{% load static %}
+{% load humanize %}
+{% load l10n %}
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mi Crédito de Emprendimiento - {{ brand.name|default:"FUNDETEC" }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'css/dashboard_emprendimiento.css' %}">
+    {% include 'base/favicon.html' %}
+</head>
+<body>
+    <!-- Loader Global -->
+    <div id="globalLoader">
+        <div id="lottieLoader"></div>
+        <div class="loader-text">Cargando...</div>
+    </div>
+
+    <!-- Navbar Minimalista -->
+    <nav class="navbar navbar-expand-lg navbar-professional sticky-top">
+        <div class="container">
+            {# NUEVA URL - Landing Emprendimiento #}
+            <a class="navbar-brand" href="{% url 'home' %}">
+                <img src="{% static brand.logo_dark|default:'images/fundetec-logo.png' %}" alt="{{ brand.name|default:'FUNDETEC' }} Emprendimiento" class="brand-logo">
+            </a>
+
+            <button class="navbar-toggler border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <div class="credit-mobile-session d-lg-none">
+                    <div class="credit-mobile-user">
+                        <div class="user-avatar">{{ user.first_name|first|default:"U" }}{{ user.last_name|first|default:"" }}</div>
+                        <div>
+                            <span class="credit-mobile-user-name">{{ user.get_full_name|default:user.username }}</span>
+                            <small class="credit-mobile-user-email">{{ user.email }}</small>
+                        </div>
+                    </div>
+                    <form method="post" action="{% url 'emprendimiento:logout' %}">
+                        {% csrf_token %}
+                        <button type="submit" class="credit-mobile-logout">Cerrar sesion</button>
+                    </form>
+                </div>
+                <ul class="navbar-nav mx-auto">
+                    <li class="nav-item">
+                        {# NUEVA URL - Emprendimiento #}
+                        <a class="nav-link active" href="{% url 'emprendimiento:mi_credito' %}">
+                            <i class="bi bi-speedometer2 me-1"></i> Mi Crédito
+                        </a>
+                    </li>
+                </ul>
+
+                <div class="d-flex align-items-center gap-3 credit-nav-actions">
+                    {% if count_notificaciones > 0 %}
+                    <div class="dropdown credit-desktop-notifications d-none d-lg-block">
+                        <div class="notification-badge" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="bi bi-bell notification-icon"></i>
+                            <span class="badge">{{ count_notificaciones }}</span>
+                        </div>
+
+                        <div class="dropdown-menu dropdown-menu-end p-0" style="min-width: 320px; max-width: 400px;">
+                            <div class="p-3 border-bottom">
+                                <h6 class="mb-0 fw-bold">Notificaciones</h6>
+                                <small class="text-muted">Tienes {{ count_notificaciones }} notificación{{ count_notificaciones|pluralize:"es" }} nueva{{ count_notificaciones|pluralize }}</small>
+                            </div>
+                            <div style="max-height: 400px; overflow-y: auto;">
+                                {% for notif in notificaciones_no_leidas %}
+                                <a href="{{ notif.url|default:'#' }}" class="dropdown-item p-3 border-bottom" style="white-space: normal;">
+                                    <div class="d-flex gap-2">
+                                        <i class="bi bi-circle-fill text-primary" style="font-size: 0.5rem; margin-top: 0.5rem;"></i>
+                                        <div class="flex-grow-1">
+                                            <div class="fw-semibold">{{ notif.titulo }}</div>
+                                            <small class="text-muted d-block">{{ notif.mensaje|truncatewords:15 }}</small>
+                                            <small class="text-muted">{{ notif.fecha_creacion|timesince }} atrás</small>
+                                        </div>
+                                    </div>
+                                </a>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <div class="dropdown credit-desktop-user d-none d-lg-block">
+                        <div class="user-info" data-bs-toggle="dropdown">
+                            <div class="user-avatar">{{ user.first_name|first|default:"U" }}{{ user.last_name|first|default:"" }}</div>
+                            <div class="user-details d-none d-md-block">
+                                <span class="user-name">{{ user.get_full_name|default:"Usuario" }}</span>
+                                <span class="user-role">{{ user.email }}</span>
+                            </div>
+                            <i class="bi bi-chevron-down ms-2"></i>
+                        </div> 
+
+                        <!-- Desplegable mejorado -->
+                        <div class="dropdown-menu dropdown-menu-end user-menu" aria-labelledby="userDropdown">
+                            <div class="user-menu-header">
+                                <h6 class="mb-1 fw-bold">Mi Cuenta</h6>
+                                <small class="text-muted d-block">{{ user.email }}</small>
+                            </div>
+
+                            <div class="user-menu-item">
+                                <i class="bi bi-person-circle text-primary"></i>
+                                <div class="flex-grow-1">
+                                    <div class="fw-semibold" style="font-size: 0.85rem;">Nombre completo</div>
+                                    <small class="text-muted">{{ user.get_full_name|default:"Usuario" }}</small>
+                                </div>
+                            </div>
+
+                            <div class="user-menu-item">
+                                <i class="bi bi-envelope-fill text-info"></i>
+                                <div class="flex-grow-1">
+                                    <div class="fw-semibold" style="font-size: 0.85rem;">Correo electrónico</div>
+                                    <small class="text-muted">{{ user.email }}</small>
+                                </div>
+                            </div>
+
+                            <div class="user-menu-item">
+                                <i class="bi bi-shield-check text-success"></i>
+                                <div class="flex-grow-1">
+                                    <div class="fw-semibold" style="font-size: 0.85rem;">Tipo de cuenta</div>
+                                    <small class="text-muted">Emprendimiento</small>
+                                </div>
+                            </div>
+
+                            {% if credito_actual %}
+                            <div class="user-menu-item">
+                                <i class="bi bi-credit-card text-warning"></i>
+                                <div class="flex-grow-1">
+                                    <div class="fw-semibold" style="font-size: 0.85rem;">Crédito activo</div>
+                                    <small class="text-muted">{{ credito_actual.get_linea_display }}</small>
+                                </div>
+                            </div>
+                            {% endif %}
+
+                            <div class="user-menu-item logout-item">
+                                <i class="bi bi-box-arrow-right text-danger"></i>
+                                <form method="post" action="{% url 'emprendimiento:logout' %}" class="m-0">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-link p-0 text-decoration-none text-danger fw-semibold">
+                                        Cerrar Sesión
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="container my-4">
+        {% if creditos_usuario %}
+            {% if credito_actual.estado != 'EN_REVISION' %}
+            <!-- Header Mejorado -->
+            <div class="page-header-modern">
+                <div class="header-content">
+                    <div class="row align-items-center g-3">
+                        <div class="col-lg-8">
+                            <div class="credit-type-badge mb-2">
+                                <i class="bi bi-briefcase-fill me-2"></i>
+                                Línea de Crédito
+                            </div>
+                            <h1 class="header-title mb-2">{{ credito_actual.get_linea_display }}</h1>
+                            <div class="d-flex align-items-center gap-3 flex-wrap">
+                                <div class="header-meta">
+                                    <i class="bi bi-calendar3 me-2"></i>
+                                    <span>Solicitado el <strong>{{ credito_actual.fecha_solicitud|date:"d \d\e F, Y" }}</strong></span>
+                                </div>
+                                <div class="header-meta">
+                                    <i class="bi bi-hash me-2"></i>
+                                    <span>Crédito <strong>{{ credito_actual.numero_credito }}</strong></span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-4 text-lg-end mt-3 mt-lg-0">
+                            <span class="status-badge-modern status-{{ credito_actual.estado|lower }}">
+                                <i class="bi bi-check-circle-fill me-2"></i>
+                                {{ credito_actual.get_estado_display }}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Selector de Créditos Mejorado -->
+                {% if creditos_usuario|length > 1 %}
+                <div class="credit-selector-modern">
+                    <div class="selector-header">
+                        <i class="bi bi-wallet2 me-2"></i>
+                        <h6 class="mb-0">Mis Créditos y Solicitudes</h6>
+                        <span class="badge bg-primary ms-auto">{{ creditos_usuario|length }}</span>
+                    </div>
+                    <select class="form-select-modern" onchange="cambiarCredito(this.value)">
+                        {% for credito in creditos_usuario %}
+                            <option value="{{ credito.id }}" {% if credito.id == credito_actual.id %}selected{% endif %}>
+                                {{ credito.get_linea_display }} - {{ credito.get_estado_display }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            {% if mostrar_info_financiera %}
+                <!-- Contenido para créditos aprobados - DISEÑO MEJORADO -->
+                <div class="progress-card">
+                    <div class="row align-items-center">
+                        <div class="col-lg-7">
+                            <h4><i class="bi bi-graph-up me-2"></i>Progreso de tu crédito</h4>
+                            <div class="progress mb-4" style="height: 16px;">
+                                <div class="progress-bar"
+                                     style="width: {{ porcentaje_capital_pagado }}%;"
+                                     role="progressbar"
+                                     aria-valuenow="{{ porcentaje_capital_pagado }}"
+                                     aria-valuemin="0"
+                                     aria-valuemax="100">
+                                </div>
+                            </div>
+                            <div class="row text-center g-3">
+                                <div class="col-12 col-md-4">
+                                    <div class="stat-box">
+                                        <small class="d-block">CAPITAL PAGADO</small>
+                                        <h5 class="mb-0 text-success stat-value">${{ capital_pagado_monto|intcomma }}</h5>
+                                    </div>
+                                </div>
+                                <div class="col-12 col-md-4">
+                                    <div class="stat-box">
+                                        <small class="d-block">CAPITAL PENDIENTE</small>
+                                        <h5 class="mb-0 text-warning stat-value">${{ credito_actual.capital_pendiente|intcomma }}</h5>
+                                    </div>
+                                </div>
+                                <div class="col-12 col-md-4">
+                                    <div class="stat-box">
+                                        <small class="d-block">MONTO SOLICITADO</small>
+                                        <h5 class="mb-0 text-primary stat-value">${{ credito_actual.monto_aprobado|intcomma }}</h5>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-5 text-center mt-4 mt-lg-0">
+                            <!-- Progreso Circular SVG -->
+                            <div class="circular-progress-container mb-3">
+                                <svg class="circular-progress" width="180" height="180">
+                                    <defs>
+                                        <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                            <stop offset="0%" style="stop-color:#4A90E2;stop-opacity:1" />
+                                            <stop offset="50%" style="stop-color:#FFCD00;stop-opacity:1" />
+                                            <stop offset="100%" style="stop-color:#10B981;stop-opacity:1" />
+                                        </linearGradient>
+                                    </defs>
+                                    <circle class="progress-circle-bg" cx="90" cy="90" r="70"></circle>
+                                    <circle class="progress-circle" cx="90" cy="90" r="70"
+                                            style="stroke-dasharray: 439.8; stroke-dashoffset: calc(439.8 - (439.8 * {{ porcentaje_capital_pagado }} / 100))"></circle>
+                                </svg>
+                                <div class="progress-percentage">
+                                    {{ porcentaje_capital_pagado }}%
+                                    <span class="progress-label">pagado</span>
+                                </div>
+                            </div>
+
+                            {% if not es_empleado and credito_actual.estado == 'ACTIVO' and credito_actual.linea != 'LIBRANZA' %}
+                            <div class="d-flex flex-column gap-2">
+                                <a class="btn btn-payment" href="{% url 'emprendimiento:pagar_wompi' credito_actual.id %}">
+                                    <i class="bi bi-credit-card-fill me-2"></i>
+                                    Realizar Pago
+                                </a>
+                                <button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#abonoModal">
+                                    <i class="bi bi-calculator-fill me-2"></i>
+                                    Opciones Especiales
+                                </button>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Información del Crédito MEJORADA -->
+                <div class="row mb-4 g-3">
+                    <div class="col-md-12">
+                        <div class="payment-card">
+                            <h5><i class="bi bi-graph-up-arrow"></i>Resumen de tu Crédito</h5>
+                            <div class="row g-3">
+                                <div class="col-6 col-md-3">
+                                    <div class="info-card-item">
+                                        <div class="icon-wrapper">
+                                            <i class="bi bi-list-ol"></i>
+                                        </div>
+                                        <div class="label">Cuotas Restantes</div>
+                                        <div class="value">{{ cuotas_restantes }}<span style="font-size: 1rem; color: #6B7280;"> / {{ credito_actual.plazo }}</span></div>
+                                    </div>
+                                </div>
+                                <div class="col-6 col-md-3">
+                                    <div class="info-card-item">
+                                        <div class="icon-wrapper">
+                                            <i class="bi bi-cash-stack"></i>
+                                        </div>
+                                        <div class="label">Próxima Cuota</div>
+                                        <div class="value">${{ valor_cuota_pendiente|floatformat:0|intcomma }}</div>
+                                    </div>
+                                </div>
+                                <div class="col-6 col-md-3">
+                                    <div class="info-card-item">
+                                        <div class="icon-wrapper">
+                                            <i class="bi bi-calendar-event"></i>
+                                        </div>
+                                        <div class="label">Próximo Vencimiento</div>
+                                        <div class="value" style="font-size: 1rem;">{{ credito_actual.fecha_proximo_pago|date:"d M, Y" }}</div>
+                                    </div>
+                                </div>
+                                <div class="col-6 col-md-3">
+                                    <div class="info-card-item">
+                                        <div class="icon-wrapper">
+                                            <i class="bi bi-check-circle"></i>
+                                        </div>
+                                        <div class="label">Total Pagado</div>
+                                        <div class="value">${{ monto_total_pagado|floatformat:0|intcomma }}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+
+
+                <!-- Historial de Pagos -->
+                <div class="payment-card table-modern">
+                    <div class="table-header-actions">
+                        <h5 class="mb-0"><i class="bi bi-clock-history me-2"></i>Historial de Pagos</h5>
+                        <div class="d-flex gap-2">
+                            {# NUEVA URL - Emprendimiento #}
+                            <a href="{% url 'emprendimiento:descargar_plan_pagos' credito_actual.id %}"
+                               class="btn btn-outline-primary btn-sm"
+                               data-download="true">
+                                <i class="bi bi-download me-1"></i>
+                                Descargar Plan de Pagos
+                            </a>
+                            {# NUEVA URL - Emprendimiento #}
+                            <a href="{% url 'emprendimiento:descargar_extracto' credito_actual.id %}"
+                               class="btn btn-outline-primary btn-sm"
+                               data-download="true">
+                                <i class="bi bi-file-earmark-pdf me-1"></i>
+                                Descargar Extracto
+                            </a>
+                            {# NUEVA URL - Historial Abonos #}
+                            <a href="{% url 'emprendimiento:historial_abonos' credito_actual.id %}"
+                               class="btn btn-outline-primary btn-sm">
+                                <i class="bi bi-clock-history me-1"></i>
+                                Historial Abonos
+                            </a>
+                        </div>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Fecha</th>
+                                    <th>Referencia</th>
+                                    <th class="text-end">Monto</th>
+                                    <th class="text-center">Estado</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% if historial_pagos %}
+                                    {% for pago in historial_pagos %}
+                                    <tr>
+                                        <td data-label="Fecha">
+                                            <i class="bi bi-calendar3 me-2 text-muted"></i>
+                                            {{ pago.fecha_pago|date:"d M, Y H:i" }}
+                                        </td>
+                                        <td data-label="Referencia"><code style="font-size: 0.8rem;">{{ pago.referencia_pago }}</code></td>
+                                        <td class="text-end" data-label="Monto">
+                                            <strong class="text-success">${{ pago.monto|intcomma }}</strong>
+                                        </td>
+                                        <td class="text-center" data-label="Estado">
+                                            <span class="badge {% if pago.estado == 'EXITOSO' %}bg-success{% else %}bg-danger{% endif %} rounded-pill">
+                                                {{ pago.get_estado_display }}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                {% else %}
+                                    <tr class="no-payments">
+                                        <td colspan="4" class="text-center py-4">
+                                            <i class="bi bi-inbox text-muted" style="font-size: 2rem;"></i>
+                                            <p class="mb-0 mt-2 text-muted">No tienes pagos realizados aún.</p>
+                                        </td>
+                                    </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            {% else %}
+                <!-- Contenido para solicitudes en revisión o rechazadas -->
+                {% if credito_actual.estado == 'RECHAZADO' %}
+                    <div class="empty-state">
+                        <i class="bi bi-x-circle text-danger"></i>
+                        <h3 class="mt-3">Tu solicitud fue {{ credito_actual.get_estado_display }}</h3>
+                        <p class="text-muted mb-4">
+                            Lo sentimos, tu solicitud para un crédito de {{ credito_actual.get_linea_display }}
+                            no pudo ser aprobada en este momento.
+                        </p>
+                        <a href="/" class="btn btn-primary btn-lg">
+                            <i class="bi bi-plus-circle me-2"></i>
+                            Solicitar un nuevo crédito
+                        </a>
+                    </div>
+                {% else %}
+                    <!-- Estado: En Revisión - Mejorado -->
+                    <div class="row g-4">
+                        <!-- Card Principal - Estado -->
+                        <div class="col-12">
+                            <div class="card border-0 shadow-sm" style="border-left: 4px solid var(--azul-cielo) !important;">
+                                <div class="card-body p-4">
+                                    <div class="row align-items-center">
+                                        <div class="col-lg-2 text-center mb-3 mb-lg-0">
+                                            <div class="d-inline-block">
+                                                <div style="width: 80px; height: 80px; background: linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%); border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+                                                    <i class="bi bi-hourglass-split" style="font-size: 2.5rem; color: var(--azul-cielo);"></i>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="col-lg-7">
+                                            <h3 class="fw-bold mb-2" style="color: var(--azul-colombia);">
+                                                Tu solicitud está En Revisión
+                                            </h3>
+                                            <p class="text-muted mb-3" style="font-size: 1rem;">
+                                                Recibimos tu solicitud para un crédito de <strong>{{ credito_actual.get_linea_display }}</strong>
+                                                el <strong>{{ credito_actual.fecha_solicitud|date:"d \d\e F, Y" }}</strong>.
+                                            </p>
+                                            <p class="mb-0">
+                                                <i class="bi bi-bell text-primary me-2"></i>
+                                                Nuestro equipo te notificará pronto con una respuesta.
+                                            </p>
+                                        </div>
+                                        <div class="col-lg-3 text-center text-lg-end mt-3 mt-lg-0">
+                                            <div class="badge bg-light text-primary border border-primary p-3" style="font-size: 0.9rem;">
+                                                <i class="bi bi-clock me-2"></i>
+                                                <div class="mt-1 fw-semibold">Tiempo estimado</div>
+                                                <div class="fs-5 fw-bold mt-1">24 horas</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Card - Detalles de Solicitud -->
+                        <div class="col-md-6">
+                            <div class="card border-0 shadow-sm h-100">
+                                <div class="card-body p-4">
+                                    <h5 class="fw-semibold mb-4">
+                                        <i class="bi bi-file-text me-2 text-primary"></i>
+                                        Detalles de tu Solicitud
+                                    </h5>
+                                    <div class="mb-3">
+                                        <small class="text-muted text-uppercase d-block mb-1">Línea de Crédito</small>
+                                        <strong class="text-dark">{{ credito_actual.get_linea_display }}</strong>
+                                    </div>
+                                    <div class="mb-3">
+                                        <small class="text-muted text-uppercase d-block mb-1">Monto Solicitado</small>
+                                        <strong class="text-primary fs-5">${{ credito_actual.monto_solicitado|intcomma }}</strong>
+                                    </div>
+                                    <div class="mb-3">
+                                        <small class="text-muted text-uppercase d-block mb-1">Plazo</small>
+                                        <strong class="text-dark">{{ credito_actual.plazo_solicitado }} meses</strong>
+                                    </div>
+                                    <div class="mb-0">
+                                        <small class="text-muted text-uppercase d-block mb-1">Número de Solicitud</small>
+                                        <code class="bg-light px-2 py-1 rounded">{{ credito_actual.numero_credito }}</code>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Card - Próximos Pasos -->
+                        <div class="col-md-6">
+                            <div class="card border-0 shadow-sm h-100">
+                                <div class="card-body p-4">
+                                    <h5 class="fw-semibold mb-4">
+                                        <i class="bi bi-list-check me-2 text-success"></i>
+                                        Próximos Pasos
+                                    </h5>
+                                    <div class="d-flex align-items-start mb-3">
+                                        <div class="flex-shrink-0">
+                                            <div class="rounded-circle bg-success bg-opacity-10 p-2">
+                                                <i class="bi bi-check-circle-fill text-success"></i>
+                                            </div>
+                                        </div>
+                                        <div class="flex-grow-1 ms-3">
+                                            <small class="text-success d-block">Paso 1</small>
+                                            <strong class="text-success">Solicitud recibida</strong>
+                                        </div>
+                                    </div>
+                                    <div class="d-flex align-items-start mb-3">
+                                        <div class="flex-shrink-0">
+                                            <div class="rounded-circle bg-primary bg-opacity-10 p-2">
+                                                <i class="bi bi-hourglass-split text-primary"></i>
+                                            </div>
+                                        </div>
+                                        <div class="flex-grow-1 ms-3">
+                                            <small class="text-muted d-block">Paso 2</small>
+                                            <strong class="text-dark">Análisis de crédito en proceso</strong>
+                                        </div>
+                                    </div>
+                                    <div class="d-flex align-items-start mb-3">
+                                        <div class="flex-shrink-0">
+                                            <div class="rounded-circle bg-light p-2">
+                                                <i class="bi bi-bell text-muted"></i>
+                                            </div>
+                                        </div>
+                                        <div class="flex-grow-1 ms-3">
+                                            <small class="text-muted d-block">Paso 3</small>
+                                            <strong class="text-muted">Notificación de resultado</strong>
+                                        </div>
+                                    </div>
+                                    <div class="d-flex align-items-start">
+                                        <div class="flex-shrink-0">
+                                            <div class="rounded-circle bg-light p-2">
+                                                <i class="bi bi-cash-coin text-muted"></i>
+                                            </div>
+                                        </div>
+                                        <div class="flex-grow-1 ms-3">
+                                            <small class="text-muted d-block">Paso 4</small>
+                                            <strong class="text-muted">Desembolso del crédito</strong>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Card - Información Adicional -->
+                        <div class="col-12">
+                            <div class="alert alert-light border-0 shadow-sm">
+                                <div class="row align-items-center">
+                                    <div class="col-md-1 text-center mb-3 mb-md-0">
+                                        <i class="bi bi-info-circle text-info" style="font-size: 2rem;"></i>
+                                    </div>
+                                    <div class="col-md-11">
+                                        <h6 class="fw-semibold mb-2">¿Qué estamos evaluando?</h6>
+                                        <p class="mb-0 text-muted small">
+                                            Nuestro equipo está verificando tu historial crediticio, capacidad de pago y validando la información proporcionada.
+                                            Te notificaremos por correo electrónico y dentro de la plataforma cuando tengamos una respuesta.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                {% endif %}
+            {% endif %}
+
+        {% else %}
+            <!-- Sin créditos -->
+            <div class="empty-state">
+                <i class="bi bi-journal-x"></i>
+                <h3 class="mt-3">No tienes créditos ni solicitudes</h3>
+                <p class="text-muted mb-4">
+                    Parece que aún no has solicitado ningún crédito con nosotros.
+                </p>
+                {# NUEVA URL - Emprendimiento #}
+                <a href="{% url 'emprendimiento:solicitar' %}" class="btn btn-primary btn-lg">
+                    <i class="bi bi-plus-circle me-2"></i>
+                    Solicita tu primer crédito
+                </a>
+            </div>
+        {% endif %}
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer-aprobado">
+        <div class="container text-center">
+            <p>© {{ current_year|default:"2026" }} {{ brand.name|default:"FUNDETEC" }}. Todos los derechos reservados.</p>
+        </div>
+    </footer>
+
+    {% if not es_empleado %}
+    <!-- Modal de Abonos y Reestructuración - ULTRA COMPACTO -->
+    <div class="modal fade" id="abonoModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width: 600px;">
+            <div class="modal-content border-0 shadow-lg" style="border-radius: 20px; overflow: hidden;">
+                <div class="modal-header border-0 py-4 px-4" style="background: white;">
+                    <div>
+                        <div class="d-flex align-items-center gap-2 mb-1">
+                            <div style="width: 40px; height: 40px; background: linear-gradient(135deg, #E0F2FE, #BFDBFE); border-radius: 12px; display: flex; align-items: center; justify-content: center;">
+                                <i class="bi bi-credit-card-2-front" style="font-size: 1.25rem; color: #0284C7;"></i>
+                            </div>
+                            <h5 class="modal-title mb-0 fw-bold" style="color: #111827;">Opciones de Pago</h5>
+                        </div>
+                        <p class="text-muted mb-0" style="font-size: 0.875rem; padding-left: 48px;">Selecciona cómo deseas realizar tu pago</p>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-4" style="background: #F9FAFB;">
+                    <!-- Selección de Tipo de Pago - MODERNIZADO -->
+                    <div class="row g-3 mb-4">
+                        <div class="col-12">
+                            <div class="tipo-abono-card-modern" data-tipo="CAPITAL" style="cursor: pointer;">
+                                <div class="d-flex align-items-center gap-3">
+                                    <div style="width: 48px; height: 48px; background: #DBEAFE; border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                                        <i class="bi bi-piggy-bank" style="font-size: 1.4rem; color: #0284C7;"></i>
+                                    </div>
+                                    <div class="flex-grow-1">
+                                        <div class="d-flex align-items-center gap-2 mb-1">
+                                            <h6 class="mb-0 fw-bold" style="color: #111827; font-size: 0.95rem;">Abono a Capital</h6>
+                                            <span class="badge" style="background: #0EA5E9; font-size: 0.7rem; padding: 0.3rem 0.6rem;">Solo 1 vez</span>
+                                        </div>
+                                        <p class="text-muted mb-0" style="font-size: 0.875rem;">Reestructura tu crédito con nuevos intereses y cuotas</p>
+                                    </div>
+                                    <i class="bi bi-chevron-right text-muted" style="font-size: 1.1rem;"></i>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <div class="tipo-abono-card-modern" data-tipo="NORMAL" style="cursor: pointer;">
+                                <div class="d-flex align-items-center gap-3">
+                                    <div style="width: 48px; height: 48px; background: #FEF3C7; border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                                        <i class="bi bi-cash-coin" style="font-size: 1.4rem; color: #D97706;"></i>
+                                    </div>
+                                    <div class="flex-grow-1">
+                                        <div class="d-flex align-items-center gap-2 mb-1">
+                                            <h6 class="mb-0 fw-bold" style="color: #111827; font-size: 0.95rem;">Abono Normal</h6>
+                                            <span class="badge" style="background: #F59E0B; font-size: 0.7rem; padding: 0.3rem 0.6rem;">Flexible</span>
+                                        </div>
+                                        <p class="text-muted mb-0" style="font-size: 0.875rem;">Realiza un pago parcial sobre tu deuda actual</p>
+                                    </div>
+                                    <i class="bi bi-chevron-right text-muted" style="font-size: 1.1rem;"></i>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <div class="tipo-abono-card-modern" data-tipo="TOTAL" style="cursor: pointer;">
+                                <div class="d-flex align-items-center gap-3">
+                                    <div style="width: 48px; height: 48px; background: #D1FAE5; border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                                        <i class="bi bi-check-circle-fill" style="font-size: 1.4rem; color: #059669;"></i>
+                                    </div>
+                                    <div class="flex-grow-1">
+                                        <div class="d-flex align-items-center gap-2 mb-1">
+                                            <h6 class="mb-0 fw-bold" style="color: #111827; font-size: 0.95rem;">Pago Total</h6>
+                                            <span class="badge" style="background: #10B981; font-size: 0.7rem; padding: 0.3rem 0.6rem;">Incluye intereses</span>
+                                        </div>
+                                        <p class="text-muted mb-0" style="font-size: 0.875rem;">Liquida completamente tu deuda pendiente</p>
+                                    </div>
+                                    <i class="bi bi-chevron-right text-muted" style="font-size: 1.1rem;"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Formulario de Abono a Capital -->
+                    <div id="form-capital" class="d-none">
+                        <div class="alert alert-info py-1 px-2 mb-2" style="font-size: 0.75rem;">
+                            <i class="bi bi-info-circle me-1"></i>
+                            <strong>Abono a Capital:</strong> Reestructuramos tu crédito con nuevos intereses y cuotas.
+                        </div>
+
+                        <div class="mb-2">
+                            <label for="monto-capital" class="form-label fw-semibold mb-1" style="font-size: 0.8rem;">
+                                Monto del abono
+                            </label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text" style="font-size: 0.8rem;">$</span>
+                                <input type="number" class="form-control" id="monto-capital" style="font-size: 0.8rem;"
+                                       min="50000"
+                                       max="{{ credito_actual.capital_pendiente|unlocalize }}"
+                                       step="10000"
+                                       placeholder="Ingresa el monto">
+                            </div>
+                            <small class="text-muted" style="font-size: 0.7rem;">
+                                Min: $50.000 | Máx: ${{ credito_actual.capital_pendiente|intcomma }}
+                            </small>
+                        </div>
+                    </div>
+
+                    <!-- Formulario de Abono Normal -->
+                    <div id="form-normal" class="d-none">
+                        <div class="alert alert-primary py-1 px-2 mb-2" style="font-size: 0.75rem;">
+                            <i class="bi bi-info-circle me-1"></i>
+                            <strong>Abono Normal:</strong> Reduce el valor de la proxima cuota.
+                        </div>
+
+                        <div class="mb-2">
+                            <label for="monto-normal" class="form-label fw-semibold mb-1" style="font-size: 0.8rem;">
+                                Monto del abono
+                            </label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text" style="font-size: 0.8rem;">$</span>
+                                <input type="number" class="form-control" id="monto-normal" style="font-size: 0.8rem;"
+                                       min="1000"
+                                       max="{{ valor_cuota_pendiente|unlocalize }}"
+                                       step="1000"
+                                       placeholder="Ingresa el monto"
+                                       data-max-cuota="{{ valor_cuota_pendiente|unlocalize }}"
+                                       data-max-saldo="{{ credito_actual.saldo_pendiente|unlocalize }}">
+                            </div>
+                            <small class="text-muted" style="font-size: 0.7rem;">
+                                Maximo: ${{ valor_cuota_pendiente|intcomma }}
+                            </small>
+                            <div class="text-muted mt-1" id="abono-normal-formato" style="font-size: 0.7rem;">
+                                $0
+                            </div>
+                            <div id="normal-error" class="text-danger mt-1 d-none" style="font-size: 0.7rem;"></div>
+                        </div>
+
+                        <div class="card border-info">
+                            <div class="card-body p-2">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <small class="text-muted" style="font-size: 0.7rem;">Cuota actual:</small>
+                                    <strong style="font-size: 0.85rem;" id="cuota-actual">${{ valor_cuota_pendiente|default:credito_actual.valor_cuota|intcomma }}</strong>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <small class="text-muted" style="font-size: 0.7rem;">Abono:</small>
+                                    <strong style="font-size: 0.85rem;" id="abono-normal">$0</strong>
+                                </div>
+                                <hr class="my-1">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <strong style="font-size: 0.8rem;">Cuota restante:</strong>
+                                    <h5 class="mb-0 text-primary" id="cuota-restante" style="font-size: 1.1rem;">$0</h5>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Formulario de Pago Total -->
+                    <div id="form-total" class="d-none">
+                        <div class="alert alert-success py-1 px-2 mb-2" style="font-size: 0.75rem;">
+                            <i class="bi bi-check-circle me-1"></i>
+                            <strong>Pago Total:</strong> Liquida completamente tu deuda con intereses y comisiones pendientes.
+                        </div>
+
+                        <div class="mb-2">
+                            <div class="card border-success">
+                                <div class="card-body p-2">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <small class="text-muted" style="font-size: 0.7rem;">Capital Pendiente:</small>
+                                        <strong style="font-size: 0.85rem;" id="capital-pendiente-total">${{ credito_actual.capital_pendiente|intcomma }}</strong>
+                                    </div>
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <small class="text-muted" style="font-size: 0.7rem;">Intereses Acumulados:</small>
+                                        <strong style="font-size: 0.85rem;" id="intereses-acumulados">$0</strong>
+                                    </div>
+                                    <hr class="my-1">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <strong style="font-size: 0.8rem;">Total a Pagar:</strong>
+                                        <h5 class="mb-0 text-success" id="total-pagar" style="font-size: 1.1rem;">$0</h5>
+                                    </div>
+                                </div>
+                            </div>
+                            <small class="text-muted d-block mt-1" style="font-size: 0.7rem;">
+                                <i class="bi bi-info-circle me-1"></i>
+                                El pago total incluye intereses y comisiones pendientes.
+                            </small>
+                        </div>
+                    </div>
+
+                    <!-- Botón Analizar - ULTRA COMPACTO -->
+                    <div class="text-center mb-2" id="btn-analizar-container" style="display: none;">
+                        <button type="button" class="btn btn-primary btn-sm px-3" id="btn-analizar-abono" style="font-size: 0.8rem;">
+                            <i class="bi bi-search me-1"></i>
+                            Analizar Impacto
+                        </button>
+                    </div>
+
+                    <!-- Resultados del Análisis - ULTRA COMPACTO -->
+                    <div id="resultados-analisis" class="d-none">
+                        <hr class="my-1">
+                        <div class="fw-bold mb-2" style="font-size: 0.85rem;">
+                            <i class="bi bi-graph-up me-1"></i>
+                            Análisis del Impacto
+                        </div>
+
+                        <!-- Alerta de Error -->
+                        <div id="error-analisis" class="alert alert-danger py-1 px-2 d-none" style="font-size: 0.75rem;">
+                            <i class="bi bi-exclamation-circle me-1"></i>
+                            <span id="error-mensaje"></span>
+                        </div>
+
+                        <!-- Comparación de Planes - ULTRA COMPACTO -->
+                        <div id="comparacion-planes">
+                            <div class="row g-2 mb-2">
+                                <div class="col-6">
+                                    <div class="card border-secondary h-100">
+                                        <div class="card-header bg-secondary text-white py-1 px-2">
+                                            <div class="mb-0" style="font-size: 0.7rem;"><i class="bi bi-calendar3 me-1"></i>Plan Actual</div>
+                                        </div>
+                                        <div class="card-body p-2" style="font-size: 0.7rem;">
+                                            <div class="mb-1">
+                                                <small class="text-muted d-block" style="font-size: 0.65rem;">Cuotas</small>
+                                                <strong style="font-size: 0.75rem;" id="plan-actual-cuotas">-</strong>
+                                            </div>
+                                            <div class="mb-1">
+                                                <small class="text-muted d-block" style="font-size: 0.65rem;">Valor Cuota</small>
+                                                <strong style="font-size: 0.75rem;" id="plan-actual-valor-cuota">-</strong>
+                                            </div>
+                                            <div class="mb-1">
+                                                <small class="text-muted d-block" style="font-size: 0.65rem;">Capital</small>
+                                                <strong style="font-size: 0.75rem;" id="plan-actual-capital">-</strong>
+                                            </div>
+                                            <div>
+                                                <small class="text-muted d-block" style="font-size: 0.65rem;">Intereses</small>
+                                                <strong style="font-size: 0.75rem;" id="plan-actual-intereses">-</strong>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="card border-success h-100">
+                                        <div class="card-header bg-success text-white py-1 px-2">
+                                            <div class="mb-0" style="font-size: 0.7rem;"><i class="bi bi-calendar-check me-1"></i>Plan Nuevo</div>
+                                        </div>
+                                        <div class="card-body p-2" style="font-size: 0.7rem;">
+                                            <div class="mb-1">
+                                                <small class="text-muted d-block" style="font-size: 0.65rem;">Cuotas</small>
+                                                <strong class="text-success" style="font-size: 0.75rem;" id="plan-nuevo-cuotas">-</strong>
+                                            </div>
+                                            <div class="mb-1">
+                                                <small class="text-muted d-block" style="font-size: 0.65rem;">Valor Cuota</small>
+                                                <strong class="text-success" style="font-size: 0.75rem;" id="plan-nuevo-valor-cuota">-</strong>
+                                            </div>
+                                            <div class="mb-1">
+                                                <small class="text-muted d-block" style="font-size: 0.65rem;">Capital</small>
+                                                <strong class="text-success" style="font-size: 0.75rem;" id="plan-nuevo-capital">-</strong>
+                                            </div>
+                                            <div>
+                                                <small class="text-muted d-block" style="font-size: 0.65rem;">Intereses</small>
+                                                <strong class="text-success" style="font-size: 0.75rem;" id="plan-nuevo-intereses">-</strong>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Ahorro en Intereses - ULTRA COMPACTO -->
+                            <div class="alert alert-success text-center py-1 px-2 mb-0">
+                                <div class="mb-1" style="font-size: 0.7rem;">
+                                    <i class="bi bi-piggy-bank me-1"></i>
+                                    <strong>Ahorrarás en Intereses</strong>
+                                </div>
+                                <h5 class="mb-0 fw-bold text-success" id="ahorro-intereses" style="font-size: 1.1rem;">$0</h5>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer py-1 px-2">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal" style="font-size: 0.75rem;">Cancelar</button>
+                    <button type="button" class="btn btn-success btn-sm d-none" id="btn-confirmar-abono" style="font-size: 0.75rem;">
+                        <i class="bi bi-check-circle me-1"></i>
+                        Confirmar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/lottie-web/5.12.2/lottie.min.js"></script>
+    <script src="{% static 'js/dashboard_emprendimiento.js' %}"></script>
+    <script>
+        // Inicializar animación Lottie
+        document.addEventListener('DOMContentLoaded', function() {
+            lottieAnimation = lottie.loadAnimation({
+                container: document.getElementById('lottieLoader'),
+                renderer: 'svg',
+                loop: true,
+                autoplay: true,
+                path: '{% static "animations/loading.json" %}'
+            });
+
+            // Inicializar modal de abonos si existe credito
+            {% if credito_actual %}
+            initModalAbonos({
+                creditoId: {{ credito_actual.id }},
+                csrfToken: '{{ csrf_token }}',
+                valorCuota: parseFloat('{{ valor_cuota_pendiente|default:credito_actual.valor_cuota|unlocalize }}'),
+                saldoPendiente: parseFloat('{{ credito_actual.saldo_pendiente|unlocalize }}'),
+                capitalPendiente: parseFloat('{{ credito_actual.capital_pendiente|unlocalize }}')
+            });
+            {% endif %}
+        });
+    </script>
+</body>
+</html>
+
+

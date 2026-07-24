@@ -1,0 +1,4 @@
+{% load static %}
+{% with favicon_path=brand.favicon|default:'images/fundetec-logo.png' %}
+<link rel="icon" type="image/png" href="{% static favicon_path %}">
+{% endwith %}

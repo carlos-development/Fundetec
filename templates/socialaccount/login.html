@@ -1,0 +1,42 @@
+{% extends "socialaccount/base_socialaccount.html" %}
+{% load socialaccount %}
+
+{% block content %}
+<main class="section-main">
+    <section class="hero-section-account">
+        <div class="container-account">
+            <div class="div-card-agent-account">
+                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"
+                     alt="Google" style="height: 40px; margin-bottom: 1rem;">
+                <h2 class="mb-3">Inicio de sesión con Google</h2>
+                {% if 'libranza' in request.GET.next|default:'' or 'libranza' in request.path %}
+                    <p>Debes iniciar sesión con tu cuenta de Google para acceder al formulario de crédito de Libranza</p>
+                {% else %}
+                    <p>Debes iniciar sesión con tu cuenta de Google para acceder al formulario de crédito</p>
+                {% endif %}
+
+                <form method="post" class="form-account">
+                    {% csrf_token %}
+                    <button type="submit" class="btn-account">
+                        <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"
+                             alt="Google" style="height: 20px;">
+                        <span>Continuar con Google</span>
+                    </button>
+                </form>
+            </div>
+        </div>
+    </section>
+</main>
+
+<script>
+    window.addEventListener('DOMContentLoaded', function() {
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('process') === 'login') {
+            const form = document.querySelector('.form-account');
+            if (form) {
+                form.submit();
+            }
+        }
+    });
+</script>
+{% endblock %}

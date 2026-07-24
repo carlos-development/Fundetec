@@ -1,0 +1,8 @@
+{% load brand_tags %}
+<div class="email-footer">
+    <img src="{% brand_static_url 'logo_dark' %}" alt="{% brand_value 'name' %}" class="footer-logo">
+    <p class="footer-company">{% brand_value 'legal_name' %}</p>
+    <div class="footer-links">
+        <a href="{% brand_value 'public_base_url' %}">{% brand_value 'name' %}</a>
+    </div>
+</div>

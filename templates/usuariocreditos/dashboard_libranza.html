@@ -1,0 +1,598 @@
+{% load static %}
+{% load humanize %}
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mi crédito estudiantil - {{ brand.name|default:"FUNDETEC" }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+        <link rel="stylesheet" href="{% static 'css/dashboard_emprendimiento.css' %}">
+    {% comment %} <link rel="stylesheet" href="{% static 'css/dashboard_libranza.css' %}"> {% endcomment %}
+    {% include 'base/favicon.html' %}
+</head>
+<body>
+    <!-- Loader Global -->
+    <div id="globalLoader">
+        <div id="lottieLoader"></div>
+        <div class="loader-text">Cargando...</div>
+    </div>
+
+    <!-- Navbar Minimalista -->
+    <nav class="navbar navbar-expand-lg navbar-professional sticky-top">
+        <div class="container">
+            {# NUEVA URL - Libranza #}
+            <a class="navbar-brand" href="{% url 'libranza:landing' %}">
+                <img src="{% static brand.logo_dark|default:'images/fundetec-logo.png' %}" alt="{{ brand.name|default:'FUNDETEC' }} crédito estudiantil" class="brand-logo">
+            </a>
+
+            <button class="navbar-toggler border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <div class="credit-mobile-session d-lg-none">
+                    <div class="credit-mobile-user">
+                        <div class="user-avatar">{{ user.first_name|first|default:"U" }}{{ user.last_name|first|default:"" }}</div>
+                        <div>
+                            <span class="credit-mobile-user-name">{{ user.get_full_name|default:user.username }}</span>
+                            <small class="credit-mobile-user-email">{{ user.email }}</small>
+                        </div>
+                    </div>
+                    <form method="post" action="{% url 'libranza:logout' %}">
+                        {% csrf_token %}
+                        <button type="submit" class="credit-mobile-logout">Cerrar sesion</button>
+                    </form>
+                </div>
+                <ul class="navbar-nav mx-auto">
+                    <li class="nav-item">
+                        {# NUEVA URL - Libranza #}
+                        <a class="nav-link active" href="{% url 'libranza:mi_credito' %}">
+                            <i class="bi bi-speedometer2 me-1"></i> Mi Crédito
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        {# NUEVA URL - Billetera #}
+                        <a class="nav-link" href="{% url 'billetera:dashboard' %}">
+                            <i class="bi bi-wallet2 me-1"></i> Billetera
+                        </a>
+                    </li>
+                    {% comment %} <li class="nav-item">
+                        {# NUEVA URL - Libranza #}
+                        <a class="nav-link" href="{% url 'libranza:landing' %}">
+                            <i class="bi bi-house me-1"></i> Inicio
+                        </a>
+                    </li> {% endcomment %}
+                </ul>
+
+                <div class="d-flex align-items-center gap-3 credit-nav-actions">
+                    {% if count_notificaciones > 0 %}
+                    <div class="dropdown credit-desktop-notifications d-none d-lg-block">
+                        <div class="notification-badge" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="bi bi-bell notification-icon"></i>
+                            <span class="badge">{{ count_notificaciones }}</span>
+                        </div>
+
+                        <div class="dropdown-menu dropdown-menu-end p-0" style="min-width: 320px; max-width: 400px;">
+                            <div class="p-3 border-bottom">
+                                <h6 class="mb-0 fw-bold">Notificaciones</h6>
+                                <small class="text-muted">Tienes {{ count_notificaciones }} notificación{{ count_notificaciones|pluralize:"es" }} nueva{{ count_notificaciones|pluralize }}</small>
+                            </div>
+                            <div style="max-height: 400px; overflow-y: auto;">
+                                {% for notif in notificaciones_no_leidas %}
+                                <a href="{{ notif.url|default:'#' }}" class="dropdown-item p-3 border-bottom" style="white-space: normal;">
+                                    <div class="d-flex gap-2">
+                                        <i class="bi bi-circle-fill text-primary" style="font-size: 0.5rem; margin-top: 0.5rem;"></i>
+                                        <div class="flex-grow-1">
+                                            <div class="fw-semibold">{{ notif.titulo }}</div>
+                                            <small class="text-muted d-block">{{ notif.mensaje|truncatewords:15 }}</small>
+                                            <small class="text-muted">{{ notif.fecha_creacion|timesince }} atrás</small>
+                                        </div>
+                                    </div>
+                                </a>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <div class="dropdown credit-desktop-user d-none d-lg-block">
+                        <div class="user-info" data-bs-toggle="dropdown">
+                            <div class="user-avatar">{{ user.first_name|first|default:"U" }}{{ user.last_name|first|default:"" }}</div>
+                            <div class="user-details d-none d-md-block">
+                                <span class="user-name">{{ user.get_full_name|default:"Usuario" }}</span>
+                                <span class="user-role">{{ user.email }}</span>
+                            </div>
+                            <i class="bi bi-chevron-down ms-2"></i>
+                        </div> 
+
+                        <!-- Desplegable mejorado -->
+                        <div class="dropdown-menu dropdown-menu-end user-menu" aria-labelledby="userDropdown">
+                            <div class="user-menu-header">
+                                <h6 class="mb-1 fw-bold">Mi Cuenta</h6>
+                                <small class="text-muted d-block">{{ user.email }}</small>
+                            </div>
+
+                            <div class="user-menu-item">
+                                <i class="bi bi-person-circle text-primary"></i>
+                                <div class="flex-grow-1">
+                                    <div class="fw-semibold" style="font-size: 0.85rem;">Nombre completo</div>
+                                    <small class="text-muted">{{ user.get_full_name|default:"Usuario" }}</small>
+                                </div>
+                            </div>
+
+                            <div class="user-menu-item">
+                                <i class="bi bi-envelope-fill text-info"></i>
+                                <div class="flex-grow-1">
+                                    <div class="fw-semibold" style="font-size: 0.85rem;">Correo electrónico</div>
+                                    <small class="text-muted">{{ user.email }}</small>
+                                </div>
+                            </div>
+
+                            <div class="user-menu-item">
+                                <i class="bi bi-shield-check text-success"></i>
+                                <div class="flex-grow-1">
+                                    <div class="fw-semibold" style="font-size: 0.85rem;">Tipo de cuenta</div>
+                                    <small class="text-muted">Crédito estudiantil</small>
+                                </div>
+                            </div>
+
+                            {% comment %} {% if credito_actual %}
+                            <div class="user-menu-item">
+                                <i class="bi bi-credit-card text-warning"></i>
+                                <div class="flex-grow-1">
+                                    <div class="fw-semibold" style="font-size: 0.85rem;">Crédito activo</div>
+                                    <small class="text-muted">{{ credito_actual.get_linea_display }}</small>
+                                </div>
+                            </div>
+                            {% endif %} {% endcomment %}
+
+                            <div class="user-menu-item logout-item">
+                                <i class="bi bi-box-arrow-right text-danger"></i>
+                                <form method="post" action="{% url 'libranza:logout' %}" class="m-0">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-link p-0 text-decoration-none text-danger fw-semibold">
+                                        Cerrar Sesión
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="container my-4">
+        {% if creditos_usuario %}
+            {% if credito_actual.estado != 'EN_REVISION' %}
+            <!-- Header Mejorado -->
+            <div class="page-header-modern">
+                <div class="header-content">
+                    <div class="row align-items-center g-3">
+                        <div class="col-lg-8">
+                            <div class="credit-type-badge mb-2">
+                                <i class="bi bi-building me-2"></i>
+                                Línea de Crédito
+                            </div>
+                            <h1 class="header-title mb-2">{{ credito_actual.get_linea_display }}</h1>
+                            <div class="d-flex align-items-center gap-3 flex-wrap">
+                                <div class="header-meta">
+                                    <i class="bi bi-calendar3 me-2"></i>
+                                    <span>Solicitado el <strong>{{ credito_actual.fecha_solicitud|date:"d \d\e F, Y" }}</strong></span>
+                                </div>
+                                <div class="header-meta">
+                                    <i class="bi bi-hash me-2"></i>
+                                    <span>Crédito <strong>{{ credito_actual.numero_credito }}</strong></span>{% if credito_actual.tipo_regla_credito == 'ESPECIAL' %}<span class="badge bg-dark ms-2">Especial</span>{% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-4 text-lg-end mt-3 mt-lg-0">
+                            <span class="status-badge-modern status-{{ credito_actual.estado|lower }}">
+                                <i class="bi bi-check-circle-fill me-2"></i>
+                                {{ credito_actual.get_estado_display }}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Selector de Créditos Mejorado -->
+                {% if creditos_usuario|length > 1 %}
+                <div class="credit-selector-modern">
+                    <div class="selector-header">
+                        <i class="bi bi-wallet2 me-2"></i>
+                        <h6 class="mb-0">Mis Créditos y Solicitudes</h6>
+                        <span class="badge bg-primary ms-auto">{{ creditos_usuario|length }}</span>
+                    </div>
+                    <select class="form-select-modern" onchange="cambiarCredito(this.value)">
+                        {% for credito in creditos_usuario %}
+                            <option value="{{ credito.id }}" {% if credito.id == credito_actual.id %}selected{% endif %}>
+                                {{ credito.get_linea_display }} - {{ credito.get_estado_display }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            {% if adelanto_eligibility %}
+            <section class="payment-card mb-4">
+                <div class="d-flex flex-column flex-lg-row justify-content-between align-items-start gap-3">
+                    <div>
+                        <h5 class="mb-2"><i class="bi bi-grid me-2"></i>Opciones de financiación educativa</h5>
+                        <p class="text-muted mb-0">
+                            Puedes revisar opciones complementarias de apoyo educativo sin depender de tener un crédito activo.
+                        </p>
+                    </div>
+                    <a href="{% url 'libranza:adelanto_nomina' %}" class="btn {% if adelanto_eligibility.eligible %}btn-primary{% else %}btn-outline-primary{% endif %}">
+                        <i class="bi bi-cash-coin me-2"></i>{% if adelanto_eligibility.eligible %}Solicitar apoyo educativo{% else %}Ver apoyo educativo{% endif %}
+                    </a>
+                </div>
+                <div class="row g-3 mt-1">
+                    <div class="col-md-6">
+                        <div class="info-card-item">
+                            <div class="icon-wrapper">
+                                <i class="bi bi-cash-coin"></i>
+                            </div>
+                            <div class="label">Estado del adelanto</div>
+                            <div class="value" style="font-size:1rem;">
+                                {% if adelanto_eligibility.eligible %}
+                                    Disponible para solicitar
+                                {% else %}
+                                    No disponible aún
+                                {% endif %}
+                            </div>
+                            <small class="text-muted d-block mt-2">{{ adelanto_eligibility.reason|default:"Cumples condiciones para iniciar el flujo." }}</small>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="info-card-item">
+                            <div class="icon-wrapper">
+                                <i class="bi bi-bank"></i>
+                            </div>
+                            <div class="label">Monto máximo estimado</div>
+                            <div class="value">${{ adelanto_eligibility.monto_maximo|floatformat:0|intcomma }}</div>
+                            <small class="text-muted d-block mt-2">Se calcula con la información registrada y pasa por revisión del administrador del convenio.</small>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            {% endif %}
+
+            {% if mostrar_info_financiera %}
+                <!-- Contenido para créditos aprobados - DISEÑO MEJORADO -->
+                <div class="progress-card">
+                    <div class="row align-items-center">
+                        <div class="col-lg-7">
+                            <h4><i class="bi bi-graph-up me-2"></i>Progreso de tu crédito</h4>
+                            <div class="progress mb-4" style="height: 16px;">
+                                <div class="progress-bar"
+                                     style="width: {{ porcentaje_capital_pagado }}%;"
+                                     role="progressbar"
+                                     aria-valuenow="{{ porcentaje_capital_pagado }}"
+                                     aria-valuemin="0"
+                                     aria-valuemax="100">
+                                </div>
+                            </div>
+                            <div class="row text-center g-3">
+                                <div class="col-12 col-md-4">
+                                    <div class="stat-box">
+                                        <small class="d-block">CAPITAL PAGADO</small>
+                                        <h5 class="mb-0 text-success stat-value">${{ capital_pagado_monto|intcomma }}</h5>
+                                    </div>
+                                </div>
+                                <div class="col-12 col-md-4">
+                                    <div class="stat-box">
+                                        <small class="d-block">CAPITAL PENDIENTE</small>
+                                        <h5 class="mb-0 text-warning stat-value">${{ credito_actual.capital_pendiente|intcomma }}</h5>
+                                    </div>
+                                </div>
+                                <div class="col-12 col-md-4">
+                                    <div class="stat-box">
+                                        <small class="d-block">MONTO SOLICITADO</small>
+                                        <h5 class="mb-0 text-primary stat-value">${{ credito_actual.monto_aprobado|intcomma }}</h5>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-5 text-center mt-4 mt-lg-0">
+                            <!-- Progreso Circular SVG -->
+                            <div class="circular-progress-container mb-3">
+                                <svg class="circular-progress" width="180" height="180">
+                                    <defs>
+                                        <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                            <stop offset="0%" style="stop-color:#4A90E2;stop-opacity:1" />
+                                            <stop offset="50%" style="stop-color:#FFCD00;stop-opacity:1" />
+                                            <stop offset="100%" style="stop-color:#10B981;stop-opacity:1" />
+                                        </linearGradient>
+                                    </defs>
+                                    <circle class="progress-circle-bg" cx="90" cy="90" r="70"></circle>
+                                    <circle class="progress-circle" cx="90" cy="90" r="70"
+                                            style="stroke-dasharray: 439.8; stroke-dashoffset: calc(439.8 - (439.8 * {{ porcentaje_capital_pagado }} / 100))"></circle>
+                                </svg>
+                                <div class="progress-percentage">
+                                    {{ porcentaje_capital_pagado }}%
+                                    <span class="progress-label">pagado</span>
+                                </div>
+                            </div>
+                            <p class="text-muted mb-0" style="font-size: 0.85rem;">
+                                <i class="bi bi-info-circle me-1"></i>
+                                Plan de pagos activo
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Información del Crédito MEJORADA -->
+                <div class="row mb-4 g-3">
+                    <div class="col-md-12">
+                        <div class="payment-card">
+                            <h5><i class="bi bi-graph-up-arrow"></i>Resumen de tu Crédito</h5>
+                            <div class="row g-3">
+                                <div class="col-6 col-md-3">
+                                    <div class="info-card-item">
+                                        <div class="icon-wrapper">
+                                            <i class="bi bi-list-ol"></i>
+                                        </div>
+                                        <div class="label">Cuotas Restantes</div>
+                                        <div class="value">{{ cuotas_restantes }}<span style="font-size: 1rem; color: #6B7280;"> / {{ credito_actual.plazo }}</span></div>
+                                    </div>
+                                </div>
+                                <div class="col-6 col-md-3">
+                                    <div class="info-card-item">
+                                        <div class="icon-wrapper">
+                                            <i class="bi bi-cash-stack"></i>
+                                        </div>
+                                        <div class="label">Próxima Cuota</div>
+                                        <div class="value">${{ credito_actual.valor_cuota|floatformat:0|intcomma }}</div>
+                                    </div>
+                                </div>
+                                <div class="col-6 col-md-3">
+                                    <div class="info-card-item">
+                                        <div class="icon-wrapper">
+                                            <i class="bi bi-calendar-event"></i>
+                                        </div>
+                                        <div class="label">Próximo Vencimiento</div>
+                                        <div class="value" style="font-size: 1rem;">{{ credito_actual.fecha_proximo_pago|date:"d M, Y" }}</div>
+                                    </div>
+                                </div>
+                                <div class="col-6 col-md-3">
+                                    <div class="info-card-item">
+                                        <div class="icon-wrapper">
+                                            <i class="bi bi-check-circle"></i>
+                                        </div>
+                                        <div class="label">Total Pagado</div>
+                                        <div class="value">${{ monto_total_pagado|floatformat:0|intcomma }}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+
+
+                <!-- Historial de Pagos -->
+                <div class="table-modern">
+                    <div class="table-header-actions">
+                        <h5>
+                            <div class="icon-wrapper">
+                                <i class="bi bi-clock-history"></i>
+                            </div>
+                            Historial de Pagos
+                        </h5>
+                        <div class="d-flex gap-2">
+                            {# NUEVA URL - Libranza #}
+                            <a href="{% url 'libranza:descargar_plan_pagos' credito_actual.id %}"
+                               class="btn btn-outline-primary btn-sm"
+                               data-download="true">
+                                <i class="bi bi-download me-1"></i>
+                                Descargar Plan de Pagos
+                            </a>
+                            {# NUEVA URL - Libranza #}
+                            <a href="{% url 'libranza:descargar_extracto' credito_actual.id %}"
+                               class="btn btn-outline-primary btn-sm"
+                               data-download="true">
+                                <i class="bi bi-file-earmark-pdf me-1"></i>
+                                Descargar Extracto
+                            </a>
+                        </div>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Fecha</th>
+                                    <th>Referencia</th>
+                                    <th class="text-end">Monto</th>
+                                    <th class="text-center">Estado</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% if historial_pagos %}
+                                    {% for pago in historial_pagos %}
+                                    <tr>
+                                        <td data-label="Fecha">
+                                            <i class="bi bi-calendar3 me-2 text-muted"></i>
+                                            {{ pago.fecha_pago|date:"d M, Y H:i" }}
+                                        </td>
+                                        <td data-label="Referencia"><code style="font-size: 0.8rem;">{{ pago.referencia_pago }}</code></td>
+                                        <td class="text-end" data-label="Monto">
+                                            <strong class="text-success">${{ pago.monto|intcomma }}</strong>
+                                        </td>
+                                        <td class="text-center" data-label="Estado">
+                                            <span class="badge {% if pago.estado == 'EXITOSO' %}bg-success{% else %}bg-danger{% endif %} rounded-pill">
+                                                {{ pago.get_estado_display }}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                {% else %}
+                                    <tr class="no-payments">
+                                        <td colspan="4" class="text-center py-4">
+                                            <i class="bi bi-inbox text-muted" style="font-size: 2rem;"></i>
+                                            <p class="mb-0 mt-2 text-muted">No tienes pagos realizados aún.</p>
+                                        </td>
+                                    </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            {% else %}
+                <!-- Contenido para solicitudes en revisión o rechazadas -->
+                {% if credito_actual.estado == 'RECHAZADO' %}
+                    <div class="empty-state">
+                        <i class="bi bi-x-circle text-danger"></i>
+                        <h3 class="mt-3">Tu solicitud fue {{ credito_actual.get_estado_display }}</h3>
+                        <p class="text-muted mb-4">
+                            Lo sentimos, tu solicitud para un crédito de {{ credito_actual.get_linea_display }}
+                            no pudo ser aprobada en este momento.
+                        </p>
+                        {# NUEVA URL - Libranza #}
+                        <a href="{% url 'libranza:solicitar' %}" class="btn btn-primary btn-lg">
+                            <i class="bi bi-plus-circle me-2"></i>
+                            Solicitar un nuevo crédito
+                        </a>
+                    </div>
+                {% else %}
+                    <div class="review-state-layout">
+                        <div class="review-state-hero">
+                            <div class="review-state-icon">
+                                <i class="bi bi-hourglass-split"></i>
+                            </div>
+                            <div class="review-state-content">
+                                <span class="review-state-badge">
+                                    <i class="bi bi-shield-check me-1"></i>
+                                    Solicitud en revisión
+                                </span>
+                                <h3>Tu solicitud está en revisión</h3>
+                                <p>
+                                    Recibimos tu solicitud para un crédito de <strong>{{ credito_actual.get_linea_display }}</strong>
+                                    el <strong>{{ credito_actual.fecha_solicitud|date:"d \d\e F, Y" }}</strong>.
+                                    Nuestro equipo está validando la información para darte una respuesta.
+                                </p>
+                            </div>
+                            <div class="review-state-time">
+                                <small>Tiempo estimado</small>
+                                <strong>24 horas</strong>
+                                <span>Te notificaremos por correo</span>
+                            </div>
+                        </div>
+
+                        <div class="row g-3 review-state-cards">
+                            <div class="col-lg-6">
+                                <div class="review-state-card">
+                                    <h5>
+                                        <i class="bi bi-file-earmark-text me-2"></i>
+                                        Detalle de solicitud
+                                    </h5>
+                                    <div class="review-state-row">
+                                        <span>Número</span>
+                                        <strong>{{ credito_actual.numero_credito }}</strong>
+                                    </div>
+                                    <div class="review-state-row">
+                                        <span>Monto solicitado</span>
+                                        <strong>${{ credito_actual.monto_solicitado|intcomma }}</strong>
+                                    </div>
+                                    <div class="review-state-row">
+                                        <span>Plazo solicitado</span>
+                                        <strong>{{ credito_actual.plazo_solicitado }} meses</strong>
+                                    </div>
+                                    <div class="review-state-row">
+                                        <span>Estado</span>
+                                        <strong>{{ credito_actual.get_estado_display }}</strong>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-lg-6">
+                                <div class="review-state-card">
+                                    <h5>
+                                        <i class="bi bi-list-check me-2"></i>
+                                        Próximos pasos
+                                    </h5>
+                                    <ul class="review-state-steps">
+                                        <li class="done">
+                                            <i class="bi bi-check-circle-fill"></i>
+                                            <span>Solicitud recibida correctamente.</span>
+                                        </li>
+                                        <li class="active">
+                                            <i class="bi bi-hourglass-split"></i>
+                                            <span>Análisis y validación en proceso.</span>
+                                        </li>
+                                        <li>
+                                            <i class="bi bi-bell"></i>
+                                            <span>Notificación con decisión final.</span>
+                                        </li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                {% endif %}
+            {% endif %}
+
+        {% else %}
+            <section class="payment-card mb-4">
+                <div class="text-center py-4">
+                    <i class="bi bi-journal-x" style="font-size: 3rem; color: #94a3b8;"></i>
+                    <h3 class="mt-3">Aún no tienes créditos activos</h3>
+                    <p class="text-muted mb-4">
+                        Puedes iniciar un crédito estudiantil o revisar opciones complementarias de apoyo educativo si cumples las condiciones.
+                    </p>
+                </div>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <div class="info-card-item">
+                            <div class="icon-wrapper">
+                                <i class="bi bi-wallet2"></i>
+                            </div>
+                            <div class="label">Crédito estudiantil</div>
+                            <div class="value" style="font-size: 1rem;">Disponible para solicitar</div>
+                            <small class="text-muted d-block mt-2">Completa tu solicitud de financiación educativa y sigue el flujo normal de evaluación.</small>
+                            <a href="{% url 'libranza:solicitar' %}" class="btn btn-primary mt-3">Solicitar crédito estudiantil</a>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="info-card-item">
+                            <div class="icon-wrapper">
+                                <i class="bi bi-cash-coin"></i>
+                            </div>
+                            <div class="label">Apoyo educativo complementario</div>
+                            <div class="value" style="font-size: 1rem;">
+                                {% if adelanto_eligibility.eligible %}
+                                    Disponible para solicitar
+                                {% else %}
+                                    No disponible aún
+                                {% endif %}
+                            </div>
+                            <small class="text-muted d-block mt-2">{{ adelanto_eligibility.reason|default:"Revisa si tu institución tiene convenio educativo y si ya cumples las condiciones mínimas." }}</small>
+                            <a href="{% url 'libranza:adelanto_nomina' %}" class="btn {% if adelanto_eligibility.eligible %}btn-primary{% else %}btn-outline-primary{% endif %} mt-3">
+                                Ver apoyo educativo
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        {% endif %}
+    </main>
+
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/lottie-web/5.12.2/lottie.min.js"></script>
+    <script src="{% static 'js/dashboard_libranza.js' %}"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            initLottieLoader('{% static "animations/loading.json" %}');
+        });
+    </script>
+</body>
+</html>
+
+
+

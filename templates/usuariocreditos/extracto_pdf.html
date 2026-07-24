@@ -1,0 +1,399 @@
+{% load static %}
+{% load humanize %}
+{% load brand_tags %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Extracto de Credito - {{ credito.numero_credito }}</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 0;
+        }
+
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            font-size: 9pt;
+            color: #1a1a1a;
+            line-height: 1.5;
+            background: #ffffff;
+        }
+
+        .header {
+            padding: 32px 48px 24px;
+        }
+
+        .header-flex {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+
+        .logo {
+            width: 160px;
+            height: auto;
+        }
+
+        .company-info {
+            text-align: right;
+            font-size: 8pt;
+            color: #666;
+            line-height: 1.6;
+        }
+
+        .company-name {
+            font-weight: 600;
+            color: #1e40af;
+            margin-bottom: 2px;
+            font-size: 9pt;
+        }
+
+        .doc-info {
+            margin-top: 24px;
+            padding-top: 16px;
+        }
+
+        .doc-title {
+            font-size: 20pt;
+            font-weight: 600;
+            color: #1a1a1a;
+            letter-spacing: -0.3px;
+        }
+
+        .doc-subtitle {
+            font-size: 9pt;
+            color: #666;
+            margin-top: 4px;
+        }
+
+        .linea-tag {
+            display: inline-block;
+            background: #fef3c7;
+            color: #92400e;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 7.5pt;
+            font-weight: 600;
+            margin-left: 6px;
+        }
+
+        .container {
+            padding: 24px 48px;
+        }
+
+        .summary {
+            background: #fafafa;
+            border-radius: 8px;
+            padding: 20px 24px;
+            margin-bottom: 32px;
+        }
+
+        .summary-title {
+            font-size: 9pt;
+            font-weight: 600;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 16px;
+        }
+
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+        }
+
+        .summary-item {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .summary-label {
+            font-size: 7.5pt;
+            color: #999;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+
+        .summary-value {
+            font-size: 11pt;
+            font-weight: 600;
+            color: #1a1a1a;
+        }
+
+        .summary-value-primary {
+            color: #1e40af;
+        }
+
+        .summary-value-positive {
+            color: #065f46;
+        }
+
+        .summary-value-warning {
+            color: #b91c1c;
+        }
+
+        .section-title {
+            font-size: 10pt;
+            font-weight: 600;
+            color: #1a1a1a;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            padding-left: 12px;
+            border-bottom: 2px solid #fbbf24;
+            border-left: 4px solid #1e40af;
+        }
+
+        .table-wrapper {
+            margin-bottom: 24px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 8pt;
+        }
+
+        thead {
+            background: #fafafa;
+            border-bottom: 1px solid #e5e5e5;
+        }
+
+        th {
+            text-align: left;
+            padding: 10px 12px;
+            font-weight: 600;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            font-size: 7pt;
+        }
+
+        th:first-child {
+            width: 40px;
+            text-align: center;
+        }
+
+        th:last-child {
+            text-align: right;
+        }
+
+        tbody tr {
+            border-bottom: 1px solid #f5f5f5;
+        }
+
+        td {
+            padding: 12px;
+            color: #1a1a1a;
+        }
+
+        td:first-child {
+            text-align: center;
+            font-weight: 600;
+            color: #666;
+        }
+
+        td:last-child {
+            text-align: right;
+        }
+
+        .amount {
+            font-weight: 600;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .amount-primary {
+            color: #1e40af;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 7pt;
+            font-weight: 600;
+            letter-spacing: 0.3px;
+        }
+
+        .badge-pagada {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .pago-num {
+            width: 24px;
+            height: 24px;
+            background: #f5f5f5;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 8pt;
+            font-weight: 600;
+        }
+
+        .empty {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+            font-style: italic;
+        }
+
+        .footer {
+            margin-top: 32px;
+            padding-top: 20px;
+            padding-left: 12px;
+            border-top: 2px solid #fbbf24;
+            font-size: 7.5pt;
+            color: #999;
+            line-height: 1.8;
+            text-align: center;
+        }
+
+        .footer p {
+            margin-bottom: 8px;
+        }
+
+        .footer strong {
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-flex">
+            <div>
+                {% if logo_base64 %}
+                <img src="{{ logo_base64 }}" class="logo" alt="{% brand_value 'name' %}">
+                {% else %}
+                <div style="font-size: 16pt; font-weight: 700; color: #0B4EA2;">{% brand_value 'name' %}</div>
+                {% endif %}
+            </div>
+
+            <div class="company-info">
+                <div class="company-name">{% brand_value 'legal_name' %}</div>
+                <div>Villavicencio, Meta, Colombia</div>
+                <div>+57 313 247 7352</div>
+            </div>
+        </div>
+
+        <div class="doc-info">
+            <h1 class="doc-title">Extracto de Credito</h1>
+            <p class="doc-subtitle">
+                Corte al {{ fecha_generacion|date:"d/m/Y H:i" }}
+                <span class="linea-tag">{{ credito.get_linea_display }}</span>
+            </p>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="summary">
+            <div class="summary-title">Resumen financiero</div>
+            <div class="summary-grid">
+                <div class="summary-item">
+                    <div class="summary-label">Cliente</div>
+                    <div class="summary-value">{{ credito.nombre_cliente }}</div>
+                </div>
+                <div class="summary-item">
+                    <div class="summary-label">Numero de credito</div>
+                    <div class="summary-value">{{ credito.numero_credito }}</div>
+                </div>
+                <div class="summary-item">
+                    <div class="summary-label">Estado</div>
+                    <div class="summary-value summary-value-primary">{{ credito.get_estado_display }}</div>
+                </div>
+                <div class="summary-item">
+                    <div class="summary-label">Monto aprobado</div>
+                    <div class="summary-value">${{ credito.monto_aprobado|floatformat:0|intcomma }}</div>
+                </div>
+                <div class="summary-item">
+                    <div class="summary-label">Total pagado</div>
+                    {% if monto_total_pagado > 0 %}
+                    <div class="summary-value summary-value-positive">${{ monto_total_pagado|floatformat:0|intcomma }}</div>
+                    {% else %}
+                    <div class="summary-value">Sin pagos registrados</div>
+                    {% endif %}
+                </div>
+                <div class="summary-item">
+                    <div class="summary-label">Saldo pendiente</div>
+                    <div class="summary-value summary-value-warning">${{ saldo_pendiente_extracto|floatformat:0|intcomma }}</div>
+                </div>
+                <div class="summary-item">
+                    <div class="summary-label">Costo total credito</div>
+                    <div class="summary-value">${{ costo_total_credito|floatformat:0|intcomma }}</div>
+                </div>
+                <div class="summary-item">
+                    <div class="summary-label">Progreso pagado</div>
+                    <div class="summary-value summary-value-primary">{{ progreso_credito }}%</div>
+                </div>
+                <div class="summary-item">
+                    <div class="summary-label">Fecha emision</div>
+                    <div class="summary-value">{{ fecha_generacion|date:"d/m/Y" }}</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="table-wrapper">
+            <div class="section-title">Historial de pagos aplicados</div>
+            {% if historial_pagos %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Fecha de pago</th>
+                        <th>Referencia</th>
+                        <th>Monto pagado</th>
+                        <th style="text-align: center;">Estado</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for pago in historial_pagos %}
+                    <tr>
+                        <td><span class="pago-num">{{ forloop.counter }}</span></td>
+                        <td>{{ pago.fecha_pago|date:"d/m/Y H:i" }}</td>
+                        <td>{{ pago.referencia_pago|default:"SIN-REFERENCIA" }}</td>
+                        <td class="amount amount-primary">${{ pago.monto|floatformat:0|intcomma }}</td>
+                        <td style="text-align: center;">
+                            <span class="badge badge-pagada">Aplicado</span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="empty">No hay pagos aplicados para este credito.</div>
+            {% endif %}
+        </div>
+
+        <div class="footer">
+            <p>
+                <strong>Nota:</strong> Este extracto es informativo y refleja el estado del credito al momento de la generacion.
+            </p>
+            <p>
+                {% if credito.linea == "LIBRANZA" %}
+                Extracto de crédito estudiantil administrado por {% brand_value 'legal_name' %}.
+                {% else %}
+                Extracto de credito de emprendimiento administrado por {% brand_value 'legal_name' %}.
+                {% endif %}
+            </p>
+            <p>
+                Para consultas: <strong>+57 313 247 7352</strong> - Villavicencio, Meta, Colombia
+            </p>
+            <p style="margin-top: 12px; color: #bbb;">
+                Generado el {{ fecha_generacion|date:"d/m/Y" }} a las {{ fecha_generacion|time:"H:i" }}
+            </p>
+        </div>
+    </div>
+</body>
+</html>
+

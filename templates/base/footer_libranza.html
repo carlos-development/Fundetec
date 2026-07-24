@@ -1,0 +1,97 @@
+{% comment %}
+=============================================================================
+FOOTER EXCLUSIVO PARA PRODUCTO DE LIBRANZA
+=============================================================================
+Este footer se usa únicamente en las páginas relacionadas con Crédito de Libranza.
+NO incluye enlaces a emprendimiento.
+
+SECCIONES:
+- Logo y descripción de Libranza
+- Información de contacto
+- Enlaces de Libranza (Compañía)
+- Enlaces adicionales (Explora)
+
+MODIFICAR:
+- Descripción del producto: Línea ~15
+- Email de contacto: Línea ~22
+- Teléfono de contacto: Línea ~28
+- Enlaces de navegación: Líneas 40-58
+{% endcomment %}
+
+{% load static contact_tags %}
+{% contact_email as support_email %}
+{% contact_mailto as support_mailto %}
+<footer class="footer">
+  <div class="footer-container">
+    <div class="footer-grid">
+      <!-- Columna 1: Logo e información de Libranza -->
+      <div class="footer-column col-logo">
+        {# ✅ NUEVA URL - Libranza #}
+        <a href="{% url 'libranza:landing' %}" class="footer-logo">
+          <img src="{% static brand.logo_dark|default:'images/fundetec-logo.png' %}" alt="{{ brand.name|default:'FUNDETEC' }} crédito estudiantil" class="footer-logo-img" />
+        </a>
+        <!-- MODIFICAR: Descripción del producto de Libranza -->
+        <p class="footer-description">
+          {{ brand.name|default:"FUNDETEC" }} ofrece créditos estudiantiles y financiación educativa
+          para apoyar matrícula, cursos y programas académicos. Proceso digital, cuotas claras
+          y acompañamiento financiero.
+        </p>
+        <div class="footer-contact">
+          <!-- MODIFICAR: Email de contacto para Libranza -->
+          <a href="{{ support_mailto }}" class="footer-link">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-mail h-4 w-4">
+              <rect width="20" height="16" x="2" y="4" rx="2"></rect>
+              <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path>
+            </svg>
+            <span>{{ support_email }}</span>
+          </a>
+          <!-- MODIFICAR: Teléfono/WhatsApp de contacto -->
+          <a href="{{ whatsapp_support_href }}" class="footer-link" target="_blank" rel="noopener">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-phone h-4 w-4">
+              <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
+            </svg>
+            <span>{{ whatsapp_support_display }}</span>
+          </a>
+        </div>
+      </div>
+
+      <!-- Espacio en medio (solo visible en desktop) -->
+      <div class="footer-column col-empty"></div>
+
+      <!-- Columna 2: Enlaces de Libranza -->
+      <div class="footer-column">
+        <h3 class="footer-title">Crédito estudiantil</h3>
+        <ul class="footer-list">
+          {# ✅ NUEVAS URLs - Libranza #}
+          <li><a href="{% url 'libranza:landing' %}" class="footer-item">Inicio</a></li>
+          <li><a href="{% url 'libranza:simulador' %}" class="footer-item">Simulador</a></li>
+          <li><a href="{% url 'libranza:landing' %}#requisitos" class="footer-item">Requisitos</a></li>
+          <li><a href="{% url 'libranza:landing' %}#como-funciona" class="footer-item">Cómo funciona</a></li>
+          <li><a href="{% url 'libranza:solicitar' %}" class="footer-item">Solicitar crédito estudiantil</a></li>
+        </ul>
+      </div>
+
+      <!-- Columna 3: Enlaces adicionales -->
+      <div class="footer-column">
+        <h3 class="footer-title">Soporte</h3>
+        <ul class="footer-list">
+          {# ✅ NUEVAS URLs - Libranza #}
+          <li><a href="{% url 'libranza:landing' %}#preguntas-frecuentes" class="footer-item">Preguntas Frecuentes</a></li>
+          <li><a href="{% url 'terminos_condiciones' %}" class="footer-item">Términos y Condiciones</a></li>
+          <li><a href="{% url 'politica_privacidad' %}" class="footer-item">Política de Privacidad</a></li>
+          <li><a href="#" class="footer-item">Contacto</a></li>
+          <li><a href="{% url 'pagador:login' %}" class="footer-item">Panel instituciones</a></li>
+          {% if request.user.is_authenticated %}
+          <li><a href="{% url 'libranza:mi_credito' %}" class="footer-item">Mi Crédito</a></li>
+          {% endif %}
+        </ul>
+      </div>
+    </div>
+
+    <!-- Línea divisoria y copyright -->
+    <div class="footer-bottom">
+      <!-- MODIFICAR: Texto de copyright -->
+      <p class="footer-copy">{{ brand.name|default:"FUNDETEC" }} Crédito estudiantil 2024-2026. Todos los derechos reservados.</p>
+    </div>
+  </div>
+</footer>

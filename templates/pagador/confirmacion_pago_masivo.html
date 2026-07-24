@@ -1,0 +1,304 @@
+{% load static %}
+{% load humanize %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Confirmar carga de pagos - {{ empresa.nombre }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="{% static 'creditos/css/base_styles.css' %}" rel="stylesheet">
+    {% include 'base/favicon.html' %}
+    <style>
+        .payments-intro {
+            background: #f7fbfd;
+            border: 1px solid rgba(16, 38, 61, 0.08);
+            border-radius: 22px;
+            padding: 1.35rem 1.5rem;
+        }
+        .payments-intro .eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: .45rem;
+            padding: .3rem .65rem;
+            border-radius: 999px;
+            background: rgba(32, 201, 151, 0.1);
+            color: #157347;
+            font-size: .78rem;
+            font-weight: 600;
+        }
+        .payments-intro h1 {
+            margin: .85rem 0 .35rem;
+            font-size: clamp(1.55rem, 2vw, 2rem);
+            font-weight: 700;
+            color: #10263d;
+        }
+        .payments-intro p {
+            margin-bottom: 0;
+            color: #5b6c7f;
+            max-width: 56rem;
+        }
+        .payments-summary-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 1rem;
+        }
+        .summary-chip {
+            background: #fff;
+            border: 1px solid rgba(17, 51, 83, 0.08);
+            border-radius: 18px;
+            padding: 1rem 1.1rem;
+            box-shadow: 0 10px 26px rgba(17, 51, 83, 0.06);
+        }
+        .summary-chip span {
+            display: block;
+            color: #677789;
+            font-size: .84rem;
+            margin-bottom: .35rem;
+        }
+        .summary-chip strong {
+            color: #10263d;
+            font-size: 1.25rem;
+            font-weight: 700;
+        }
+        .payments-layout {
+            display: grid;
+            grid-template-columns: minmax(0, 1.6fr) minmax(320px, .9fr);
+            gap: 1.35rem;
+        }
+        .payments-card {
+            background: #fff;
+            border-radius: 22px;
+            border: 1px solid rgba(16, 38, 61, 0.08);
+            box-shadow: 0 16px 36px rgba(17, 51, 83, 0.06);
+            overflow: hidden;
+        }
+        .payments-card-header {
+            padding: 1.1rem 1.35rem;
+            border-bottom: 1px solid rgba(16, 38, 61, 0.08);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 1rem;
+        }
+        .payments-card-body {
+            padding: 1.35rem;
+        }
+        .payments-table thead th {
+            font-size: .78rem;
+            text-transform: uppercase;
+            letter-spacing: .04em;
+            color: #637487;
+            border-bottom-color: rgba(16, 38, 61, 0.08);
+        }
+        .payments-table tbody td {
+            padding-top: .95rem;
+            padding-bottom: .95rem;
+            border-bottom-color: rgba(16, 38, 61, 0.06);
+            vertical-align: middle;
+        }
+        .payments-table .credit-code {
+            white-space: nowrap;
+            word-break: keep-all;
+            overflow-wrap: normal;
+            font-weight: 600;
+        }
+        .employee-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: .45rem;
+            padding: .22rem .62rem;
+            border-radius: 999px;
+            background: rgba(13, 110, 253, 0.08);
+            color: #0b5ed7;
+            font-size: .8rem;
+            font-weight: 600;
+        }
+        .helper-copy {
+            font-size: .94rem;
+            color: #53657a;
+            line-height: 1.6;
+        }
+        .helper-copy ul {
+            padding-left: 1.1rem;
+            margin: .8rem 0 0;
+        }
+        .helper-copy li + li {
+            margin-top: .55rem;
+        }
+        @media (max-width: 1199px) {
+            .payments-layout,
+            .payments-summary-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body class="theme-dashboard">
+{% include 'base/loader_global.html' %}
+    <header class="page-header">
+        <div class="container-fluid" style="max-width: 1400px;">
+            <div class="d-flex align-items-center justify-content-between">
+                <a href="{% url 'pagador:dashboard' %}" class="logo">
+                    <img src="{% static brand.logo_dark|default:'images/fundetec-logo.png' %}" alt="{{ brand.name|default:'FUNDETEC' }} Logo" style="height: 40px;">
+                </a>
+                <div class="d-flex align-items-center gap-3">
+                    <div class="user-info">
+                        <div class="user-details">
+                            <h6 class="mb-0">{{ request.user.get_full_name|default:request.user.username }}</h6>
+                            <small>{{ empresa.nombre }}</small>
+                        </div>
+                        <div class="user-avatar">{{ request.user.username|slice:":1"|upper }}</div>
+                    </div>
+                    <form method="post" action="{% url 'pagador:logout' %}">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-outline">
+                            <i class="bi bi-box-arrow-right"></i>
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <div class="container-fluid py-4" style="max-width: 1400px;">
+        <section class="payments-intro mb-4">
+            <div class="eyebrow">
+                <i class="bi bi-file-earmark-check"></i>
+                Confirmación de pagos por archivo
+            </div>
+            <h1>Revisa la carga antes de aplicar los pagos</h1>
+            <p>
+                Valida las personas encontradas, confirma el valor total de la carga y deja el contexto del pago.
+                Si ya tienes soporte del recaudo, puedes adjuntarlo antes de confirmar.
+            </p>
+        </section>
+
+        <div class="payments-summary-grid mb-4">
+            <div class="summary-chip">
+                <span>Institución</span>
+                <strong>{{ empresa.nombre }}</strong>
+            </div>
+            <div class="summary-chip">
+                <span>Pagos detectados</span>
+                <strong>{{ cantidad_pagos }}</strong>
+            </div>
+            <div class="summary-chip">
+                <span>Valor total a aplicar</span>
+                <strong>${{ monto_total|intcomma }}</strong>
+            </div>
+        </div>
+
+        {% if errores_pago_masivo %}
+        <div class="alert alert-danger border-0 shadow-sm mb-4">
+            <h5 class="mb-2"><i class="bi bi-exclamation-triangle-fill me-2"></i>No pudimos confirmar esta carga</h5>
+            <ul class="mb-0">
+                {% for error in errores_pago_masivo %}
+                <li>{{ error }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        <div class="payments-layout">
+            <div class="payments-card">
+                <div class="payments-card-header">
+                    <div>
+                        <h3 class="h5 mb-1">Detalle de pagos encontrados</h3>
+                        <p class="text-muted mb-0">Archivo cargado: {{ lote.nombre_original }}</p>
+                    </div>
+                    <a href="{% url 'pagador:descargar_cuotas_excel' %}" class="btn btn-outline-success btn-sm" data-download="true">
+                        <i class="bi bi-file-earmark-excel me-1"></i>Descargar plantilla oficial
+                    </a>
+                </div>
+                <div class="payments-card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover payments-table align-middle">
+                            <thead>
+                                <tr>
+                                    <th>Crédito</th>
+                                    <th>Persona</th>
+                                    <th class="text-end">Monto</th>
+                                    <th>Referencia</th>
+                                    <th>Fecha de pago</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for pago in pagos_validos %}
+                                <tr>
+                                    <td class="credit-code">{{ pago.numero_credito }}</td>
+                                    <td>
+                                        <div class="fw-semibold">{{ pago.nombre }}</div>
+                                        <div class="employee-pill mt-2">
+                                            <i class="bi bi-person-vcard"></i>
+                                            Cédula {{ pago.cedula }}
+                                        </div>
+                                    </td>
+                                    <td class="text-end fw-semibold">${{ pago.monto|intcomma }}</td>
+                                    <td>{{ pago.referencia_pago }}</td>
+                                    <td>{{ pago.fecha_aplicacion|date:"d/m/Y" }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="d-flex flex-column gap-4">
+                <div class="payments-card">
+                    <div class="payments-card-header">
+                        <div>
+                            <h3 class="h5 mb-1">Antes de confirmar</h3>
+                            <p class="text-muted mb-0">Deja trazabilidad clara para el equipo interno.</p>
+                        </div>
+                    </div>
+                    <div class="payments-card-body">
+                        <div class="helper-copy mb-4">
+                            <p class="mb-0">Antes de aplicar la carga, ten en cuenta lo siguiente:</p>
+                            <ul>
+                                <li>Verifica que el valor total coincida con el recaudo real de la institución.</li>
+                                <li>Describe en las notas a qué periodo corresponde el pago y cómo fue confirmado.</li>
+                                <li>Si ya cuentas con soporte bancario, adjúntalo en esta confirmación.</li>
+                            </ul>
+                        </div>
+
+                        <form method="post" enctype="multipart/form-data" class="d-grid gap-3">
+                            {% csrf_token %}
+                            <div>
+                                <label for="{{ form.notas.id_for_label }}" class="form-label">Descripción de la carga</label>
+                                {{ form.notas }}
+                                {% if form.notas.help_text %}
+                                <div class="form-text">{{ form.notas.help_text }}</div>
+                                {% endif %}
+                                {% if form.notas.errors %}
+                                <div class="text-danger small mt-1">{{ form.notas.errors|join:", " }}</div>
+                                {% endif %}
+                            </div>
+                            <div>
+                                <label for="{{ form.comprobante.id_for_label }}" class="form-label">Comprobante del pago</label>
+                                {{ form.comprobante }}
+                                {% if form.comprobante.help_text %}
+                                <div class="form-text">{{ form.comprobante.help_text }}</div>
+                                {% endif %}
+                                {% if form.comprobante.errors %}
+                                <div class="text-danger small mt-1">{{ form.comprobante.errors|join:", " }}</div>
+                                {% endif %}
+                            </div>
+                            <button type="submit" class="btn btn-primary" data-loader-type="check" data-loader-text="Aplicando pagos...">
+                                <i class="bi bi-check-circle me-2"></i>Confirmar y aplicar pagos
+                            </button>
+                            <a href="{% url 'pagador:dashboard' %}" class="btn btn-outline-secondary btn-sm">Cancelar</a>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/lottie-web/5.12.2/lottie.min.js"></script>
+    <script src="{% static 'js/global_loader.js' %}"></script>
+</body>
+</html>

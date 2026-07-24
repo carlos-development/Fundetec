@@ -1,0 +1,32 @@
+{% extends "base_general.html" %}
+
+{% block title %}Cerrar sesion{% endblock %}
+
+{% block content %}
+{% include "account/_auth_content_styles.html" %}
+
+<main class="section-main">
+  <section class="hero-section-account">
+    <div class="container-account">
+      <div class="div-card-agent-account is-status-card">
+        <div class="auth-status-icon">&#21A9;</div>
+        <div class="mb-3">
+          <span class="badge rounded-pill border">Cerrar sesion</span>
+        </div>
+
+        <h1>Quieres salir de tu cuenta?</h1>
+        <p class="auth-desc">Cierra la sesion actual para proteger tu acceso en este dispositivo.</p>
+
+        <form method="post">
+          {% csrf_token %}
+          <button type="submit" class="btn-account">Si, cerrar sesion</button>
+        </form>
+
+        <div class="auth-footer-links is-centered">
+          <a href="{% url 'home' %}">Cancelar</a>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+{% endblock %}
