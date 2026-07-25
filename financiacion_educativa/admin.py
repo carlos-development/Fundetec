@@ -2,8 +2,10 @@ from django.contrib import admin
 from django.core.exceptions import ValidationError
 
 from .models import (
+    ConfiguracionFinancieraEducativa,
     CondicionesFinancieras,
     Consentimiento,
+    CuotaAmortizacionEducativa,
     DocumentoFinanciacion,
     EvidenciaMatricula,
     EventoInvitacionContinuacion,
@@ -16,7 +18,15 @@ from .models import (
     SolicitudFinanciacionEducativa,
     VersionTerminosFinanciacion,
 )
-from .choices import EstadoVersionTerminos, MotivoRechazoDocumento
+from .choices import (
+    EstadoConfiguracionFinanciera,
+    EstadoVersionTerminos,
+    MotivoRechazoDocumento,
+)
+from .services.configuracion_financiera import (
+    activar_configuracion_financiera,
+    retirar_configuracion_financiera,
+)
 from .services.documentos import revisar_documento
 from .services.matricula import revisar_evidencia_matricula
 from .services.terminos import publicar_version_terminos, retirar_version_terminos
@@ -460,17 +470,132 @@ class EvidenciaMatriculaAdmin(admin.ModelAdmin):
 class CondicionesFinancierasAdmin(admin.ModelAdmin):
     list_display = (
         'solicitud',
+        'numero_version',
+        'activa',
+        'bloqueada',
+        'es_legado',
         'valor_financiado',
-        'plazo_meses',
-        'tasa_interes_mensual',
-        'tasa_comision',
         'valor_cuota_estimada',
         'version_regla',
         'fecha_calculo',
     )
-    list_filter = ('version_regla', 'metodo_calculo', 'moneda', 'fecha_calculo')
+    list_filter = (
+        'activa',
+        'bloqueada',
+        'es_legado',
+        'version_regla',
+        'metodo_calculo',
+        'moneda',
+        'fecha_calculo',
+    )
     search_fields = ('solicitud__referencia_externa', 'solicitud__institucion__nombre_comercial')
     readonly_fields = tuple(field.name for field in CondicionesFinancieras._meta.fields)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(ConfiguracionFinancieraEducativa)
+class ConfiguracionFinancieraEducativaAdmin(admin.ModelAdmin):
+    list_display = (
+        'codigo',
+        'version',
+        'estado',
+        'vigente_desde',
+        'vigente_hasta',
+        'originacion_visible',
+        'interes_visible',
+        'proveedor_fondo_garantias',
+        'proveedor_seguro_vida',
+    )
+    list_filter = ('estado', 'moneda', 'metodo_calculo', 'vigente_desde')
+    search_fields = ('codigo', 'proveedor_fondo_garantias', 'proveedor_seguro_vida')
+    readonly_fields = ('id', 'creado_por', 'actualizado_por', 'creada_en', 'actualizada_en')
+    actions = ('activar_seleccionadas', 'retirar_seleccionadas')
+
+    @admin.display(description='Originacion (%)')
+    def originacion_visible(self, obj):
+        return f'{obj.porcentaje_originacion} %'
+
+    @admin.display(description='Interes mensual (%)')
+    def interes_visible(self, obj):
+        return f'{obj.tasa_interes_mensual} %'
+
+    def get_readonly_fields(self, request, obj=None):
+        base = self.readonly_fields
+        if obj and (
+            obj.estado != EstadoConfiguracionFinanciera.DRAFT
+            or obj.fotografias.exists()
+        ):
+            return tuple(field.name for field in obj._meta.fields)
+        return base
+
+    def save_model(self, request, obj, form, change):
+        if not change:
+            obj.creado_por = request.user
+        obj.actualizado_por = request.user
+        obj.full_clean()
+        super().save_model(request, obj, form, change)
+
+    @admin.action(description='Activar configuraciones seleccionadas')
+    def activar_seleccionadas(self, request, queryset):
+        activadas = 0
+        for configuracion in queryset:
+            try:
+                activar_configuracion_financiera(
+                    configuracion=configuracion,
+                    actor=request.user,
+                )
+            except ValidationError:
+                continue
+            activadas += 1
+        self.message_user(request, f'Configuraciones activadas: {activadas}.')
+
+    @admin.action(description='Retirar configuraciones seleccionadas')
+    def retirar_seleccionadas(self, request, queryset):
+        retiradas = 0
+        for configuracion in queryset:
+            try:
+                retirar_configuracion_financiera(
+                    configuracion=configuracion,
+                    actor=request.user,
+                )
+            except ValidationError:
+                continue
+            retiradas += 1
+        self.message_user(request, f'Configuraciones retiradas: {retiradas}.')
+
+    def has_delete_permission(self, request, obj=None):
+        return bool(
+            obj
+            and obj.estado == EstadoConfiguracionFinanciera.DRAFT
+            and not obj.fotografias.exists()
+        )
+
+
+@admin.register(CuotaAmortizacionEducativa)
+class CuotaAmortizacionEducativaAdmin(admin.ModelAdmin):
+    list_display = (
+        'fotografia',
+        'numero',
+        'fecha_vencimiento',
+        'saldo_inicial',
+        'interes',
+        'capital',
+        'valor_cuota',
+        'saldo_final',
+    )
+    list_filter = ('fecha_vencimiento',)
+    search_fields = ('fotografia__solicitud__referencia_externa',)
+    readonly_fields = tuple(
+        field.name for field in CuotaAmortizacionEducativa._meta.fields
+    )
 
     def has_add_permission(self, request):
         return False
@@ -507,3 +632,4 @@ class HistorialEstadoSolicitudAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
+    CuotaAmortizacionEducativa,

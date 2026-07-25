@@ -1,0 +1,120 @@
+{% extends "account/libranza/_base.html" %}
+{% load financiacion_format %}
+
+{% block title %}Financiacion educativa{% endblock %}
+
+{% block content %}
+{% include "account/common/_auth_content_styles.html" %}
+<main class="section-main">
+  <section class="hero-section-account">
+    <div class="container-account" style="max-width: 1040px;">
+      <div class="div-card-agent-account text-start">
+        <h1>Financiacion educativa</h1>
+        <p class="auth-desc">
+          Valores informativos en COP. Estas proyecciones no registran pagos ni emiten comprobantes.
+        </p>
+        {% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
+
+        {% if fotografia %}
+          <h2 class="h5">Capital financiado</h2>
+          <div class="table-responsive mb-4">
+            <table class="table">
+              <tbody>
+                <tr><th>Monto solicitado</th><td>{{ fotografia.valor_financiado|cop }}</td></tr>
+                <tr><th>Originacion ({{ fotografia.tasa_comision }} %)</th><td>{{ fotografia.valor_comision|cop }}</td></tr>
+                <tr><th>IVA de originacion ({{ fotografia.tasa_iva_comision }} %)</th><td>{{ fotografia.valor_iva_comision|cop }}</td></tr>
+                <tr><th>{{ fotografia.proveedor_fondo_garantias }} ({{ fotografia.tasa_fondo_garantias }} %)</th><td>{{ fotografia.valor_fondo_garantias|cop }}</td></tr>
+                <tr><th>Seguro {{ fotografia.proveedor_seguro_vida }} ({{ fotografia.tasa_seguro_vida }} %)</th><td>{{ fotografia.valor_seguro_vida|cop }}</td></tr>
+                <tr><th>Capital total financiado</th><td><strong>{{ fotografia.capital_financiado|cop }}</strong></td></tr>
+                <tr><th>Cuota informativa</th><td>{{ fotografia.valor_cuota_estimada|cop }}</td></tr>
+                <tr><th>Intereses proyectados</th><td>{{ fotografia.interes_total_estimado|cop }}</td></tr>
+                <tr><th>Total proyectado</th><td>{{ fotografia.total_estimado|cop }}</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h2 class="h5">Plan de amortizacion</h2>
+          <div class="table-responsive mb-4">
+            <table class="table table-sm align-middle">
+              <thead>
+                <tr>
+                  <th>Cuota</th><th>Fecha</th><th>Saldo inicial</th>
+                  <th>Interes</th><th>Capital</th><th>Valor</th><th>Saldo final</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for cuota in fotografia.cuotas.all %}
+                  <tr>
+                    <td>{{ cuota.numero }}</td>
+                    <td>{{ cuota.fecha_vencimiento|date:"Y-m-d" }}</td>
+                    <td>{{ cuota.saldo_inicial|cop }}</td>
+                    <td>{{ cuota.interes|cop }}</td>
+                    <td>{{ cuota.capital|cop }}</td>
+                    <td>{{ cuota.valor_cuota|cop }}</td>
+                    <td>{{ cuota.saldo_final|cop }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+
+          <div class="row g-4">
+            <div class="col-md-6">
+              <h2 class="h5">Proyectar abono a capital</h2>
+              <form method="post" action="{% url 'financiacion_educativa_web:proyectar-abono' solicitud.id %}">
+                {% csrf_token %}
+                {{ abono_form.as_p }}
+                <button class="btn-account" type="submit">Calcular proyeccion</button>
+              </form>
+              {% if proyeccion_abono %}
+                <div class="alert alert-info mt-3">
+                  <p>Saldo anterior: {{ proyeccion_abono.saldo_antes_pago|cop }}</p>
+                  <p>Intereses causados: {{ proyeccion_abono.intereses_causados|cop }}</p>
+                  <p>Aplicado a capital: {{ proyeccion_abono.aplicado_capital|cop }}</p>
+                  <p>Saldo posterior: {{ proyeccion_abono.saldo_posterior|cop }}</p>
+                  <p>Nuevas cuotas proyectadas: {{ proyeccion_abono.nueva_cantidad_cuotas }}</p>
+                  <p>Intereses futuros evitados: {{ proyeccion_abono.intereses_futuros_evitados|cop }}</p>
+                  {% if proyeccion_abono.excedente %}<p>Excedente: {{ proyeccion_abono.excedente|cop }}</p>{% endif %}
+                  <p class="mb-0">{{ proyeccion_abono.advertencia }}</p>
+                </div>
+              {% endif %}
+            </div>
+            <div class="col-md-6">
+              <h2 class="h5">Proyectar pago total</h2>
+              <form method="post" action="{% url 'financiacion_educativa_web:proyectar-pago-total' solicitud.id %}">
+                {% csrf_token %}
+                {{ pago_total_form.as_p }}
+                <button class="btn-account" type="submit">Calcular liquidacion</button>
+              </form>
+              {% if proyeccion_pago_total %}
+                <div class="alert alert-info mt-3">
+                  <p>Saldo de capital: {{ proyeccion_pago_total.saldo_capital|cop }}</p>
+                  <p>Intereses causados: {{ proyeccion_pago_total.intereses_causados|cop }}</p>
+                  <p>Total informativo: <strong>{{ proyeccion_pago_total.total_liquidacion|cop }}</strong></p>
+                  <p>Intereses futuros excluidos: {{ proyeccion_pago_total.intereses_futuros_excluidos|cop }}</p>
+                  <p>Vigencia: {{ proyeccion_pago_total.fecha_vigencia|date:"Y-m-d" }}</p>
+                  <p class="mb-0">{{ proyeccion_pago_total.advertencia }}</p>
+                </div>
+              {% endif %}
+            </div>
+          </div>
+        {% else %}
+          <h2 class="h5">Crear fotografia financiera</h2>
+          <p>
+            Se aplicara la configuracion educativa vigente al monto y plazo recibidos de la institucion.
+          </p>
+          <form method="post">
+            {% csrf_token %}
+            {{ crear_form.as_p }}
+            <button class="btn-account" type="submit">Generar plan informativo</button>
+          </form>
+        {% endif %}
+
+        <p class="mt-4 mb-0">
+          <a href="{% url 'financiacion_educativa_web:documentacion' solicitud.id %}">Volver al proceso</a>
+        </p>
+      </div>
+    </div>
+  </section>
+</main>
+{% endblock %}

@@ -100,6 +100,20 @@ class MetodoCalculoFinanciero(models.TextChoices):
     FRENCH_AMORTIZATION = 'FRENCH_AMORTIZATION', 'Anualidad francesa'
 
 
+class EstadoConfiguracionFinanciera(models.TextChoices):
+    DRAFT = 'DRAFT', 'Borrador'
+    ACTIVE = 'ACTIVE', 'Activa'
+    RETIRED = 'RETIRED', 'Retirada'
+
+
+class PoliticaRedondeoFinanciero(models.TextChoices):
+    COP_PESO_HALF_UP = 'COP_PESO_HALF_UP', 'COP al peso, mitad hacia arriba'
+
+
+class PoliticaCausacionInteres(models.TextChoices):
+    DAILY_30 = 'DAILY_30', 'Prorrateo diario, base comercial de 30 dias'
+
+
 class PropositoInvitacionContinuacion(models.TextChoices):
     CONTINUE_APPLICATION = 'CONTINUE_APPLICATION', 'Continuar solicitud'
 

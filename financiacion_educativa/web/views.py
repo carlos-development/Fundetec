@@ -10,6 +10,7 @@ from django.views.decorators.http import require_GET, require_http_methods
 
 from financiacion_educativa.choices import EstadoSolicitudFinanciacion
 from financiacion_educativa.models import (
+    CondicionesFinancieras,
     DocumentoFinanciacion,
     EvidenciaMatricula,
     ParticipanteFinanciacion,
@@ -43,15 +44,25 @@ from financiacion_educativa.services.requisitos_documentales import (
     calcular_requisitos_documentales,
     completar_fase_documental,
 )
+from financiacion_educativa.services.proyecciones_financieras import (
+    proyectar_abono_capital,
+    proyectar_pago_total,
+)
+from financiacion_educativa.services.reglas_financieras import (
+    crear_fotografia_condiciones_financieras,
+)
 from financiacion_educativa.choices import OrigenCapturaDocumento
 
 from .forms import (
     AccesoFinanciacionForm,
     DocumentoFinanciacionForm,
     EvidenciaMatriculaForm,
+    CrearFotografiaFinancieraForm,
     ParticipanteFinanciacionForm,
     RegistroFinanciacionForm,
     ReemplazoDocumentoForm,
+    ProyeccionAbonoForm,
+    ProyeccionPagoTotalForm,
 )
 
 
@@ -541,4 +552,135 @@ def completar_documentacion_view(request, solicitud_id):
     return redirect(
         'financiacion_educativa_web:documentacion',
         solicitud_id=solicitud.pk,
+    )
+
+
+def _fotografia_activa(solicitud):
+    return CondicionesFinancieras.objects.filter(
+        solicitud=solicitud,
+        activa=True,
+        es_legado=False,
+    ).prefetch_related('cuotas').first()
+
+
+def _contexto_financiero(solicitud, **extra):
+    fotografia = _fotografia_activa(solicitud)
+    return {
+        'solicitud': solicitud,
+        'fotografia': fotografia,
+        'crear_form': CrearFotografiaFinancieraForm(),
+        'abono_form': ProyeccionAbonoForm(solicitud=solicitud),
+        'pago_total_form': ProyeccionPagoTotalForm(solicitud=solicitud),
+        **extra,
+    }
+
+
+@never_cache
+@login_required(login_url='/financiacion-educativa/acceso/')
+@require_http_methods(['GET', 'POST'])
+def finanzas_view(request, solicitud_id):
+    solicitud = _solicitud_del_usuario(request, solicitud_id)
+    fotografia = _fotografia_activa(solicitud)
+    crear_form = CrearFotografiaFinancieraForm(request.POST or None)
+    error = ''
+    if request.method == 'POST':
+        if fotografia:
+            return redirect(
+                'financiacion_educativa_web:finanzas',
+                solicitud_id=solicitud.pk,
+            )
+        if crear_form.is_valid():
+            try:
+                crear_fotografia_condiciones_financieras(
+                    solicitud,
+                    fecha_inicio_plan=crear_form.cleaned_data['fecha_inicio_plan'],
+                    actor=request.user,
+                )
+            except ValidationError as exc:
+                error = ' '.join(exc.messages)
+            else:
+                return redirect(
+                    'financiacion_educativa_web:finanzas',
+                    solicitud_id=solicitud.pk,
+                )
+    contexto = _contexto_financiero(
+        solicitud,
+        crear_form=crear_form,
+        error=error,
+    )
+    return render(
+        request,
+        'financiacion_educativa/finanzas.html',
+        contexto,
+    )
+
+
+@never_cache
+@login_required(login_url='/financiacion-educativa/acceso/')
+@require_http_methods(['POST'])
+def proyectar_abono_view(request, solicitud_id):
+    solicitud = _solicitud_del_usuario(request, solicitud_id)
+    fotografia = _fotografia_activa(solicitud)
+    if not fotografia:
+        raise Http404
+    form = ProyeccionAbonoForm(request.POST, solicitud=solicitud)
+    resultado = None
+    if form.is_valid():
+        try:
+            resultado = proyectar_abono_capital(
+                fotografia=fotografia,
+                valor_pago=form.cleaned_data['valor_pago'],
+                fecha_efectiva=form.cleaned_data['fecha_efectiva'],
+                cuotas_cubiertas=form.cleaned_data['cuotas_cubiertas'],
+                participante_pagante_id=getattr(
+                    form.cleaned_data['participante_pagante'],
+                    'pk',
+                    None,
+                ),
+            )
+        except ValidationError as exc:
+            _agregar_error_formulario(form, exc)
+    return render(
+        request,
+        'financiacion_educativa/finanzas.html',
+        _contexto_financiero(
+            solicitud,
+            abono_form=form,
+            proyeccion_abono=resultado,
+        ),
+    )
+
+
+@never_cache
+@login_required(login_url='/financiacion-educativa/acceso/')
+@require_http_methods(['POST'])
+def proyectar_pago_total_view(request, solicitud_id):
+    solicitud = _solicitud_del_usuario(request, solicitud_id)
+    fotografia = _fotografia_activa(solicitud)
+    if not fotografia:
+        raise Http404
+    form = ProyeccionPagoTotalForm(request.POST, solicitud=solicitud)
+    resultado = None
+    if form.is_valid():
+        try:
+            resultado = proyectar_pago_total(
+                fotografia=fotografia,
+                fecha_efectiva=form.cleaned_data['fecha_efectiva'],
+                cuotas_cubiertas=form.cleaned_data['cuotas_cubiertas'],
+                participante_pagante_id=getattr(
+                    form.cleaned_data['participante_pagante'],
+                    'pk',
+                    None,
+                ),
+            )
+        except ValidationError as exc:
+            _agregar_error_formulario(form, exc)
+    return render(
+        request,
+        'financiacion_educativa/finanzas.html',
+        _contexto_financiero(
+            solicitud,
+            pago_total_form=form,
+            proyeccion_pago_total=resultado,
+        ),
     )

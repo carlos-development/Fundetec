@@ -1,5 +1,13 @@
 from decimal import Decimal
+from datetime import date
 
+from financiacion_educativa.choices import (
+    EstadoConfiguracionFinanciera,
+    MetodoCalculoFinanciero,
+    PoliticaCausacionInteres,
+    PoliticaRedondeoFinanciero,
+)
+from financiacion_educativa.models import ConfiguracionFinancieraEducativa
 from financiacion_educativa.services.solicitudes import (
     DatosSolicitudFinanciacion,
     crear_solicitud_financiacion,
@@ -33,4 +41,32 @@ def crear_solicitud(institucion=None, referencia='REF-001', usuario=None):
             tipo_curso='TECNICO',
             correlation_id=f'corr-{referencia}',
         ),
+    )
+
+
+def crear_configuracion_financiera(
+    *,
+    version=1,
+    vigente_desde=date(2026, 1, 1),
+    vigente_hasta=None,
+    estado=EstadoConfiguracionFinanciera.ACTIVE,
+    tasa_interes=Decimal('1'),
+):
+    return ConfiguracionFinancieraEducativa.objects.create(
+        codigo='EDU_STANDARD',
+        version=version,
+        vigente_desde=vigente_desde,
+        vigente_hasta=vigente_hasta,
+        estado=estado,
+        porcentaje_originacion=Decimal('10'),
+        porcentaje_iva_originacion=Decimal('19'),
+        porcentaje_fondo_garantias=Decimal('2'),
+        proveedor_fondo_garantias='Figarantias',
+        porcentaje_seguro_vida=Decimal('0.3711'),
+        proveedor_seguro_vida='SURA',
+        tasa_interes_mensual=tasa_interes,
+        moneda='COP',
+        metodo_calculo=MetodoCalculoFinanciero.FRENCH_AMORTIZATION,
+        politica_redondeo=PoliticaRedondeoFinanciero.COP_PESO_HALF_UP,
+        politica_causacion=PoliticaCausacionInteres.DAILY_30,
     )

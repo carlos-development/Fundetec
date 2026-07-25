@@ -230,3 +230,46 @@ class EvidenciaMatriculaForm(forms.Form):
     def __init__(self, *args, requiere_archivo=True, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['archivo'].required = requiere_archivo
+
+
+class CrearFotografiaFinancieraForm(forms.Form):
+    fecha_inicio_plan = forms.DateField(
+        label='Fecha inicial del plan',
+        widget=forms.DateInput(attrs={'type': 'date'}),
+        help_text='La primera cuota vence un mes despues de esta fecha.',
+    )
+
+
+class BaseProyeccionFinancieraForm(forms.Form):
+    fecha_efectiva = forms.DateField(
+        label='Fecha efectiva hipotetica',
+        widget=forms.DateInput(attrs={'type': 'date'}),
+    )
+    cuotas_cubiertas = forms.IntegerField(
+        label='Cuotas hipoteticamente cubiertas',
+        min_value=0,
+        initial=0,
+    )
+    participante_pagante = forms.ModelChoiceField(
+        label='Persona que realizaria el pago',
+        queryset=ParticipanteFinanciacion.objects.none(),
+        required=False,
+        empty_label='Sin indicar',
+    )
+
+    def __init__(self, *args, solicitud, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['participante_pagante'].queryset = solicitud.participantes.all()
+
+
+class ProyeccionAbonoForm(BaseProyeccionFinancieraForm):
+    valor_pago = forms.DecimalField(
+        label='Valor hipotetico del abono',
+        max_digits=14,
+        decimal_places=0,
+        min_value=1,
+    )
+
+
+class ProyeccionPagoTotalForm(BaseProyeccionFinancieraForm):
+    pass

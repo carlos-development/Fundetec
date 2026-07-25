@@ -71,4 +71,19 @@ urlpatterns = [
         views.completar_documentacion_view,
         name='documentacion-completar',
     ),
+    path(
+        'solicitudes/<uuid:solicitud_id>/finanzas/',
+        views.finanzas_view,
+        name='finanzas',
+    ),
+    path(
+        'solicitudes/<uuid:solicitud_id>/finanzas/proyectar-abono/',
+        views.proyectar_abono_view,
+        name='proyectar-abono',
+    ),
+    path(
+        'solicitudes/<uuid:solicitud_id>/finanzas/proyectar-pago-total/',
+        views.proyectar_pago_total_view,
+        name='proyectar-pago-total',
+    ),
 ]

@@ -2,6 +2,7 @@ import uuid
 import hashlib
 import re
 from decimal import Decimal
+from datetime import date
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -20,11 +21,14 @@ from .choices import (
     EstadoEscaneoDocumento,
     EstadoEvidenciaMatricula,
     EstadoValidacionDocumento,
+    EstadoConfiguracionFinanciera,
     EstadoInvitacionContinuacion,
     EstadoVersionTerminos,
     MetodoCalculoFinanciero,
     MotivoRechazoDocumento,
     OrigenCapturaDocumento,
+    PoliticaCausacionInteres,
+    PoliticaRedondeoFinanciero,
     PropositoInvitacionContinuacion,
     RelacionEstudiante,
     RolParticipante,
@@ -841,13 +845,154 @@ class EvidenciaMatricula(models.Model):
         return f'Matricula {self.solicitud.referencia_externa}'
 
 
-class CondicionesFinancieras(ModeloInmutableMixin, models.Model):
+class ConfiguracionFinancieraEducativa(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    solicitud = models.OneToOneField(
+    codigo = models.CharField(max_length=60)
+    version = models.PositiveIntegerField()
+    vigente_desde = models.DateField()
+    vigente_hasta = models.DateField(null=True, blank=True)
+    estado = models.CharField(
+        max_length=20,
+        choices=EstadoConfiguracionFinanciera.choices,
+        default=EstadoConfiguracionFinanciera.DRAFT,
+    )
+    porcentaje_originacion = models.DecimalField(max_digits=9, decimal_places=6)
+    porcentaje_iva_originacion = models.DecimalField(max_digits=9, decimal_places=6)
+    porcentaje_fondo_garantias = models.DecimalField(max_digits=9, decimal_places=6)
+    proveedor_fondo_garantias = models.CharField(max_length=120)
+    porcentaje_seguro_vida = models.DecimalField(max_digits=9, decimal_places=6)
+    proveedor_seguro_vida = models.CharField(max_length=120)
+    tasa_interes_mensual = models.DecimalField(max_digits=9, decimal_places=6)
+    moneda = models.CharField(max_length=3, default='COP')
+    metodo_calculo = models.CharField(
+        max_length=40,
+        choices=MetodoCalculoFinanciero.choices,
+        default=MetodoCalculoFinanciero.FRENCH_AMORTIZATION,
+    )
+    politica_redondeo = models.CharField(
+        max_length=40,
+        choices=PoliticaRedondeoFinanciero.choices,
+        default=PoliticaRedondeoFinanciero.COP_PESO_HALF_UP,
+    )
+    politica_causacion = models.CharField(
+        max_length=30,
+        choices=PoliticaCausacionInteres.choices,
+        default=PoliticaCausacionInteres.DAILY_30,
+    )
+    creado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='configuraciones_financieras_educativas_creadas',
+    )
+    actualizado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='configuraciones_financieras_educativas_actualizadas',
+    )
+    creada_en = models.DateTimeField(auto_now_add=True)
+    actualizada_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['codigo', '-version']
+        verbose_name = 'Configuracion financiera educativa'
+        verbose_name_plural = 'Configuraciones financieras educativas'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['codigo', 'version'],
+                name='uniq_config_fin_edu_codigo_version',
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=['estado', 'vigente_desde', 'vigente_hasta'],
+                name='cfg_fin_edu_vigencia_idx',
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.vigente_hasta and self.vigente_hasta < self.vigente_desde:
+            raise ValidationError({
+                'vigente_hasta': 'La vigencia final no puede ser anterior a la inicial.',
+            })
+        porcentajes = (
+            'porcentaje_originacion',
+            'porcentaje_iva_originacion',
+            'porcentaje_fondo_garantias',
+            'porcentaje_seguro_vida',
+            'tasa_interes_mensual',
+        )
+        for campo in porcentajes:
+            if getattr(self, campo) < 0:
+                raise ValidationError({campo: 'El porcentaje no puede ser negativo.'})
+        if self.moneda != 'COP':
+            raise ValidationError({'moneda': 'La financiacion educativa usa COP.'})
+        if (
+            self.porcentaje_fondo_garantias > 0
+            and not self.proveedor_fondo_garantias.strip()
+        ):
+            raise ValidationError({
+                'proveedor_fondo_garantias': 'Indica el proveedor del fondo.',
+            })
+        if self.porcentaje_seguro_vida > 0 and not self.proveedor_seguro_vida.strip():
+            raise ValidationError({
+                'proveedor_seguro_vida': 'Indica el proveedor del seguro.',
+            })
+        if self.estado == EstadoConfiguracionFinanciera.ACTIVE:
+            superpuestas = type(self).objects.filter(
+                codigo=self.codigo,
+                estado=EstadoConfiguracionFinanciera.ACTIVE,
+                vigente_desde__lte=self.vigente_hasta or date.max,
+            ).filter(
+                models.Q(vigente_hasta__isnull=True)
+                | models.Q(vigente_hasta__gte=self.vigente_desde)
+            ).exclude(pk=self.pk)
+            if superpuestas.exists():
+                raise ValidationError('Existe una configuracion activa superpuesta.')
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            anterior = type(self).objects.filter(pk=self.pk).first()
+            if anterior and (
+                anterior.estado != EstadoConfiguracionFinanciera.DRAFT
+                or anterior.fotografias.exists()
+            ):
+                raise ValidationError(
+                    'Una configuracion activa, retirada o aplicada no puede modificarse.'
+                )
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        if self.estado != EstadoConfiguracionFinanciera.DRAFT or self.fotografias.exists():
+            raise ValidationError('La configuracion no puede eliminarse.')
+        return super().delete(*args, **kwargs)
+
+    def __str__(self):
+        return f'{self.codigo} v{self.version}'
+
+
+class CondicionesFinancieras(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    solicitud = models.ForeignKey(
         SolicitudFinanciacionEducativa,
         on_delete=models.PROTECT,
-        related_name='condiciones_financieras',
+        related_name='fotografias_financieras',
     )
+    configuracion = models.ForeignKey(
+        ConfiguracionFinancieraEducativa,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='fotografias',
+    )
+    numero_version = models.PositiveIntegerField(default=1)
+    activa = models.BooleanField(default=False)
+    bloqueada = models.BooleanField(default=False)
+    es_legado = models.BooleanField(default=False)
     valor_financiado = models.DecimalField(max_digits=14, decimal_places=2)
     plazo_meses = models.PositiveSmallIntegerField()
     tasa_interes_mensual = models.DecimalField(max_digits=7, decimal_places=4)
@@ -855,6 +1000,28 @@ class CondicionesFinancieras(ModeloInmutableMixin, models.Model):
     valor_comision = models.DecimalField(max_digits=14, decimal_places=2)
     tasa_iva_comision = models.DecimalField(max_digits=7, decimal_places=4)
     valor_iva_comision = models.DecimalField(max_digits=14, decimal_places=2)
+    tasa_fondo_garantias = models.DecimalField(
+        max_digits=9,
+        decimal_places=6,
+        default=Decimal('0'),
+    )
+    valor_fondo_garantias = models.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+        default=Decimal('0'),
+    )
+    proveedor_fondo_garantias = models.CharField(max_length=120, blank=True)
+    tasa_seguro_vida = models.DecimalField(
+        max_digits=9,
+        decimal_places=6,
+        default=Decimal('0'),
+    )
+    valor_seguro_vida = models.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+        default=Decimal('0'),
+    )
+    proveedor_seguro_vida = models.CharField(max_length=120, blank=True)
     capital_financiado = models.DecimalField(max_digits=14, decimal_places=2)
     valor_cuota_estimada = models.DecimalField(max_digits=14, decimal_places=2)
     interes_total_estimado = models.DecimalField(max_digits=14, decimal_places=2)
@@ -866,16 +1033,146 @@ class CondicionesFinancieras(ModeloInmutableMixin, models.Model):
     base_calculo = models.JSONField(default=dict)
     version_regla = models.CharField(max_length=60)
     moneda = models.CharField(max_length=3, default='COP')
+    politica_redondeo = models.CharField(
+        max_length=40,
+        choices=PoliticaRedondeoFinanciero.choices,
+        default=PoliticaRedondeoFinanciero.COP_PESO_HALF_UP,
+    )
+    politica_causacion = models.CharField(
+        max_length=30,
+        choices=PoliticaCausacionInteres.choices,
+        default=PoliticaCausacionInteres.DAILY_30,
+    )
     fecha_calculo = models.DateTimeField(default=timezone.now, editable=False)
+    fecha_inicio_plan = models.DateField(null=True, blank=True)
     fecha_primer_vencimiento = models.DateField(null=True, blank=True)
     fecha_ultimo_vencimiento = models.DateField(null=True, blank=True)
+    huella_determinantes = models.CharField(
+        max_length=64,
+        blank=True,
+        validators=[hash_sha256_validator],
+    )
+    creada_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='fotografias_financieras_educativas_creadas',
+    )
 
     class Meta:
         verbose_name = 'Condiciones financieras'
         verbose_name_plural = 'Condiciones financieras'
+        ordering = ['solicitud', '-numero_version']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['solicitud', 'numero_version'],
+                name='uniq_foto_fin_edu_version',
+            ),
+            models.UniqueConstraint(
+                fields=['solicitud'],
+                condition=models.Q(activa=True),
+                name='uniq_foto_fin_edu_activa',
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=['solicitud', 'activa'],
+                name='foto_fin_edu_activa_idx',
+            ),
+        ]
+
+    CAMPOS_CALCULO = (
+        'solicitud_id',
+        'configuracion_id',
+        'numero_version',
+        'es_legado',
+        'valor_financiado',
+        'plazo_meses',
+        'tasa_interes_mensual',
+        'tasa_comision',
+        'valor_comision',
+        'tasa_iva_comision',
+        'valor_iva_comision',
+        'tasa_fondo_garantias',
+        'valor_fondo_garantias',
+        'proveedor_fondo_garantias',
+        'tasa_seguro_vida',
+        'valor_seguro_vida',
+        'proveedor_seguro_vida',
+        'capital_financiado',
+        'valor_cuota_estimada',
+        'interes_total_estimado',
+        'total_estimado',
+        'metodo_calculo',
+        'base_calculo',
+        'version_regla',
+        'moneda',
+        'politica_redondeo',
+        'politica_causacion',
+        'fecha_calculo',
+        'fecha_inicio_plan',
+        'fecha_primer_vencimiento',
+        'fecha_ultimo_vencimiento',
+        'huella_determinantes',
+    )
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            anterior = type(self).objects.filter(pk=self.pk).first()
+            if anterior and anterior.bloqueada:
+                raise ValidationError('La fotografia financiera esta bloqueada.')
+            if anterior:
+                modificados = [
+                    campo
+                    for campo in self.CAMPOS_CALCULO
+                    if getattr(anterior, campo) != getattr(self, campo)
+                ]
+                if modificados:
+                    raise ValidationError(
+                        'Los datos calculados no pueden modificarse; crea una nueva version.'
+                    )
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError('Las fotografias financieras no pueden eliminarse.')
 
     def __str__(self):
-        return f'Condiciones {self.solicitud.referencia_externa} - {self.version_regla}'
+        legado = ' legado' if self.es_legado else ''
+        return (
+            f'Condiciones {self.solicitud.referencia_externa} '
+            f'v{self.numero_version}{legado}'
+        )
+
+
+class CuotaAmortizacionEducativa(ModeloInmutableMixin, models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    fotografia = models.ForeignKey(
+        CondicionesFinancieras,
+        on_delete=models.PROTECT,
+        related_name='cuotas',
+    )
+    numero = models.PositiveSmallIntegerField()
+    fecha_vencimiento = models.DateField()
+    saldo_inicial = models.DecimalField(max_digits=14, decimal_places=2)
+    interes = models.DecimalField(max_digits=14, decimal_places=2)
+    capital = models.DecimalField(max_digits=14, decimal_places=2)
+    valor_cuota = models.DecimalField(max_digits=14, decimal_places=2)
+    saldo_final = models.DecimalField(max_digits=14, decimal_places=2)
+
+    class Meta:
+        ordering = ['fotografia', 'numero']
+        verbose_name = 'Cuota de amortizacion educativa'
+        verbose_name_plural = 'Cuotas de amortizacion educativa'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['fotografia', 'numero'],
+                name='uniq_cuota_fin_edu_numero',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.fotografia_id} - cuota {self.numero}'
 
 
 class HistorialEstadoSolicitud(ModeloInmutableMixin, models.Model):
