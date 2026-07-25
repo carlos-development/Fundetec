@@ -1,0 +1,124 @@
+{% extends "account/libranza/_base.html" %}
+
+{% block title %}Documentacion educativa{% endblock %}
+
+{% block content %}
+{% include "account/common/_auth_content_styles.html" %}
+<main class="section-main">
+  <section class="hero-section-account">
+    <div class="container-account" style="max-width: 920px;">
+      <div class="div-card-agent-account text-start">
+        <h1>Documentacion educativa</h1>
+        <p class="auth-desc">
+          La edad y las relaciones registradas son declaradas y requieren revision.
+        </p>
+
+        <h2 class="h5 mt-4">Requisitos</h2>
+        <ul class="list-group mb-4">
+          {% for requisito in requisitos %}
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+              <span>{{ requisito.descripcion }}</span>
+              {% if requisito.cumplido %}
+                <span class="badge text-bg-success">Completo</span>
+              {% else %}
+                <span class="badge text-bg-warning">Pendiente</span>
+              {% endif %}
+            </li>
+          {% endfor %}
+        </ul>
+
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <h2 class="h5 mb-0">Personas y roles</h2>
+          {% if solicitud.estado == "PENDING_DOCUMENT" %}
+            <a class="btn btn-outline-primary" href="{% url 'financiacion_educativa_web:participante-nuevo' solicitud.id %}">
+              Agregar persona
+            </a>
+          {% endif %}
+        </div>
+        <div class="table-responsive mb-4">
+          <table class="table align-middle">
+            <thead><tr><th>Persona</th><th>Identificacion</th><th>Roles</th><th></th></tr></thead>
+            <tbody>
+              {% for participante in participantes %}
+                <tr>
+                  <td>{{ participante.nombre_completo }}</td>
+                  <td>{{ participante.identificacion_enmascarada }}</td>
+                  <td>
+                    {% for asignacion in participante.roles.all %}
+                      <span class="badge text-bg-light border">{{ asignacion.get_rol_display }}</span>
+                    {% empty %}Sin rol{% endfor %}
+                  </td>
+                  <td>
+                    {% if solicitud.estado == "PENDING_DOCUMENT" %}
+                      <a href="{% url 'financiacion_educativa_web:participante-editar' solicitud.id participante.id %}">Editar</a>
+                    {% endif %}
+                  </td>
+                </tr>
+              {% empty %}
+                <tr><td colspan="4">Aun no hay personas registradas.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <h2 class="h5 mb-0">Documentos</h2>
+          {% if solicitud.estado == "PENDING_DOCUMENT" %}
+            <a class="btn btn-outline-primary" href="{% url 'financiacion_educativa_web:documento-cargar' solicitud.id %}">
+              Cargar documento
+            </a>
+          {% endif %}
+        </div>
+        <div class="table-responsive mb-4">
+          <table class="table align-middle">
+            <thead><tr><th>Tipo</th><th>Escaneo</th><th>Revision</th><th></th></tr></thead>
+            <tbody>
+              {% for documento in documentos %}
+                <tr>
+                  <td>{{ documento.get_tipo_display }}</td>
+                  <td>{{ documento.get_estado_escaneo_display }}</td>
+                  <td>{{ documento.get_estado_validacion_display }}</td>
+                  <td>
+                    <a href="{% url 'financiacion_educativa_web:documento-descargar' solicitud.id documento.id %}">Descargar</a>
+                    {% if solicitud.estado == "PENDING_DOCUMENT" %}
+                      <span aria-hidden="true"> | </span>
+                      <a href="{% url 'financiacion_educativa_web:documento-reemplazar' solicitud.id documento.id %}">Reemplazar</a>
+                    {% endif %}
+                  </td>
+                </tr>
+              {% empty %}
+                <tr><td colspan="4">Aun no hay documentos cargados.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        <h2 class="h5">Matricula</h2>
+        {% if matricula %}
+          <p>
+            {{ matricula.programa_curso }} · {{ matricula.periodo_academico }} ·
+            {{ matricula.get_estado_display }}
+          </p>
+        {% else %}
+          <p>No se ha registrado evidencia de matricula.</p>
+        {% endif %}
+        {% if solicitud.estado == "PENDING_DOCUMENT" %}
+          <p>
+            <a class="btn btn-outline-primary" href="{% url 'financiacion_educativa_web:matricula' solicitud.id %}">
+              {% if matricula %}Actualizar matricula{% else %}Registrar matricula{% endif %}
+            </a>
+          </p>
+          <form method="post" action="{% url 'financiacion_educativa_web:documentacion-completar' solicitud.id %}">
+            {% csrf_token %}
+            <button class="btn-account" type="submit">Finalizar fase documental</button>
+          </form>
+        {% else %}
+          <div class="alert alert-info mb-0">
+            La documentacion fue enviada a revision de identidad.
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </section>
+</main>
+{% endblock %}

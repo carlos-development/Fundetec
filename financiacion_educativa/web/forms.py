@@ -2,6 +2,14 @@ from django import forms
 from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 
+from financiacion_educativa.choices import (
+    RelacionEstudiante,
+    RolParticipante,
+    TipoDocumentoFinanciacion,
+    TipoDocumentoIdentidad,
+)
+from financiacion_educativa.models import ParticipanteFinanciacion
+
 
 class AccesoFinanciacionForm(AuthenticationForm):
     username = forms.EmailField(
@@ -111,3 +119,114 @@ class RegistroFinanciacionForm(UserCreationForm):
         if commit:
             usuario.save()
         return usuario
+
+
+class ParticipanteFinanciacionForm(forms.Form):
+    nombres = forms.CharField(label='Nombres', max_length=160)
+    apellidos = forms.CharField(label='Apellidos', max_length=160)
+    tipo_documento = forms.ChoiceField(
+        label='Tipo de identificacion',
+        choices=TipoDocumentoIdentidad.choices,
+    )
+    numero_documento = forms.CharField(
+        label='Numero de identificacion',
+        max_length=40,
+    )
+    pais_expedicion = forms.CharField(
+        label='Pais de expedicion (codigo de dos letras)',
+        max_length=2,
+        required=False,
+        initial='CO',
+    )
+    fecha_nacimiento = forms.DateField(
+        label='Fecha de nacimiento declarada',
+        widget=forms.DateInput(attrs={'type': 'date'}),
+    )
+    correo = forms.EmailField(label='Correo', required=False)
+    telefono = forms.CharField(label='Telefono', max_length=40, required=False)
+    relacion_estudiante = forms.ChoiceField(
+        label='Relacion declarada con el estudiante',
+        choices=[('', 'Selecciona una opcion'), *RelacionEstudiante.choices],
+        required=False,
+    )
+    roles = forms.MultipleChoiceField(
+        label='Roles declarados',
+        choices=RolParticipante.choices,
+        widget=forms.CheckboxSelectMultiple,
+    )
+
+    def clean_roles(self):
+        roles = set(self.cleaned_data['roles'])
+        if {RolParticipante.STUDENT, RolParticipante.GUARDIAN}.issubset(roles):
+            raise forms.ValidationError(
+                'Una persona no puede ser estudiante y tutor a la vez.'
+            )
+        return roles
+
+
+TIPOS_DOCUMENTALES_USUARIO = (
+    TipoDocumentoFinanciacion.STUDENT_IDENTIFICATION,
+    TipoDocumentoFinanciacion.GUARDIAN_IDENTIFICATION,
+    TipoDocumentoFinanciacion.DEBTOR_IDENTIFICATION,
+    TipoDocumentoFinanciacion.OTHER_EDUCATIONAL,
+)
+
+
+class DocumentoFinanciacionForm(forms.Form):
+    tipo = forms.ChoiceField(
+        label='Tipo de documento',
+        choices=[
+            (valor, TipoDocumentoFinanciacion(valor).label)
+            for valor in TIPOS_DOCUMENTALES_USUARIO
+        ],
+    )
+    participante = forms.ModelChoiceField(
+        label='Persona relacionada',
+        queryset=ParticipanteFinanciacion.objects.none(),
+        required=False,
+        empty_label='Documento general de la solicitud',
+    )
+    archivo = forms.FileField(
+        label='Archivo PDF, JPG o PNG',
+        widget=forms.ClearableFileInput(
+            attrs={'accept': '.pdf,.jpg,.jpeg,.png'}
+        ),
+    )
+
+    def __init__(self, *args, solicitud, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['participante'].queryset = solicitud.participantes.all()
+
+
+class ReemplazoDocumentoForm(forms.Form):
+    archivo = forms.FileField(
+        label='Nuevo archivo PDF, JPG o PNG',
+        widget=forms.ClearableFileInput(
+            attrs={'accept': '.pdf,.jpg,.jpeg,.png'}
+        ),
+    )
+
+
+class EvidenciaMatriculaForm(forms.Form):
+    institucion_declarada = forms.CharField(
+        label='Institucion educativa declarada',
+        max_length=200,
+    )
+    programa_curso = forms.CharField(label='Programa o curso', max_length=200)
+    periodo_academico = forms.CharField(label='Periodo academico', max_length=80)
+    referencia_matricula = forms.CharField(
+        label='Referencia de matricula',
+        max_length=120,
+        required=False,
+    )
+    archivo = forms.FileField(
+        label='Soporte de matricula',
+        required=False,
+        widget=forms.ClearableFileInput(
+            attrs={'accept': '.pdf,.jpg,.jpeg,.png'}
+        ),
+    )
+
+    def __init__(self, *args, requiere_archivo=True, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['archivo'].required = requiere_archivo

@@ -2,7 +2,7 @@ from django.contrib.auth import login as auth_login
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
-from django.http import Http404
+from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.cache import never_cache
@@ -10,6 +10,9 @@ from django.views.decorators.http import require_GET, require_http_methods
 
 from financiacion_educativa.choices import EstadoSolicitudFinanciacion
 from financiacion_educativa.models import (
+    DocumentoFinanciacion,
+    EvidenciaMatricula,
+    ParticipanteFinanciacion,
     SolicitudFinanciacionEducativa,
     VersionTerminosFinanciacion,
 )
@@ -25,8 +28,31 @@ from financiacion_educativa.services.terminos import (
     aceptar_terminos_solicitud,
     obtener_versiones_terminos_vigentes,
 )
+from financiacion_educativa.services.documentos import (
+    registrar_documento,
+    reemplazar_documento,
+)
+from financiacion_educativa.services.matricula import (
+    registrar_o_actualizar_evidencia_matricula,
+)
+from financiacion_educativa.services.participantes import (
+    DatosParticipante,
+    registrar_o_actualizar_participante,
+)
+from financiacion_educativa.services.requisitos_documentales import (
+    calcular_requisitos_documentales,
+    completar_fase_documental,
+)
+from financiacion_educativa.choices import OrigenCapturaDocumento
 
-from .forms import AccesoFinanciacionForm, RegistroFinanciacionForm
+from .forms import (
+    AccesoFinanciacionForm,
+    DocumentoFinanciacionForm,
+    EvidenciaMatriculaForm,
+    ParticipanteFinanciacionForm,
+    RegistroFinanciacionForm,
+    ReemplazoDocumentoForm,
+)
 
 
 SESSION_INVITACION_ID = 'financiacion_educativa_invitacion_id'
@@ -178,6 +204,11 @@ def _solicitud_del_usuario(request, solicitud_id):
     )
 
 
+def _agregar_error_formulario(form, error):
+    for mensaje in error.messages:
+        form.add_error(None, mensaje)
+
+
 def _session_terminos_key(solicitud_id):
     return f'financiacion_educativa_terminos_{solicitud_id}'
 
@@ -254,4 +285,260 @@ def siguiente_paso_view(request, solicitud_id):
         request,
         'financiacion_educativa/siguiente_paso.html',
         {'solicitud': solicitud},
+    )
+
+
+@never_cache
+@login_required(login_url='/financiacion-educativa/acceso/')
+@require_GET
+def documentacion_view(request, solicitud_id):
+    solicitud = _solicitud_del_usuario(request, solicitud_id)
+    if solicitud.estado not in {
+        EstadoSolicitudFinanciacion.PENDING_DOCUMENT,
+        EstadoSolicitudFinanciacion.PENDING_MANUAL_REVIEW,
+    }:
+        raise Http404
+    try:
+        matricula = solicitud.evidencia_matricula
+    except EvidenciaMatricula.DoesNotExist:
+        matricula = None
+    return render(
+        request,
+        'financiacion_educativa/documentacion.html',
+        {
+            'solicitud': solicitud,
+            'participantes': solicitud.participantes.prefetch_related('roles'),
+            'documentos': solicitud.documentos.filter(activo=True).select_related(
+                'participante'
+            ),
+            'matricula': matricula,
+            'requisitos': calcular_requisitos_documentales(solicitud),
+        },
+    )
+
+
+@never_cache
+@login_required(login_url='/financiacion-educativa/acceso/')
+@require_http_methods(['GET', 'POST'])
+def participante_view(request, solicitud_id, participante_id=None):
+    solicitud = _solicitud_del_usuario(request, solicitud_id)
+    if solicitud.estado != EstadoSolicitudFinanciacion.PENDING_DOCUMENT:
+        raise Http404
+    participante = None
+    if participante_id:
+        participante = get_object_or_404(
+            ParticipanteFinanciacion,
+            pk=participante_id,
+            solicitud=solicitud,
+        )
+    initial = None
+    if participante:
+        initial = {
+            'nombres': participante.nombres,
+            'apellidos': participante.apellidos,
+            'tipo_documento': participante.tipo_documento,
+            'numero_documento': participante.numero_documento,
+            'pais_expedicion': participante.pais_expedicion,
+            'fecha_nacimiento': participante.fecha_nacimiento,
+            'correo': participante.correo,
+            'telefono': participante.telefono,
+            'relacion_estudiante': participante.relacion_estudiante,
+            'roles': list(participante.roles.values_list('rol', flat=True)),
+        }
+    form = ParticipanteFinanciacionForm(request.POST or None, initial=initial)
+    if request.method == 'POST' and form.is_valid():
+        datos = DatosParticipante(
+            nombres=form.cleaned_data['nombres'],
+            apellidos=form.cleaned_data['apellidos'],
+            tipo_documento=form.cleaned_data['tipo_documento'],
+            numero_documento=form.cleaned_data['numero_documento'],
+            pais_expedicion=form.cleaned_data['pais_expedicion'],
+            fecha_nacimiento=form.cleaned_data['fecha_nacimiento'],
+            fecha_nacimiento_confirmada=False,
+            correo=form.cleaned_data['correo'],
+            telefono=form.cleaned_data['telefono'],
+            relacion_estudiante=form.cleaned_data['relacion_estudiante'],
+        )
+        try:
+            registrar_o_actualizar_participante(
+                solicitud=solicitud,
+                actor=request.user,
+                datos=datos,
+                roles=form.cleaned_data['roles'],
+                participante_id=getattr(participante, 'pk', None),
+            )
+        except ValidationError as error:
+            _agregar_error_formulario(form, error)
+        else:
+            return redirect(
+                'financiacion_educativa_web:documentacion',
+                solicitud_id=solicitud.pk,
+            )
+    return render(
+        request,
+        'financiacion_educativa/participante_form.html',
+        {'solicitud': solicitud, 'participante': participante, 'form': form},
+    )
+
+
+@never_cache
+@login_required(login_url='/financiacion-educativa/acceso/')
+@require_http_methods(['GET', 'POST'])
+def cargar_documento_view(request, solicitud_id):
+    solicitud = _solicitud_del_usuario(request, solicitud_id)
+    if solicitud.estado != EstadoSolicitudFinanciacion.PENDING_DOCUMENT:
+        raise Http404
+    form = DocumentoFinanciacionForm(
+        request.POST or None,
+        request.FILES or None,
+        solicitud=solicitud,
+    )
+    if request.method == 'POST' and form.is_valid():
+        try:
+            registrar_documento(
+                solicitud=solicitud,
+                participante=form.cleaned_data['participante'],
+                tipo=form.cleaned_data['tipo'],
+                origen_captura=OrigenCapturaDocumento.USER_UPLOAD,
+                archivo=form.cleaned_data['archivo'],
+                actor=request.user,
+            )
+        except ValidationError as error:
+            _agregar_error_formulario(form, error)
+        else:
+            return redirect(
+                'financiacion_educativa_web:documentacion',
+                solicitud_id=solicitud.pk,
+            )
+    return render(
+        request,
+        'financiacion_educativa/documento_form.html',
+        {'solicitud': solicitud, 'form': form, 'reemplazo': False},
+    )
+
+
+@never_cache
+@login_required(login_url='/financiacion-educativa/acceso/')
+@require_http_methods(['GET', 'POST'])
+def reemplazar_documento_view(request, solicitud_id, documento_id):
+    solicitud = _solicitud_del_usuario(request, solicitud_id)
+    if solicitud.estado != EstadoSolicitudFinanciacion.PENDING_DOCUMENT:
+        raise Http404
+    documento = get_object_or_404(
+        DocumentoFinanciacion,
+        pk=documento_id,
+        solicitud=solicitud,
+        activo=True,
+    )
+    form = ReemplazoDocumentoForm(request.POST or None, request.FILES or None)
+    if request.method == 'POST' and form.is_valid():
+        try:
+            reemplazar_documento(
+                documento=documento,
+                archivo=form.cleaned_data['archivo'],
+                actor=request.user,
+            )
+        except ValidationError as error:
+            _agregar_error_formulario(form, error)
+        else:
+            return redirect(
+                'financiacion_educativa_web:documentacion',
+                solicitud_id=solicitud.pk,
+            )
+    return render(
+        request,
+        'financiacion_educativa/documento_form.html',
+        {
+            'solicitud': solicitud,
+            'documento': documento,
+            'form': form,
+            'reemplazo': True,
+        },
+    )
+
+
+@never_cache
+@login_required(login_url='/financiacion-educativa/acceso/')
+@require_GET
+def descargar_documento_view(request, solicitud_id, documento_id):
+    solicitud = _solicitud_del_usuario(request, solicitud_id)
+    documento = get_object_or_404(
+        DocumentoFinanciacion,
+        pk=documento_id,
+        solicitud=solicitud,
+    )
+    if not documento.archivo:
+        raise Http404
+    respuesta = FileResponse(
+        documento.archivo.open('rb'),
+        as_attachment=True,
+        filename=documento.nombre_original or 'documento',
+        content_type=documento.content_type or 'application/octet-stream',
+    )
+    respuesta['X-Content-Type-Options'] = 'nosniff'
+    respuesta['X-Frame-Options'] = 'DENY'
+    respuesta['Content-Security-Policy'] = "sandbox; default-src 'none'"
+    respuesta['Referrer-Policy'] = 'no-referrer'
+    return respuesta
+
+
+@never_cache
+@login_required(login_url='/financiacion-educativa/acceso/')
+@require_http_methods(['GET', 'POST'])
+def matricula_view(request, solicitud_id):
+    solicitud = _solicitud_del_usuario(request, solicitud_id)
+    if solicitud.estado != EstadoSolicitudFinanciacion.PENDING_DOCUMENT:
+        raise Http404
+    evidencia = EvidenciaMatricula.objects.filter(solicitud=solicitud).first()
+    initial = None
+    if evidencia:
+        initial = {
+            'institucion_declarada': evidencia.institucion_declarada,
+            'programa_curso': evidencia.programa_curso,
+            'periodo_academico': evidencia.periodo_academico,
+            'referencia_matricula': evidencia.referencia_matricula,
+        }
+    form = EvidenciaMatriculaForm(
+        request.POST or None,
+        request.FILES or None,
+        initial=initial,
+        requiere_archivo=evidencia is None,
+    )
+    if request.method == 'POST' and form.is_valid():
+        try:
+            registrar_o_actualizar_evidencia_matricula(
+                solicitud=solicitud,
+                actor=request.user,
+                institucion_declarada=form.cleaned_data['institucion_declarada'],
+                programa_curso=form.cleaned_data['programa_curso'],
+                periodo_academico=form.cleaned_data['periodo_academico'],
+                referencia_matricula=form.cleaned_data['referencia_matricula'],
+                archivo=form.cleaned_data['archivo'],
+            )
+        except ValidationError as error:
+            _agregar_error_formulario(form, error)
+        else:
+            return redirect(
+                'financiacion_educativa_web:documentacion',
+                solicitud_id=solicitud.pk,
+            )
+    return render(
+        request,
+        'financiacion_educativa/matricula_form.html',
+        {'solicitud': solicitud, 'evidencia': evidencia, 'form': form},
+    )
+
+
+@never_cache
+@login_required(login_url='/financiacion-educativa/acceso/')
+@require_http_methods(['POST'])
+def completar_documentacion_view(request, solicitud_id):
+    solicitud = _solicitud_del_usuario(request, solicitud_id)
+    try:
+        completar_fase_documental(solicitud=solicitud, actor=request.user)
+    except ValidationError:
+        pass
+    return redirect(
+        'financiacion_educativa_web:documentacion',
+        solicitud_id=solicitud.pk,
     )

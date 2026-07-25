@@ -19,6 +19,9 @@ from financiacion_educativa.services.participantes import (
 from financiacion_educativa.tests.factories import crear_solicitud
 
 
+PNG_VALIDO = b'\x89PNG\r\n\x1a\ncontenido-prueba-IEND-00000000'
+
+
 class EvidenciasFinanciacionTests(TestCase):
     def setUp(self):
         self.solicitud = crear_solicitud()
@@ -53,7 +56,7 @@ class EvidenciasFinanciacionTests(TestCase):
 
     def test_documento_se_registra_sin_ocr_ni_ia(self):
         with TemporaryDirectory() as media_root:
-            with override_settings(MEDIA_ROOT=media_root):
+            with override_settings(FINANCIACION_EDUCATIVA_PRIVATE_ROOT=media_root):
                 documento = registrar_documento(
                     solicitud=self.solicitud,
                     participante=self.participante,
@@ -61,7 +64,7 @@ class EvidenciasFinanciacionTests(TestCase):
                     origen_captura=OrigenCapturaDocumento.USER_UPLOAD,
                     archivo=SimpleUploadedFile(
                         'documento.png',
-                        b'contenido-imagen-prueba',
+                        PNG_VALIDO,
                         content_type='image/png',
                     ),
                 )
@@ -72,13 +75,13 @@ class EvidenciasFinanciacionTests(TestCase):
 
     def test_detecta_documento_duplicado_por_hash_en_solicitud(self):
         with TemporaryDirectory() as media_root:
-            with override_settings(MEDIA_ROOT=media_root):
+            with override_settings(FINANCIACION_EDUCATIVA_PRIVATE_ROOT=media_root):
                 registrar_documento(
                     solicitud=self.solicitud,
                     participante=self.participante,
                     tipo=TipoDocumentoFinanciacion.STUDENT_ID_FRONT,
                     origen_captura=OrigenCapturaDocumento.USER_UPLOAD,
-                    archivo=SimpleUploadedFile('uno.png', b'mismo-contenido', content_type='image/png'),
+                    archivo=SimpleUploadedFile('uno.png', PNG_VALIDO, content_type='image/png'),
                 )
                 with self.assertRaises(ValidationError):
                     registrar_documento(
@@ -86,5 +89,5 @@ class EvidenciasFinanciacionTests(TestCase):
                         participante=self.participante,
                         tipo=TipoDocumentoFinanciacion.OTHER,
                         origen_captura=OrigenCapturaDocumento.USER_UPLOAD,
-                        archivo=SimpleUploadedFile('dos.png', b'mismo-contenido', content_type='image/png'),
+                        archivo=SimpleUploadedFile('dos.png', PNG_VALIDO, content_type='image/png'),
                     )

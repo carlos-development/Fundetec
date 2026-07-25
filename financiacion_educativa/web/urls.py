@@ -25,4 +25,50 @@ urlpatterns = [
         views.siguiente_paso_view,
         name='siguiente',
     ),
+    path(
+        'solicitudes/<uuid:solicitud_id>/documentacion/',
+        views.documentacion_view,
+        name='documentacion',
+    ),
+    path(
+        'solicitudes/<uuid:solicitud_id>/participantes/nuevo/',
+        views.participante_view,
+        name='participante-nuevo',
+    ),
+    path(
+        'solicitudes/<uuid:solicitud_id>/participantes/<uuid:participante_id>/',
+        views.participante_view,
+        name='participante-editar',
+    ),
+    path(
+        'solicitudes/<uuid:solicitud_id>/documentos/cargar/',
+        views.cargar_documento_view,
+        name='documento-cargar',
+    ),
+    path(
+        (
+            'solicitudes/<uuid:solicitud_id>/documentos/'
+            '<uuid:documento_id>/reemplazar/'
+        ),
+        views.reemplazar_documento_view,
+        name='documento-reemplazar',
+    ),
+    path(
+        (
+            'solicitudes/<uuid:solicitud_id>/documentos/'
+            '<uuid:documento_id>/descargar/'
+        ),
+        views.descargar_documento_view,
+        name='documento-descargar',
+    ),
+    path(
+        'solicitudes/<uuid:solicitud_id>/matricula/',
+        views.matricula_view,
+        name='matricula',
+    ),
+    path(
+        'solicitudes/<uuid:solicitud_id>/documentacion/completar/',
+        views.completar_documentacion_view,
+        name='documentacion-completar',
+    ),
 ]

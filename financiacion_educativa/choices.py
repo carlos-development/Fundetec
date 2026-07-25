@@ -22,6 +22,15 @@ class RolParticipante(models.TextChoices):
     PRINCIPAL_DEBTOR = 'PRINCIPAL_DEBTOR', 'Deudor principal'
 
 
+class RelacionEstudiante(models.TextChoices):
+    SELF = 'SELF', 'La misma persona'
+    MOTHER = 'MOTHER', 'Madre'
+    FATHER = 'FATHER', 'Padre'
+    LEGAL_GUARDIAN = 'LEGAL_GUARDIAN', 'Representante legal declarado'
+    FAMILY_MEMBER = 'FAMILY_MEMBER', 'Familiar'
+    OTHER = 'OTHER', 'Otra relacion declarada'
+
+
 class TipoDocumentoIdentidad(models.TextChoices):
     CC = 'CC', 'Cedula de ciudadania'
     TI = 'TI', 'Tarjeta de identidad'
@@ -38,15 +47,46 @@ class TipoConsentimiento(models.TextChoices):
 
 
 class TipoDocumentoFinanciacion(models.TextChoices):
-    STUDENT_ID_FRONT = 'STUDENT_ID_FRONT', 'Documento frontal del estudiante'
-    GUARDIAN_ID_FRONT = 'GUARDIAN_ID_FRONT', 'Documento frontal del tutor'
-    OTHER = 'OTHER', 'Otro'
+    STUDENT_IDENTIFICATION = 'STUDENT_IDENTIFICATION', 'Identificacion del estudiante'
+    GUARDIAN_IDENTIFICATION = 'GUARDIAN_IDENTIFICATION', 'Identificacion del tutor'
+    DEBTOR_IDENTIFICATION = 'DEBTOR_IDENTIFICATION', 'Identificacion del posible deudor'
+    ENROLLMENT_EVIDENCE = 'ENROLLMENT_EVIDENCE', 'Evidencia de matricula'
+    OTHER_EDUCATIONAL = 'OTHER_EDUCATIONAL', 'Otro documento educativo'
+    STUDENT_ID_FRONT = 'STUDENT_ID_FRONT', 'Identificacion del estudiante (anterior)'
+    GUARDIAN_ID_FRONT = 'GUARDIAN_ID_FRONT', 'Identificacion del tutor (anterior)'
+    OTHER = 'OTHER', 'Otro documento (anterior)'
 
 
 class EstadoValidacionDocumento(models.TextChoices):
-    PENDING = 'PENDING', 'Pendiente'
-    APPROVED = 'APPROVED', 'Aprobado'
+    PENDING = 'PENDING', 'Pendiente de revision'
+    APPROVED = 'APPROVED', 'Aceptado'
     REJECTED = 'REJECTED', 'Rechazado'
+
+
+class EstadoEscaneoDocumento(models.TextChoices):
+    PENDING_SECURITY_SCAN = 'PENDING_SECURITY_SCAN', 'Pendiente de escaneo de seguridad'
+    SAFE = 'SAFE', 'Sin hallazgos reportados por el escaner'
+    BLOCKED = 'BLOCKED', 'Bloqueado por seguridad'
+
+
+class MotivoRechazoDocumento(models.TextChoices):
+    UNREADABLE = 'UNREADABLE', 'Documento ilegible'
+    INCOMPLETE = 'INCOMPLETE', 'Documento incompleto'
+    WRONG_DOCUMENT = 'WRONG_DOCUMENT', 'Tipo documental incorrecto'
+    EXPIRED = 'EXPIRED', 'Documento vencido'
+    DATA_MISMATCH = 'DATA_MISMATCH', 'Datos no coinciden'
+    OTHER = 'OTHER', 'Otro motivo controlado'
+
+
+class EstadoEvidenciaMatricula(models.TextChoices):
+    PENDING = 'PENDING', 'Pendiente de revision'
+    ACCEPTED = 'ACCEPTED', 'Aceptada'
+    REJECTED = 'REJECTED', 'Rechazada'
+
+
+class TipoEventoParticipante(models.TextChoices):
+    CREATED = 'CREATED', 'Creado'
+    UPDATED = 'UPDATED', 'Actualizado'
 
 
 class OrigenCapturaDocumento(models.TextChoices):

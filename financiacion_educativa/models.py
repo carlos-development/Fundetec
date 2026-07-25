@@ -1,5 +1,6 @@
 import uuid
 import hashlib
+import re
 from decimal import Decimal
 
 from django.conf import settings
@@ -16,24 +17,42 @@ from instituciones.models import Institucion
 
 from .choices import (
     EstadoSolicitudFinanciacion,
+    EstadoEscaneoDocumento,
+    EstadoEvidenciaMatricula,
     EstadoValidacionDocumento,
     EstadoInvitacionContinuacion,
     EstadoVersionTerminos,
     MetodoCalculoFinanciero,
+    MotivoRechazoDocumento,
     OrigenCapturaDocumento,
     PropositoInvitacionContinuacion,
+    RelacionEstudiante,
     RolParticipante,
+    TipoEventoParticipante,
     TipoEventoInvitacion,
     TipoConsentimiento,
     TipoDocumentoFinanciacion,
     TipoDocumentoIdentidad,
 )
+from .storage import private_document_storage
 
 
 hash_sha256_validator = RegexValidator(
     regex=r'^[0-9a-f]{64}$',
     message='La evidencia debe ser un hash SHA-256 hexadecimal.',
 )
+
+EXTENSION_DOCUMENTO_POR_MIME = {
+    'application/pdf': '.pdf',
+    'image/jpeg': '.jpg',
+    'image/png': '.png',
+}
+
+
+def ruta_documento_privado(instance, _filename):
+    nombre = instance.nombre_seguro or f'{uuid.uuid4().hex}{EXTENSION_DOCUMENTO_POR_MIME.get(instance.content_type, "")}'
+    instance.nombre_seguro = nombre
+    return f'documentos/{nombre[:2]}/{nombre}'
 
 
 class ModeloInmutableMixin:
@@ -263,8 +282,18 @@ class ParticipanteFinanciacion(models.Model):
     apellidos = models.CharField(max_length=160)
     tipo_documento = models.CharField(max_length=20, choices=TipoDocumentoIdentidad.choices)
     numero_documento = models.CharField(max_length=40)
+    pais_expedicion = models.CharField(max_length=2, blank=True)
     fecha_nacimiento = models.DateField(null=True, blank=True)
     fecha_nacimiento_confirmada = models.BooleanField(default=False)
+    correo = models.EmailField(blank=True)
+    telefono = models.CharField(max_length=40, blank=True)
+    relacion_estudiante = models.CharField(
+        max_length=30,
+        choices=RelacionEstudiante.choices,
+        blank=True,
+    )
+    relacion_verificada = models.BooleanField(default=False, editable=False)
+    identidad_verificada = models.BooleanField(default=False, editable=False)
     usuario = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -273,6 +302,20 @@ class ParticipanteFinanciacion(models.Model):
         related_name='participaciones_financiacion_educativa',
     )
     responsable_contractual = models.BooleanField(default=False)
+    creado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='participantes_financiacion_creados',
+    )
+    actualizado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='participantes_financiacion_actualizados',
+    )
     creado_en = models.DateTimeField(auto_now_add=True)
     actualizado_en = models.DateTimeField(auto_now=True)
 
@@ -292,9 +335,22 @@ class ParticipanteFinanciacion(models.Model):
 
     def clean(self):
         super().clean()
-        self.numero_documento = (self.numero_documento or '').strip().upper()
+        self.nombres = re.sub(r'\s+', ' ', (self.nombres or '').strip())
+        self.apellidos = re.sub(r'\s+', ' ', (self.apellidos or '').strip())
+        self.numero_documento = re.sub(
+            r'[^A-Z0-9]',
+            '',
+            (self.numero_documento or '').strip().upper(),
+        )
+        self.pais_expedicion = (self.pais_expedicion or '').strip().upper()
+        self.correo = (self.correo or '').strip().lower()
+        self.telefono = re.sub(r'\s+', '', (self.telefono or '').strip())
         if not self.numero_documento:
             raise ValidationError({'numero_documento': 'El documento es obligatorio.'})
+        if self.pais_expedicion and not re.fullmatch(r'[A-Z]{2}', self.pais_expedicion):
+            raise ValidationError({
+                'pais_expedicion': 'Usa un codigo de pais de dos letras.',
+            })
         if self.fecha_nacimiento_confirmada and not self.fecha_nacimiento:
             raise ValidationError({
                 'fecha_nacimiento': 'La fecha confirmada debe tener un valor.',
@@ -314,8 +370,15 @@ class ParticipanteFinanciacion(models.Model):
     def nombre_completo(self):
         return f'{self.nombres} {self.apellidos}'.strip()
 
+    @property
+    def identificacion_enmascarada(self):
+        if not self.numero_documento:
+            return ''
+        visible = self.numero_documento[-4:]
+        return f'{"*" * max(4, len(self.numero_documento) - 4)}{visible}'
+
     def __str__(self):
-        return f'{self.nombre_completo} - {self.numero_documento}'
+        return f'{self.nombre_completo} - {self.identificacion_enmascarada}'
 
 
 class RolParticipanteFinanciacion(models.Model):
@@ -331,6 +394,13 @@ class RolParticipanteFinanciacion(models.Model):
         related_name='roles',
     )
     rol = models.CharField(max_length=30, choices=RolParticipante.choices)
+    declarado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='roles_financiacion_declarados',
+    )
     creado_en = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -364,16 +434,32 @@ class RolParticipanteFinanciacion(models.Model):
             raise ValidationError({'rol': 'Un tutor no puede ser estudiante en la misma solicitud.'})
         if self.rol == RolParticipante.GUARDIAN and RolParticipante.STUDENT in roles_existentes:
             raise ValidationError({'rol': 'Un estudiante no puede ser su propio tutor.'})
-        if self.rol == RolParticipante.PRINCIPAL_DEBTOR and not roles_existentes.intersection({
-            RolParticipante.STUDENT,
-            RolParticipante.GUARDIAN,
-        }):
-            raise ValidationError({
-                'rol': 'El deudor principal debe ser el estudiante adulto o su tutor.',
-            })
-
     def __str__(self):
         return f'{self.participante.nombre_completo} - {self.get_rol_display()}'
+
+
+class EventoParticipanteFinanciacion(ModeloInmutableMixin, models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    participante = models.ForeignKey(
+        ParticipanteFinanciacion,
+        on_delete=models.PROTECT,
+        related_name='eventos',
+    )
+    tipo = models.CharField(max_length=20, choices=TipoEventoParticipante.choices)
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='eventos_participantes_financiacion',
+    )
+    campos_modificados = models.JSONField(default=list, blank=True)
+    creado_en = models.DateTimeField(default=timezone.now, editable=False)
+
+    class Meta:
+        ordering = ['creado_en', 'id']
+        verbose_name = 'Evento de participante'
+        verbose_name_plural = 'Eventos de participantes'
 
 
 class Consentimiento(ModeloInmutableMixin, models.Model):
@@ -536,18 +622,56 @@ class DocumentoFinanciacion(models.Model):
     )
     tipo = models.CharField(max_length=50, choices=TipoDocumentoFinanciacion.choices)
     archivo = models.FileField(
-        upload_to='financiacion_educativa/documentos/%Y/%m/',
+        upload_to=ruta_documento_privado,
+        storage=private_document_storage,
         null=True,
         blank=True,
     )
     referencia_almacenamiento = models.CharField(max_length=500, blank=True)
-    nombre_original = models.CharField(max_length=255, blank=True)
+    nombre_seguro = models.CharField(max_length=80, blank=True, editable=False)
+    nombre_original = models.CharField(max_length=120, blank=True)
     content_type = models.CharField(max_length=120, blank=True)
     tamano_bytes = models.PositiveBigIntegerField(null=True, blank=True)
+    cargado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='documentos_financiacion_cargados',
+    )
+    estado_escaneo = models.CharField(
+        max_length=30,
+        choices=EstadoEscaneoDocumento.choices,
+        default=EstadoEscaneoDocumento.PENDING_SECURITY_SCAN,
+    )
+    escaneado_en = models.DateTimeField(null=True, blank=True)
+    referencia_escaneo = models.CharField(max_length=120, blank=True)
     estado_validacion = models.CharField(
         max_length=20,
         choices=EstadoValidacionDocumento.choices,
         default=EstadoValidacionDocumento.PENDING,
+    )
+    revisado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='documentos_financiacion_revisados',
+    )
+    revisado_en = models.DateTimeField(null=True, blank=True)
+    motivo_rechazo = models.CharField(
+        max_length=30,
+        choices=MotivoRechazoDocumento.choices,
+        blank=True,
+    )
+    observacion_revision = models.CharField(max_length=500, blank=True)
+    activo = models.BooleanField(default=True)
+    reemplaza_a = models.ForeignKey(
+        'self',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='reemplazos',
     )
     origen_captura = models.CharField(
         max_length=30,
@@ -579,6 +703,16 @@ class DocumentoFinanciacion(models.Model):
                 condition=~models.Q(sha256=''),
                 name='uniq_documento_hash_solicitud',
             ),
+            models.UniqueConstraint(
+                fields=['solicitud', 'participante', 'tipo'],
+                condition=models.Q(activo=True, participante__isnull=False),
+                name='uniq_doc_activo_part_tipo',
+            ),
+            models.UniqueConstraint(
+                fields=['solicitud', 'tipo'],
+                condition=models.Q(activo=True, participante__isnull=True),
+                name='uniq_doc_activo_sol_tipo',
+            ),
         ]
         indexes = [
             models.Index(fields=['solicitud', 'tipo'], name='doc_edu_sol_tipo_idx'),
@@ -597,9 +731,114 @@ class DocumentoFinanciacion(models.Model):
             raise ValidationError(
                 'Debe registrar un archivo o una referencia de almacenamiento, no ambos.'
             )
+        if self.reemplaza_a_id:
+            anterior = self.reemplaza_a
+            if (
+                anterior.solicitud_id != self.solicitud_id
+                or anterior.participante_id != self.participante_id
+                or anterior.tipo != self.tipo
+            ):
+                raise ValidationError({
+                    'reemplaza_a': 'El documento anterior no corresponde al mismo requisito.',
+                })
+        if (
+            self.estado_validacion == EstadoValidacionDocumento.APPROVED
+            and self.estado_escaneo != EstadoEscaneoDocumento.SAFE
+        ):
+            raise ValidationError({
+                'estado_validacion': 'No puede aceptarse antes del escaneo de seguridad.',
+            })
+        if (
+            self.estado_validacion == EstadoValidacionDocumento.REJECTED
+            and not self.motivo_rechazo
+        ):
+            raise ValidationError({'motivo_rechazo': 'Selecciona un motivo de rechazo.'})
+        if (
+            self.estado_validacion != EstadoValidacionDocumento.REJECTED
+            and self.motivo_rechazo
+        ):
+            raise ValidationError({
+                'motivo_rechazo': 'El motivo solo aplica a documentos rechazados.',
+            })
 
     def __str__(self):
         return f'{self.get_tipo_display()} - {self.solicitud.referencia_externa}'
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError(
+            'Los documentos deben conservarse para mantener su trazabilidad.'
+        )
+
+
+class EvidenciaMatricula(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    solicitud = models.OneToOneField(
+        SolicitudFinanciacionEducativa,
+        on_delete=models.PROTECT,
+        related_name='evidencia_matricula',
+    )
+    institucion_declarada = models.CharField(max_length=200)
+    programa_curso = models.CharField(max_length=200)
+    periodo_academico = models.CharField(max_length=80)
+    referencia_matricula = models.CharField(max_length=120, blank=True)
+    documento_soporte = models.ForeignKey(
+        DocumentoFinanciacion,
+        on_delete=models.PROTECT,
+        related_name='evidencias_matricula',
+    )
+    estado = models.CharField(
+        max_length=20,
+        choices=EstadoEvidenciaMatricula.choices,
+        default=EstadoEvidenciaMatricula.PENDING,
+    )
+    registrado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name='evidencias_matricula_registradas',
+    )
+    revisado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='evidencias_matricula_revisadas',
+    )
+    revisado_en = models.DateTimeField(null=True, blank=True)
+    motivo_rechazo = models.CharField(
+        max_length=30,
+        choices=MotivoRechazoDocumento.choices,
+        blank=True,
+    )
+    observacion_revision = models.CharField(max_length=500, blank=True)
+    creada_en = models.DateTimeField(auto_now_add=True)
+    actualizada_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Evidencia de matricula'
+        verbose_name_plural = 'Evidencias de matricula'
+
+    def clean(self):
+        super().clean()
+        if (
+            self.documento_soporte_id
+            and self.documento_soporte.solicitud_id != self.solicitud_id
+        ):
+            raise ValidationError({
+                'documento_soporte': 'El soporte no pertenece a la solicitud.',
+            })
+        if (
+            self.documento_soporte_id
+            and self.documento_soporte.tipo
+            != TipoDocumentoFinanciacion.ENROLLMENT_EVIDENCE
+        ):
+            raise ValidationError({
+                'documento_soporte': 'El soporte no es evidencia de matricula.',
+            })
+        if self.estado == EstadoEvidenciaMatricula.REJECTED and not self.motivo_rechazo:
+            raise ValidationError({'motivo_rechazo': 'Selecciona un motivo de rechazo.'})
+
+    def __str__(self):
+        return f'Matricula {self.solicitud.referencia_externa}'
 
 
 class CondicionesFinancieras(ModeloInmutableMixin, models.Model):

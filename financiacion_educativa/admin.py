@@ -5,7 +5,9 @@ from .models import (
     CondicionesFinancieras,
     Consentimiento,
     DocumentoFinanciacion,
+    EvidenciaMatricula,
     EventoInvitacionContinuacion,
+    EventoParticipanteFinanciacion,
     HistorialEstadoSolicitud,
     InvitacionContinuacionSolicitud,
     ParticipanteFinanciacion,
@@ -14,14 +16,22 @@ from .models import (
     SolicitudFinanciacionEducativa,
     VersionTerminosFinanciacion,
 )
-from .choices import EstadoVersionTerminos
+from .choices import EstadoVersionTerminos, MotivoRechazoDocumento
+from .services.documentos import revisar_documento
+from .services.matricula import revisar_evidencia_matricula
 from .services.terminos import publicar_version_terminos, retirar_version_terminos
 
 
 class RolParticipanteInline(admin.TabularInline):
     model = RolParticipanteFinanciacion
     extra = 0
-    readonly_fields = ('id', 'creado_en')
+    can_delete = False
+    readonly_fields = tuple(
+        field.name for field in RolParticipanteFinanciacion._meta.fields
+    )
+
+    def has_add_permission(self, request, obj):
+        return False
 
 
 @admin.register(SolicitudFinanciacionEducativa)
@@ -190,37 +200,69 @@ class ParticipanteFinanciacionAdmin(admin.ModelAdmin):
     list_display = (
         'nombre_completo',
         'tipo_documento',
-        'numero_documento',
+        'identificacion_enmascarada',
         'solicitud',
-        'responsable_contractual',
-        'fecha_nacimiento_confirmada',
+        'identidad_verificada',
+        'relacion_verificada',
     )
     list_filter = (
-        'responsable_contractual',
-        'fecha_nacimiento_confirmada',
+        'identidad_verificada',
+        'relacion_verificada',
         'tipo_documento',
     )
     search_fields = (
         'nombres',
         'apellidos',
-        'numero_documento',
         'solicitud__referencia_externa',
     )
-    readonly_fields = ('id', 'creado_en', 'actualizado_en')
+    readonly_fields = tuple(
+        field.name for field in ParticipanteFinanciacion._meta.fields
+    )
     inlines = (RolParticipanteInline,)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(RolParticipanteFinanciacion)
 class RolParticipanteFinanciacionAdmin(admin.ModelAdmin):
-    list_display = ('participante', 'rol', 'solicitud', 'creado_en')
+    list_display = ('participante', 'rol', 'solicitud', 'declarado_por', 'creado_en')
     list_filter = ('rol', 'creado_en')
     search_fields = (
         'participante__nombres',
         'participante__apellidos',
-        'participante__numero_documento',
         'solicitud__referencia_externa',
     )
-    readonly_fields = ('id', 'creado_en')
+    readonly_fields = tuple(
+        field.name for field in RolParticipanteFinanciacion._meta.fields
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(EventoParticipanteFinanciacion)
+class EventoParticipanteFinanciacionAdmin(admin.ModelAdmin):
+    list_display = ('participante', 'tipo', 'actor', 'creado_en')
+    list_filter = ('tipo', 'creado_en')
+    readonly_fields = tuple(
+        field.name for field in EventoParticipanteFinanciacion._meta.fields
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(Consentimiento)
@@ -269,25 +311,149 @@ class DocumentoFinanciacionAdmin(admin.ModelAdmin):
         'tipo',
         'solicitud',
         'participante',
+        'estado_escaneo',
         'estado_validacion',
+        'activo',
         'origen_captura',
         'cargado_en',
     )
-    list_filter = ('tipo', 'estado_validacion', 'origen_captura', 'cargado_en')
+    list_filter = (
+        'tipo',
+        'estado_escaneo',
+        'estado_validacion',
+        'activo',
+        'origen_captura',
+        'cargado_en',
+    )
     search_fields = (
         'solicitud__referencia_externa',
-        'participante__numero_documento',
-        'nombre_original',
-        'sha256',
     )
     readonly_fields = (
         'id',
+        'solicitud',
+        'participante',
+        'tipo',
+        'archivo_privado',
+        'referencia_almacenamiento',
+        'nombre_seguro',
+        'nombre_original',
+        'content_type',
+        'tamano_bytes',
+        'cargado_por',
+        'estado_escaneo',
+        'escaneado_en',
+        'referencia_escaneo',
+        'estado_validacion',
+        'revisado_por',
+        'revisado_en',
+        'motivo_rechazo',
+        'observacion_revision',
+        'activo',
+        'reemplaza_a',
+        'origen_captura',
         'sha256',
         'resultado_procesamiento',
         'nivel_confianza',
         'cargado_en',
         'actualizado_en',
     )
+    fields = readonly_fields
+    actions = ('aceptar_seleccionados', 'rechazar_tipo_incorrecto')
+
+    @admin.display(description='Archivo privado')
+    def archivo_privado(self, obj):
+        return 'Almacenado' if obj.archivo else 'Referencia privada externa'
+
+    @admin.action(description='Aceptar documentos seleccionados')
+    def aceptar_seleccionados(self, request, queryset):
+        aceptados = 0
+        for documento in queryset:
+            try:
+                revisar_documento(
+                    documento=documento,
+                    actor=request.user,
+                    aceptar=True,
+                )
+            except ValidationError:
+                continue
+            aceptados += 1
+        self.message_user(request, f'Documentos aceptados: {aceptados}.')
+
+    @admin.action(description='Rechazar por tipo documental incorrecto')
+    def rechazar_tipo_incorrecto(self, request, queryset):
+        rechazados = 0
+        for documento in queryset:
+            try:
+                revisar_documento(
+                    documento=documento,
+                    actor=request.user,
+                    aceptar=False,
+                    motivo_rechazo=MotivoRechazoDocumento.WRONG_DOCUMENT,
+                )
+            except ValidationError:
+                continue
+            rechazados += 1
+        self.message_user(request, f'Documentos rechazados: {rechazados}.')
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(EvidenciaMatricula)
+class EvidenciaMatriculaAdmin(admin.ModelAdmin):
+    list_display = (
+        'solicitud',
+        'programa_curso',
+        'periodo_academico',
+        'estado',
+        'creada_en',
+    )
+    list_filter = ('estado', 'periodo_academico', 'creada_en')
+    search_fields = ('solicitud__referencia_externa',)
+    readonly_fields = tuple(
+        field.name for field in EvidenciaMatricula._meta.fields
+    )
+    actions = ('aceptar_seleccionadas', 'rechazar_soporte_incorrecto')
+
+    @admin.action(description='Aceptar evidencias seleccionadas')
+    def aceptar_seleccionadas(self, request, queryset):
+        aceptadas = 0
+        for evidencia in queryset:
+            try:
+                revisar_evidencia_matricula(
+                    evidencia=evidencia,
+                    actor=request.user,
+                    aceptar=True,
+                )
+            except ValidationError:
+                continue
+            aceptadas += 1
+        self.message_user(request, f'Evidencias aceptadas: {aceptadas}.')
+
+    @admin.action(description='Rechazar por soporte incorrecto')
+    def rechazar_soporte_incorrecto(self, request, queryset):
+        rechazadas = 0
+        for evidencia in queryset:
+            try:
+                revisar_evidencia_matricula(
+                    evidencia=evidencia,
+                    actor=request.user,
+                    aceptar=False,
+                    motivo_rechazo=MotivoRechazoDocumento.WRONG_DOCUMENT,
+                )
+            except ValidationError:
+                continue
+            rechazadas += 1
+        self.message_user(request, f'Evidencias rechazadas: {rechazadas}.')
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(CondicionesFinancieras)
