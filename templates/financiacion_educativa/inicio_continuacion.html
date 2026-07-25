@@ -1,0 +1,24 @@
+{% extends "account/libranza/_base.html" %}
+
+{% block title %}Continuar financiacion educativa{% endblock %}
+
+{% block content %}
+{% include "account/common/_auth_content_styles.html" %}
+<main class="section-main">
+  <section class="hero-section-account">
+    <div class="container-account">
+      <div class="div-card-agent-account">
+        <div class="mb-3"><span class="badge rounded-pill border">Financiacion educativa</span></div>
+        <h1>Continua tu proceso</h1>
+        <p class="auth-desc">
+          Inicia sesion o crea una cuenta para revisar la solicitud de forma segura.
+        </p>
+        <a class="btn-account d-block text-center" href="{{ login_url }}">Iniciar sesion</a>
+        <div class="auth-footer-links">
+          <a href="{{ register_url }}">Crear cuenta</a>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+{% endblock %}

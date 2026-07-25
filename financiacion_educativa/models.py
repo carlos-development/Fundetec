@@ -1,4 +1,5 @@
 import uuid
+import hashlib
 from decimal import Decimal
 
 from django.conf import settings
@@ -16,9 +17,13 @@ from instituciones.models import Institucion
 from .choices import (
     EstadoSolicitudFinanciacion,
     EstadoValidacionDocumento,
+    EstadoInvitacionContinuacion,
+    EstadoVersionTerminos,
     MetodoCalculoFinanciero,
     OrigenCapturaDocumento,
+    PropositoInvitacionContinuacion,
     RolParticipante,
+    TipoEventoInvitacion,
     TipoConsentimiento,
     TipoDocumentoFinanciacion,
     TipoDocumentoIdentidad,
@@ -143,6 +148,108 @@ class RegistroIdempotenciaSolicitud(models.Model):
 
     def __str__(self):
         return f'{self.institucion_id} - {self.solicitud_id}'
+
+
+class InvitacionContinuacionSolicitud(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    solicitud = models.ForeignKey(
+        SolicitudFinanciacionEducativa,
+        on_delete=models.PROTECT,
+        related_name='invitaciones_continuacion',
+    )
+    token_hash = models.CharField(
+        max_length=64,
+        unique=True,
+        validators=[hash_sha256_validator],
+    )
+    proposito = models.CharField(
+        max_length=40,
+        choices=PropositoInvitacionContinuacion.choices,
+        default=PropositoInvitacionContinuacion.CONTINUE_APPLICATION,
+    )
+    estado = models.CharField(
+        max_length=20,
+        choices=EstadoInvitacionContinuacion.choices,
+        default=EstadoInvitacionContinuacion.ACTIVE,
+    )
+    vence_en = models.DateTimeField()
+    consumida_en = models.DateTimeField(null=True, blank=True)
+    consumida_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='invitaciones_educativas_consumidas',
+    )
+    creada_en = models.DateTimeField(auto_now_add=True)
+    actualizada_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-creada_en']
+        verbose_name = 'Invitacion de continuacion'
+        verbose_name_plural = 'Invitaciones de continuacion'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['solicitud'],
+                condition=models.Q(estado=EstadoInvitacionContinuacion.ACTIVE),
+                name='uniq_invitacion_activa_solicitud',
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(
+                        estado=EstadoInvitacionContinuacion.CONSUMED,
+                        consumida_en__isnull=False,
+                        consumida_por__isnull=False,
+                    )
+                    | ~models.Q(estado=EstadoInvitacionContinuacion.CONSUMED)
+                ),
+                name='invitacion_consumida_con_auditoria',
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['solicitud', 'estado'], name='inv_edu_sol_estado_idx'),
+            models.Index(fields=['vence_en'], name='inv_edu_vence_idx'),
+        ]
+
+    @property
+    def esta_vigente(self):
+        return (
+            self.estado == EstadoInvitacionContinuacion.ACTIVE
+            and self.vence_en > timezone.now()
+        )
+
+    def __str__(self):
+        return f'Invitacion {self.id} - {self.get_estado_display()}'
+
+
+class EventoInvitacionContinuacion(ModeloInmutableMixin, models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    invitacion = models.ForeignKey(
+        InvitacionContinuacionSolicitud,
+        on_delete=models.PROTECT,
+        related_name='eventos',
+    )
+    tipo = models.CharField(max_length=20, choices=TipoEventoInvitacion.choices)
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='eventos_invitacion_educativa',
+    )
+    metadata = models.JSONField(default=dict, blank=True)
+    creado_en = models.DateTimeField(default=timezone.now, editable=False)
+
+    class Meta:
+        ordering = ['creado_en', 'id']
+        verbose_name = 'Evento de invitacion'
+        verbose_name_plural = 'Eventos de invitaciones'
+        indexes = [
+            models.Index(fields=['invitacion', 'creado_en'], name='evt_inv_edu_fecha_idx'),
+        ]
+
+    def __str__(self):
+        return f'{self.invitacion_id} - {self.get_tipo_display()}'
 
 
 class ParticipanteFinanciacion(models.Model):
@@ -308,7 +415,13 @@ class Consentimiento(ModeloInmutableMixin, models.Model):
             ),
             models.UniqueConstraint(
                 fields=['solicitud', 'participante', 'tipo', 'version_texto'],
+                condition=models.Q(participante__isnull=False),
                 name='uniq_consent_part_tipo_version',
+            ),
+            models.UniqueConstraint(
+                fields=['solicitud', 'usuario', 'tipo', 'version_texto'],
+                condition=models.Q(usuario__isnull=False),
+                name='uniq_consent_user_tipo_version',
             ),
         ]
 
@@ -323,6 +436,88 @@ class Consentimiento(ModeloInmutableMixin, models.Model):
 
     def __str__(self):
         return f'{self.get_tipo_display()} v{self.version_texto}'
+
+
+class VersionTerminosFinanciacion(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tipo = models.CharField(max_length=40, choices=TipoConsentimiento.choices)
+    version = models.CharField(max_length=40, unique=True)
+    titulo = models.CharField(max_length=200)
+    contenido = models.TextField()
+    hash_integridad = models.CharField(
+        max_length=64,
+        editable=False,
+        validators=[hash_sha256_validator],
+    )
+    obligatorio = models.BooleanField(default=True)
+    estado = models.CharField(
+        max_length=20,
+        choices=EstadoVersionTerminos.choices,
+        default=EstadoVersionTerminos.DRAFT,
+    )
+    publicada_en = models.DateTimeField(null=True, blank=True)
+    vigente_desde = models.DateTimeField(null=True, blank=True)
+    retirada_en = models.DateTimeField(null=True, blank=True)
+    creada_en = models.DateTimeField(auto_now_add=True)
+    actualizada_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['tipo', '-vigente_desde', '-creada_en']
+        verbose_name = 'Version de terminos de financiacion'
+        verbose_name_plural = 'Versiones de terminos de financiacion'
+        indexes = [
+            models.Index(fields=['estado', 'vigente_desde'], name='term_edu_estado_vig_idx'),
+            models.Index(fields=['tipo', 'obligatorio'], name='term_edu_tipo_obl_idx'),
+        ]
+
+    @staticmethod
+    def calcular_hash(contenido):
+        return hashlib.sha256(contenido.encode('utf-8')).hexdigest()
+
+    @property
+    def esta_vigente(self):
+        ahora = timezone.now()
+        return (
+            self.estado == EstadoVersionTerminos.PUBLISHED
+            and self.publicada_en is not None
+            and self.vigente_desde is not None
+            and self.vigente_desde <= ahora
+            and self.retirada_en is None
+        )
+
+    def clean(self):
+        super().clean()
+        if not (self.contenido or '').strip():
+            raise ValidationError({'contenido': 'El contenido es obligatorio.'})
+        if self.estado == EstadoVersionTerminos.PUBLISHED:
+            if not self.publicada_en or not self.vigente_desde:
+                raise ValidationError(
+                    'Una version publicada requiere fechas de publicacion y vigencia.'
+                )
+        if self.retirada_en and self.estado != EstadoVersionTerminos.RETIRED:
+            raise ValidationError({
+                'retirada_en': 'La fecha de retiro requiere estado retirado.',
+            })
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            anterior = type(self).objects.filter(pk=self.pk).only('estado').first()
+            if anterior and anterior.estado != EstadoVersionTerminos.DRAFT:
+                raise ValidationError(
+                    'Una version publicada o retirada no puede modificarse.'
+                )
+        self.hash_integridad = self.calcular_hash(self.contenido)
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        if self.estado != EstadoVersionTerminos.DRAFT:
+            raise ValidationError(
+                'Una version publicada o retirada no puede eliminarse.'
+            )
+        return super().delete(*args, **kwargs)
+
+    def __str__(self):
+        return f'{self.titulo} - {self.version}'
 
 
 class DocumentoFinanciacion(models.Model):

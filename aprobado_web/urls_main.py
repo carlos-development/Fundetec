@@ -14,6 +14,12 @@ from .views import portal_entrypoint_view
 urlpatterns = [
     *common_urlpatterns,
 
+    # Continuacion del flujo educativo para usuarios
+    path(
+        "financiacion-educativa/",
+        include("financiacion_educativa.web.urls"),
+    ),
+
     # API institucional de financiacion educativa
     path(
         "api/v1/financiacion-educativa/",

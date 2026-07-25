@@ -1,0 +1,50 @@
+{% extends "account/libranza/_base.html" %}
+
+{% block title %}Terminos de financiacion{% endblock %}
+
+{% block content %}
+{% include "account/common/_auth_content_styles.html" %}
+<main class="section-main">
+  <section class="hero-section-account">
+    <div class="container-account">
+      <div class="div-card-agent-account">
+        <div class="mb-3"><span class="badge rounded-pill border">Terminos</span></div>
+        <h1>Revisa y acepta</h1>
+        <p class="auth-desc">Programa: {{ solicitud.nombre_curso }}</p>
+        {% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
+        {% if versiones %}
+          <form method="post">
+            {% csrf_token %}
+            {% for version in versiones %}
+              <section class="mb-4 text-start">
+                <h2 class="h5">{{ version.titulo }}</h2>
+                <p class="small text-muted">Version {{ version.version }}</p>
+                <div class="border rounded p-3 mb-3" style="max-height: 18rem; overflow-y: auto;">
+                  {{ version.contenido|linebreaksbr }}
+                </div>
+                <div class="form-check">
+                  <input
+                    class="form-check-input"
+                    type="checkbox"
+                    name="accepted_versions"
+                    value="{{ version.id }}"
+                    id="term-{{ version.id }}"
+                  >
+                  <label class="form-check-label" for="term-{{ version.id }}">
+                    He leido y acepto esta version.
+                  </label>
+                </div>
+              </section>
+            {% endfor %}
+            <button class="btn-account" type="submit">Aceptar y continuar</button>
+          </form>
+        {% else %}
+          <div class="alert alert-warning">
+            No hay terminos vigentes disponibles. Intenta nuevamente mas tarde.
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </section>
+</main>
+{% endblock %}

@@ -1,15 +1,21 @@
 from django.contrib import admin
+from django.core.exceptions import ValidationError
 
 from .models import (
     CondicionesFinancieras,
     Consentimiento,
     DocumentoFinanciacion,
+    EventoInvitacionContinuacion,
     HistorialEstadoSolicitud,
+    InvitacionContinuacionSolicitud,
     ParticipanteFinanciacion,
     RegistroIdempotenciaSolicitud,
     RolParticipanteFinanciacion,
     SolicitudFinanciacionEducativa,
+    VersionTerminosFinanciacion,
 )
+from .choices import EstadoVersionTerminos
+from .services.terminos import publicar_version_terminos, retirar_version_terminos
 
 
 class RolParticipanteInline(admin.TabularInline):
@@ -72,6 +78,108 @@ class RegistroIdempotenciaSolicitudAdmin(admin.ModelAdmin):
 
     def has_change_permission(self, request, obj=None):
         return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(InvitacionContinuacionSolicitud)
+class InvitacionContinuacionSolicitudAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'solicitud',
+        'estado',
+        'proposito',
+        'vence_en',
+        'consumida_en',
+        'creada_en',
+    )
+    list_filter = ('estado', 'proposito', 'creada_en', 'vence_en')
+    search_fields = ('id', 'solicitud__referencia_externa')
+    readonly_fields = tuple(
+        field.name for field in InvitacionContinuacionSolicitud._meta.fields
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(EventoInvitacionContinuacion)
+class EventoInvitacionContinuacionAdmin(admin.ModelAdmin):
+    list_display = ('invitacion', 'tipo', 'actor', 'creado_en')
+    list_filter = ('tipo', 'creado_en')
+    search_fields = ('invitacion__id', 'invitacion__solicitud__referencia_externa')
+    readonly_fields = tuple(
+        field.name for field in EventoInvitacionContinuacion._meta.fields
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(VersionTerminosFinanciacion)
+class VersionTerminosFinanciacionAdmin(admin.ModelAdmin):
+    list_display = (
+        'titulo',
+        'version',
+        'tipo',
+        'obligatorio',
+        'estado',
+        'vigente_desde',
+        'publicada_en',
+    )
+    list_filter = ('estado', 'tipo', 'obligatorio')
+    search_fields = ('titulo', 'version', 'hash_integridad')
+    actions = ('publicar_seleccionadas', 'retirar_seleccionadas')
+
+    def get_readonly_fields(self, request, obj=None):
+        base = (
+            'id',
+            'hash_integridad',
+            'estado',
+            'publicada_en',
+            'vigente_desde',
+            'retirada_en',
+            'creada_en',
+            'actualizada_en',
+        )
+        if obj and obj.estado != EstadoVersionTerminos.DRAFT:
+            return tuple(field.name for field in self.model._meta.fields)
+        return base
+
+    @admin.action(description='Publicar versiones seleccionadas')
+    def publicar_seleccionadas(self, request, queryset):
+        publicadas = 0
+        for version in queryset:
+            try:
+                publicar_version_terminos(version=version)
+            except ValidationError:
+                continue
+            publicadas += 1
+        self.message_user(request, f'Versiones publicadas: {publicadas}.')
+
+    @admin.action(description='Retirar versiones seleccionadas')
+    def retirar_seleccionadas(self, request, queryset):
+        retiradas = 0
+        for version in queryset:
+            try:
+                retirar_version_terminos(version=version)
+            except ValidationError:
+                continue
+            retiradas += 1
+        self.message_user(request, f'Versiones retiradas: {retiradas}.')
 
     def has_delete_permission(self, request, obj=None):
         return False

@@ -58,3 +58,25 @@ class OrigenCapturaDocumento(models.TextChoices):
 
 class MetodoCalculoFinanciero(models.TextChoices):
     FRENCH_AMORTIZATION = 'FRENCH_AMORTIZATION', 'Anualidad francesa'
+
+
+class PropositoInvitacionContinuacion(models.TextChoices):
+    CONTINUE_APPLICATION = 'CONTINUE_APPLICATION', 'Continuar solicitud'
+
+
+class EstadoInvitacionContinuacion(models.TextChoices):
+    ACTIVE = 'ACTIVE', 'Activa'
+    CONSUMED = 'CONSUMED', 'Consumida'
+    REVOKED = 'REVOKED', 'Revocada'
+
+
+class TipoEventoInvitacion(models.TextChoices):
+    ISSUED = 'ISSUED', 'Emitida'
+    REVOKED = 'REVOKED', 'Revocada'
+    CONSUMED = 'CONSUMED', 'Consumida'
+
+
+class EstadoVersionTerminos(models.TextChoices):
+    DRAFT = 'DRAFT', 'Borrador'
+    PUBLISHED = 'PUBLISHED', 'Publicada'
+    RETIRED = 'RETIRED', 'Retirada'

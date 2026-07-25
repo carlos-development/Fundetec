@@ -1,0 +1,25 @@
+{% extends "account/libranza/_base.html" %}
+
+{% block title %}Confirmar solicitud{% endblock %}
+
+{% block content %}
+{% include "account/common/_auth_content_styles.html" %}
+<main class="section-main">
+  <section class="hero-section-account">
+    <div class="container-account">
+      <div class="div-card-agent-account">
+        <div class="mb-3"><span class="badge rounded-pill border">Confirmacion</span></div>
+        <h1>Confirma que deseas continuar</h1>
+        <p class="auth-desc">
+          La solicitud corresponde al programa <strong>{{ solicitud.nombre_curso }}</strong>
+          originado por <strong>{{ solicitud.institucion.nombre_comercial }}</strong>.
+        </p>
+        <form method="post">
+          {% csrf_token %}
+          <button class="btn-account" type="submit">Asociar mi cuenta y continuar</button>
+        </form>
+      </div>
+    </div>
+  </section>
+</main>
+{% endblock %}
