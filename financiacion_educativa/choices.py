@@ -128,6 +128,29 @@ class TipoEventoInvitacion(models.TextChoices):
     ISSUED = 'ISSUED', 'Emitida'
     REVOKED = 'REVOKED', 'Revocada'
     CONSUMED = 'CONSUMED', 'Consumida'
+    DELIVERY_SCHEDULED = 'DELIVERY_SCHEDULED', 'Entrega programada'
+    DELIVERY_STARTED = 'DELIVERY_STARTED', 'Entrega iniciada'
+    DELIVERY_SENT = 'DELIVERY_SENT', 'Entrega enviada'
+    DELIVERY_FAILED = 'DELIVERY_FAILED', 'Entrega fallida'
+
+
+class CanalEntregaInvitacion(models.TextChoices):
+    EMAIL = 'EMAIL', 'Correo electronico'
+
+
+class EstadoEntregaInvitacion(models.TextChoices):
+    PENDING = 'PENDING', 'Pendiente'
+    SENDING = 'SENDING', 'En envio'
+    SENT = 'SENT', 'Enviada'
+    FAILED = 'FAILED', 'Fallida'
+    CANCELLED = 'CANCELLED', 'Cancelada'
+    SUPERSEDED = 'SUPERSEDED', 'Reemplazada'
+
+
+class OrigenEntregaInvitacion(models.TextChoices):
+    INITIAL = 'INITIAL', 'Inicial'
+    AUTOMATIC_RETRY = 'AUTOMATIC_RETRY', 'Reintento automatico'
+    MANUAL_REISSUE = 'MANUAL_REISSUE', 'Reemision manual'
 
 
 class EstadoVersionTerminos(models.TextChoices):

@@ -65,7 +65,7 @@ def _construir_url(token):
     return f'{base}{ruta}'
 
 
-def _registrar_evento(invitacion, tipo, actor=None, metadata=None):
+def registrar_evento_invitacion(invitacion, tipo, actor=None, metadata=None):
     return EventoInvitacionContinuacion.objects.create(
         invitacion=invitacion,
         tipo=tipo,
@@ -98,7 +98,7 @@ def emitir_invitacion_continuacion(*, solicitud, actor=None):
     for anterior in anteriores:
         anterior.estado = EstadoInvitacionContinuacion.REVOKED
         anterior.save(update_fields=['estado', 'actualizada_en'])
-        _registrar_evento(
+        registrar_evento_invitacion(
             anterior,
             TipoEventoInvitacion.REVOKED,
             actor=actor,
@@ -113,7 +113,7 @@ def emitir_invitacion_continuacion(*, solicitud, actor=None):
         estado=EstadoInvitacionContinuacion.ACTIVE,
         vence_en=ahora + duracion_invitacion(),
     )
-    _registrar_evento(
+    registrar_evento_invitacion(
         invitacion,
         TipoEventoInvitacion.ISSUED,
         actor=actor,
@@ -168,7 +168,7 @@ def revocar_invitacion_continuacion(*, invitacion, actor=None, motivo='MANUAL'):
         return invitacion
     invitacion.estado = EstadoInvitacionContinuacion.REVOKED
     invitacion.save(update_fields=['estado', 'actualizada_en'])
-    _registrar_evento(
+    registrar_evento_invitacion(
         invitacion,
         TipoEventoInvitacion.REVOKED,
         actor=actor,

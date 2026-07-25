@@ -17,8 +17,10 @@ from django.utils import timezone
 from instituciones.models import Institucion
 
 from .choices import (
+    CanalEntregaInvitacion,
     EstadoSolicitudFinanciacion,
     EstadoEscaneoDocumento,
+    EstadoEntregaInvitacion,
     EstadoEvidenciaMatricula,
     EstadoValidacionDocumento,
     EstadoConfiguracionFinanciera,
@@ -26,6 +28,7 @@ from .choices import (
     EstadoVersionTerminos,
     MetodoCalculoFinanciero,
     MotivoRechazoDocumento,
+    OrigenEntregaInvitacion,
     OrigenCapturaDocumento,
     PoliticaCausacionInteres,
     PoliticaRedondeoFinanciero,
@@ -273,6 +276,120 @@ class EventoInvitacionContinuacion(ModeloInmutableMixin, models.Model):
 
     def __str__(self):
         return f'{self.invitacion_id} - {self.get_tipo_display()}'
+
+
+class EntregaInvitacionContinuacion(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    solicitud = models.ForeignKey(
+        SolicitudFinanciacionEducativa,
+        on_delete=models.PROTECT,
+        related_name='entregas_invitacion',
+    )
+    invitacion = models.OneToOneField(
+        InvitacionContinuacionSolicitud,
+        on_delete=models.PROTECT,
+        related_name='entrega',
+    )
+    secuencia = models.PositiveIntegerField()
+    canal = models.CharField(
+        max_length=20,
+        choices=CanalEntregaInvitacion.choices,
+        default=CanalEntregaInvitacion.EMAIL,
+    )
+    estado = models.CharField(
+        max_length=20,
+        choices=EstadoEntregaInvitacion.choices,
+        default=EstadoEntregaInvitacion.PENDING,
+    )
+    origen = models.CharField(
+        max_length=30,
+        choices=OrigenEntregaInvitacion.choices,
+    )
+    destinatario_hmac = models.CharField(
+        max_length=64,
+        validators=[hash_sha256_validator],
+        editable=False,
+    )
+    reemplaza_a = models.ForeignKey(
+        'self',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='reemplazos',
+    )
+    intentos = models.PositiveSmallIntegerField(default=0)
+    codigo_ultimo_error = models.CharField(max_length=60, blank=True)
+    programada_en = models.DateTimeField(default=timezone.now, editable=False)
+    iniciada_en = models.DateTimeField(null=True, blank=True, editable=False)
+    enviada_en = models.DateTimeField(null=True, blank=True, editable=False)
+    fallida_en = models.DateTimeField(null=True, blank=True, editable=False)
+    cancelada_en = models.DateTimeField(null=True, blank=True, editable=False)
+    creada_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='entregas_invitacion_educativa_creadas',
+    )
+    creada_en = models.DateTimeField(auto_now_add=True)
+    actualizada_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['solicitud', '-secuencia']
+        verbose_name = 'Entrega de invitacion de continuacion'
+        verbose_name_plural = 'Entregas de invitaciones de continuacion'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['solicitud', 'secuencia'],
+                name='uniq_entrega_inv_edu_secuencia',
+            ),
+            models.UniqueConstraint(
+                fields=['solicitud'],
+                condition=models.Q(origen=OrigenEntregaInvitacion.INITIAL),
+                name='uniq_entrega_inv_edu_inicial',
+            ),
+            models.UniqueConstraint(
+                fields=['solicitud'],
+                condition=models.Q(
+                    estado__in=[
+                        EstadoEntregaInvitacion.PENDING,
+                        EstadoEntregaInvitacion.SENDING,
+                    ]
+                ),
+                name='uniq_entrega_inv_edu_en_curso',
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=['estado', 'programada_en'],
+                name='ent_inv_edu_estado_idx',
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.invitacion_id and self.solicitud_id:
+            if self.invitacion.solicitud_id != self.solicitud_id:
+                raise ValidationError({
+                    'invitacion': 'La invitacion no pertenece a la solicitud.',
+                })
+        if self.reemplaza_a_id:
+            if self.reemplaza_a.solicitud_id != self.solicitud_id:
+                raise ValidationError({
+                    'reemplaza_a': 'La entrega anterior no pertenece a la solicitud.',
+                })
+            if self.reemplaza_a_id == self.pk:
+                raise ValidationError({
+                    'reemplaza_a': 'Una entrega no puede reemplazarse a si misma.',
+                })
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError(
+            'Las entregas de invitaciones deben conservarse para auditoria.'
+        )
+
+    def __str__(self):
+        return f'Entrega {self.solicitud_id} #{self.secuencia}'
 
 
 class ParticipanteFinanciacion(models.Model):

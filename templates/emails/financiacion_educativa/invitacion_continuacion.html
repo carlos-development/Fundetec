@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Continua tu solicitud educativa</title>
+</head>
+<body style="margin:0;background:#f4f6f8;color:#172033;font-family:Arial,sans-serif;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+    <tr>
+      <td align="center" style="padding:32px 16px;">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;background:#fff;border:1px solid #dfe4ea;">
+          <tr>
+            <td style="padding:32px;">
+              <h1 style="font-size:24px;margin:0 0 16px;">Continua tu solicitud educativa</h1>
+              <p style="line-height:1.5;margin:0 0 24px;">
+                Usa el siguiente enlace para registrarte o iniciar sesion y continuar con {{ brand_name }}.
+              </p>
+              <p style="margin:0 0 24px;">
+                <a href="{{ continuation_url }}" style="display:inline-block;background:#0b4ea2;color:#fff;padding:12px 18px;text-decoration:none;">
+                  Continuar solicitud
+                </a>
+              </p>
+              <p style="font-size:14px;line-height:1.5;margin:0 0 8px;">
+                El enlace vence el {{ expires_at|date:"Y-m-d H:i T" }} y solo puede utilizarse una vez.
+              </p>
+              <p style="font-size:14px;line-height:1.5;margin:0;">
+                No compartas este enlace. Si no esperabas este mensaje, puedes ignorarlo.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

@@ -15,7 +15,9 @@ from financiacion_educativa.models import SolicitudFinanciacionEducativa
 from financiacion_educativa.services.idempotencia import (
     ConflictoIdempotencia,
     ConflictoReferenciaExterna,
-    crear_solicitud_idempotente,
+)
+from financiacion_educativa.services.orquestacion import (
+    crear_solicitud_institucional_orquestada,
 )
 from financiacion_educativa.services.solicitudes import DatosSolicitudFinanciacion
 from instituciones.authentication import InstitutionApiKeyAuthentication
@@ -106,7 +108,9 @@ class SolicitudListCreateAPIView(InstitutionalAPIView):
         description=(
             'Crea una solicitud en estado PENDING_USER_REGISTRATION. Repetir la '
             'misma clave y payload devuelve la misma solicitud con 202 y el '
-            'encabezado Idempotent-Replayed: true.'
+            'encabezado Idempotent-Replayed: true. Para una solicitud nueva se '
+            'programa de forma privada el envio de una invitacion al correo '
+            'registrado. El enlace nunca se incluye en la respuesta.'
         ),
         parameters=[PARAMETRO_IDEMPOTENCIA],
         request=CrearSolicitudSerializer,
@@ -191,7 +195,7 @@ class SolicitudListCreateAPIView(InstitutionalAPIView):
             user_agent_origen=request.META.get('HTTP_USER_AGENT', ''),
         )
         try:
-            resultado = crear_solicitud_idempotente(
+            resultado = crear_solicitud_institucional_orquestada(
                 institucion=request.user,
                 clave_idempotencia=clave_idempotencia,
                 datos=datos,

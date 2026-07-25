@@ -1,0 +1,7 @@
+Continua tu solicitud educativa con {{ brand_name }}.
+
+Abre este enlace para registrarte o iniciar sesion y continuar:
+{{ continuation_url }}
+
+El enlace vence el {{ expires_at|date:"Y-m-d H:i T" }} y solo puede utilizarse una vez.
+No lo compartas. Si no esperabas este mensaje, puedes ignorarlo.

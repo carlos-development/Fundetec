@@ -7,6 +7,7 @@ from .models import (
     Consentimiento,
     CuotaAmortizacionEducativa,
     DocumentoFinanciacion,
+    EntregaInvitacionContinuacion,
     EvidenciaMatricula,
     EventoInvitacionContinuacion,
     EventoParticipanteFinanciacion,
@@ -22,6 +23,7 @@ from .choices import (
     EstadoConfiguracionFinanciera,
     EstadoVersionTerminos,
     MotivoRechazoDocumento,
+    OrigenEntregaInvitacion,
 )
 from .services.configuracion_financiera import (
     activar_configuracion_financiera,
@@ -30,6 +32,11 @@ from .services.configuracion_financiera import (
 from .services.documentos import revisar_documento
 from .services.matricula import revisar_evidencia_matricula
 from .services.terminos import publicar_version_terminos, retirar_version_terminos
+from .services.orquestacion import (
+    programar_invitacion_inicial,
+    reemitir_invitacion_orquestada,
+    revocar_invitacion_orquestada,
+)
 
 
 class RolParticipanteInline(admin.TabularInline):
@@ -75,6 +82,11 @@ class SolicitudFinanciacionEducativaAdmin(admin.ModelAdmin):
         'creada_en',
         'actualizada_en',
     )
+    actions = (
+        'programar_invitacion_inicial_seleccionadas',
+        'reemitir_invitacion_seleccionadas',
+        'revocar_invitacion_seleccionadas',
+    )
 
     @admin.display(description='Solicitante')
     def nombre_solicitante(self, obj):
@@ -82,6 +94,49 @@ class SolicitudFinanciacionEducativaAdmin(admin.ModelAdmin):
 
     def has_add_permission(self, request):
         return False
+
+    @admin.action(description='Programar invitacion inicial')
+    def programar_invitacion_inicial_seleccionadas(self, request, queryset):
+        programadas = 0
+        for solicitud in queryset:
+            try:
+                resultado = programar_invitacion_inicial(
+                    solicitud=solicitud,
+                    actor=request.user,
+                )
+            except ValidationError:
+                continue
+            programadas += int(resultado.creada)
+        self.message_user(request, f'Invitaciones programadas: {programadas}.')
+
+    @admin.action(description='Reemitir invitacion de continuacion')
+    def reemitir_invitacion_seleccionadas(self, request, queryset):
+        reemitidas = 0
+        for solicitud in queryset:
+            try:
+                reemitir_invitacion_orquestada(
+                    solicitud=solicitud,
+                    origen=OrigenEntregaInvitacion.MANUAL_REISSUE,
+                    actor=request.user,
+                )
+            except ValidationError:
+                continue
+            reemitidas += 1
+        self.message_user(request, f'Invitaciones reemitidas: {reemitidas}.')
+
+    @admin.action(description='Revocar invitacion de continuacion')
+    def revocar_invitacion_seleccionadas(self, request, queryset):
+        revocadas = 0
+        for solicitud in queryset:
+            try:
+                invitacion = revocar_invitacion_orquestada(
+                    solicitud=solicitud,
+                    actor=request.user,
+                )
+            except ValidationError:
+                continue
+            revocadas += int(invitacion is not None)
+        self.message_user(request, f'Invitaciones revocadas: {revocadas}.')
 
 
 @admin.register(RegistroIdempotenciaSolicitud)
@@ -101,6 +156,7 @@ class RegistroIdempotenciaSolicitudAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
+    CuotaAmortizacionEducativa,
 
 
 @admin.register(InvitacionContinuacionSolicitud)
@@ -138,6 +194,52 @@ class EventoInvitacionContinuacionAdmin(admin.ModelAdmin):
     readonly_fields = tuple(
         field.name for field in EventoInvitacionContinuacion._meta.fields
     )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(EntregaInvitacionContinuacion)
+class EntregaInvitacionContinuacionAdmin(admin.ModelAdmin):
+    list_display = (
+        'solicitud',
+        'secuencia',
+        'canal',
+        'origen',
+        'estado',
+        'intentos',
+        'programada_en',
+        'enviada_en',
+    )
+    list_filter = ('estado', 'canal', 'origen', 'programada_en')
+    search_fields = ('solicitud__referencia_externa',)
+    fields = (
+        'id',
+        'solicitud',
+        'invitacion',
+        'secuencia',
+        'canal',
+        'origen',
+        'estado',
+        'reemplaza_a',
+        'intentos',
+        'codigo_ultimo_error',
+        'programada_en',
+        'iniciada_en',
+        'enviada_en',
+        'fallida_en',
+        'cancelada_en',
+        'creada_por',
+        'creada_en',
+        'actualizada_en',
+    )
+    readonly_fields = fields
 
     def has_add_permission(self, request):
         return False
@@ -632,4 +734,3 @@ class HistorialEstadoSolicitudAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
-    CuotaAmortizacionEducativa,
