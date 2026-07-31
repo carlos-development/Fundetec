@@ -1,0 +1,28 @@
+{% extends "financiacion_educativa/_base.html" %}
+
+{% block title %}Cuenta no autorizada | Aprobado{% endblock %}
+
+{% block content %}
+<section class="edu-flow-page">
+    <div class="edu-flow-container edu-flow-container-narrow">
+        <article class="edu-surface">
+            <div class="edu-page-heading">
+                <p class="edu-eyebrow">Acceso protegido</p>
+                <h1>Esta cuenta no puede continuar</h1>
+                <p>
+                    Cierra sesi&oacute;n y usa la cuenta correspondiente al correo
+                    que recibi&oacute; la invitaci&oacute;n.
+                </p>
+            </div>
+            <div class="edu-form-actions">
+                <a class="edu-button" href="{% url 'account_logout' %}">
+                    Cerrar sesi&oacute;n
+                </a>
+                <a class="edu-button-quiet" href="{% url 'financiacion_educativa_web:inicio' %}">
+                    Volver
+                </a>
+            </div>
+        </article>
+    </div>
+</section>
+{% endblock %}

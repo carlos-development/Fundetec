@@ -1,0 +1,92 @@
+{% load financiacion_format %}
+<aside class="edu-summary" data-education-summary>
+    <div class="edu-summary-header">
+        <h2>Resumen de tu solicitud</h2>
+        <button class="edu-summary-toggle" type="button" data-summary-toggle aria-expanded="false" aria-label="Mostrar resumen">
+            <span aria-hidden="true">&#9662;</span>
+        </button>
+    </div>
+    <div class="edu-summary-body">
+        <div class="edu-summary-row">
+            <span class="edu-summary-label">Solicitante</span>
+            <strong class="edu-summary-value">{{ solicitud.nombres }} {{ solicitud.apellidos }}</strong>
+            <span class="edu-summary-source">Recibido de la instituci&oacute;n</span>
+        </div>
+        <div class="edu-summary-row">
+            <span class="edu-summary-label">Correo</span>
+            <strong class="edu-summary-value">{{ solicitud.correo }}</strong>
+            <span class="edu-summary-source">Recibido de la instituci&oacute;n</span>
+        </div>
+        <div class="edu-summary-row">
+            <span class="edu-summary-label">Celular</span>
+            <strong class="edu-summary-value">{{ solicitud.celular }}</strong>
+            <span class="edu-summary-source">Recibido de la instituci&oacute;n</span>
+        </div>
+        <div class="edu-summary-row">
+            <span class="edu-summary-label">Direcci&oacute;n</span>
+            <strong class="edu-summary-value">{{ solicitud.direccion }}</strong>
+            <span class="edu-summary-source">Recibido de la instituci&oacute;n</span>
+        </div>
+        {% if solicitud.identidad_estudiante_completa %}
+            <div class="edu-summary-row">
+                <span class="edu-summary-label">Identificaci&oacute;n</span>
+                <strong class="edu-summary-value">{{ solicitud.get_tipo_documento_estudiante_display }} &middot; {{ solicitud.identificacion_estudiante_enmascarada }}</strong>
+                <span class="edu-summary-source">Recibido de la instituci&oacute;n</span>
+            </div>
+            <div class="edu-summary-row">
+                <span class="edu-summary-label">Fecha de nacimiento</span>
+                <strong class="edu-summary-value">{{ solicitud.fecha_nacimiento_estudiante|date:"Y-m-d" }}</strong>
+                <span class="edu-summary-source">Recibido de la instituci&oacute;n</span>
+            </div>
+        {% endif %}
+        <div class="edu-summary-row">
+            <span class="edu-summary-label">Programa o curso</span>
+            <strong class="edu-summary-value">{{ solicitud.nombre_curso }}</strong>
+            <span class="edu-summary-source">Recibido de la instituci&oacute;n</span>
+        </div>
+        <div class="edu-summary-row">
+            <span class="edu-summary-label">Valor y plazo</span>
+            <strong class="edu-summary-value">{{ solicitud.valor_plan|cop }} &middot; {{ solicitud.plazo_meses }} meses</strong>
+            <span class="edu-summary-source">Recibido de la instituci&oacute;n</span>
+        </div>
+        {% if solicitud.codigo_matricula or solicitud.periodo_academico or solicitud.sede or solicitud.jornada %}
+            <div class="edu-summary-row">
+                <span class="edu-summary-label">Matr&iacute;cula acad&eacute;mica</span>
+                <strong class="edu-summary-value">
+                    {{ solicitud.codigo_matricula|default:"Sin c&oacute;digo" }}
+                    {% if solicitud.periodo_academico %}&middot; {{ solicitud.periodo_academico }}{% endif %}
+                </strong>
+                <span class="edu-summary-source">
+                    {% if solicitud.sede %}{{ solicitud.sede }}{% endif %}
+                    {% if solicitud.jornada %}&middot; {{ solicitud.jornada }}{% endif %}
+                </span>
+            </div>
+        {% endif %}
+        <div class="edu-summary-row">
+            <span class="edu-summary-label">Fecha de matr&iacute;cula</span>
+            <strong class="edu-summary-value">
+                {% if solicitud.fecha_matricula %}
+                    {{ solicitud.fecha_matricula|date:"Y-m-d" }}
+                {% else %}
+                    Pendiente de firma del pagar&eacute;
+                {% endif %}
+            </strong>
+            <span class="edu-summary-source">Se registra al confirmar una firma v&aacute;lida</span>
+        </div>
+        <div class="edu-summary-row">
+            <span class="edu-summary-label">Instituci&oacute;n</span>
+            <strong class="edu-summary-value">{{ solicitud.institucion.nombre_comercial }}</strong>
+            <span class="edu-summary-source">Recibido de la instituci&oacute;n</span>
+        </div>
+        <div class="edu-summary-row">
+            <span class="edu-summary-label">Referencia</span>
+            <strong class="edu-summary-value">{{ solicitud.referencia_externa }}</strong>
+            <span class="edu-summary-source">Recibido de la instituci&oacute;n</span>
+        </div>
+        <div class="edu-summary-row">
+            <span class="edu-summary-label">Estado actual</span>
+            <strong class="edu-summary-value">{{ solicitud.get_estado_display }}</strong>
+            <span class="edu-summary-source">Actualizado por Aprobado</span>
+        </div>
+    </div>
+</aside>

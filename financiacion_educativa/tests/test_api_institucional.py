@@ -27,9 +27,17 @@ PAYLOAD_VALIDO = {
     'phone': '3001234567',
     'email': 'juan@example.com',
     'address': 'Calle 10 # 20-30',
+    'document_type': 'CC',
+    'document_number': '0012345678',
+    'birth_date': '2002-08-15',
+    'enrollment_code': 'A2D-2026-00123',
+    'academic_period': '2026-2',
+    'campus': 'Sede Centro',
+    'schedule': 'Nocturna',
+    'program_name': 'INGLÉS BÁSICO A2 DIAMANTE',
+    'enrollment_date': None,
     'plan_value': '2500000.00',
     'term': 6,
-    'course_type': 'Intensivo de programacion',
 }
 
 
@@ -71,11 +79,20 @@ class APIInstitucionalFinanciacionTests(APITestCase):
         self.assertEqual(respuesta.status_code, status.HTTP_202_ACCEPTED)
         self.assertEqual(
             respuesta.data['status'],
-            EstadoSolicitudFinanciacion.PENDING_USER_REGISTRATION,
+            'RECEIVED',
         )
+        self.assertFalse(respuesta.data['course_authorized'])
         solicitud = SolicitudFinanciacionEducativa.objects.get()
         self.assertEqual(str(solicitud.id), str(respuesta.data['application_id']))
         self.assertIsNone(solicitud.usuario)
+        self.assertEqual(solicitud.numero_documento_estudiante, '0012345678')
+        self.assertEqual(
+            solicitud.nombre_curso,
+            'INGLÉS BÁSICO A2 DIAMANTE',
+        )
+        self.assertIsNone(solicitud.fecha_matricula)
+        self.assertEqual(respuesta.data['document_number'], '0012345678')
+        self.assertIsNone(respuesta.data['enrollment_date'])
 
     def test_institucion_proviene_de_credencial_y_campo_es_rechazado(self):
         payload = deepcopy(PAYLOAD_VALIDO)
@@ -194,6 +211,42 @@ class APIInstitucionalFinanciacionTests(APITestCase):
         self.assertEqual(respuesta.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn('unexpected', respuesta.data['error']['fields'])
 
+    def test_identidad_debe_enviarse_completa_y_con_fecha_valida(self):
+        parcial = deepcopy(PAYLOAD_VALIDO)
+        parcial.pop('birth_date')
+        respuesta = self._crear(payload=parcial, clave='identidad-parcial')
+        self.assertEqual(respuesta.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('document_type', respuesta.data['error']['fields'])
+
+        futura = deepcopy(PAYLOAD_VALIDO)
+        futura['birth_date'] = '2999-01-01'
+        respuesta = self._crear(payload=futura, clave='fecha-futura')
+        self.assertEqual(respuesta.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('birth_date', respuesta.data['error']['fields'])
+
+    def test_fecha_matricula_no_puede_ser_informada_por_la_institucion(self):
+        payload = deepcopy(PAYLOAD_VALIDO)
+        payload['enrollment_date'] = '2026-07-26'
+
+        respuesta = self._crear(payload=payload, clave='fecha-matricula')
+
+        self.assertEqual(respuesta.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('enrollment_date', respuesta.data['error']['fields'])
+        self.assertFalse(SolicitudFinanciacionEducativa.objects.exists())
+
+    def test_course_type_se_conserva_como_alias_compatible(self):
+        payload = deepcopy(PAYLOAD_VALIDO)
+        payload.pop('program_name')
+        payload['course_type'] = 'INGLÉS BÁSICO A2 DIAMANTE'
+
+        respuesta = self._crear(payload=payload, clave='alias-programa')
+
+        self.assertEqual(respuesta.status_code, status.HTTP_202_ACCEPTED)
+        self.assertEqual(
+            respuesta.data['program_name'],
+            'INGLÉS BÁSICO A2 DIAMANTE',
+        )
+
     def test_clave_y_payload_iguales_no_duplican(self):
         primera = self._crear()
         segunda = self._crear()
@@ -304,8 +357,16 @@ class APIInstitucionalFinanciacionTests(APITestCase):
             respuesta.data['external_reference'],
             PAYLOAD_VALIDO['external_reference'],
         )
-        self.assertNotIn('address', respuesta.data)
-        self.assertNotIn('email', respuesta.data)
+        self.assertEqual(respuesta.data['address'], PAYLOAD_VALIDO['address'])
+        self.assertEqual(respuesta.data['email'], PAYLOAD_VALIDO['email'])
+        self.assertEqual(
+            respuesta.data['document_number'],
+            PAYLOAD_VALIDO['document_number'],
+        )
+        self.assertEqual(
+            respuesta.data['program_name'],
+            PAYLOAD_VALIDO['program_name'],
+        )
         self.assertEqual(respuesta.data['plan_value'], '2500000.00')
 
     def test_otra_institucion_no_puede_consultar_solicitud(self):
@@ -382,3 +443,36 @@ class APIInstitucionalFinanciacionTests(APITestCase):
             '202',
             esquema['paths'][ruta_creacion]['post']['responses'],
         )
+        encabezados_202 = esquema['paths'][ruta_creacion]['post'][
+            'responses'
+        ]['202']['headers']
+        self.assertIn('Idempotent-Replayed', encabezados_202)
+        esquema_entrada = esquema['components']['schemas'][
+            'CrearSolicitud'
+        ]
+        for campo in (
+            'document_type',
+            'document_number',
+            'birth_date',
+            'enrollment_code',
+            'academic_period',
+            'campus',
+            'schedule',
+            'program_name',
+            'enrollment_date',
+        ):
+            self.assertIn(campo, esquema_entrada['properties'])
+        terminos = esquema['components']['schemas'][
+            'TerminosFinancieros'
+        ]
+        self.assertEqual(
+            set(terminos['required']),
+            {
+                'currency',
+                'requested_amount',
+                'financed_amount',
+                'term_months',
+                'estimated_installment',
+            },
+        )
+        self.assertNotIn('additionalProperties', terminos)

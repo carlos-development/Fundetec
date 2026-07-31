@@ -13,3 +13,13 @@ def cop(valor):
     except (InvalidOperation, TypeError, ValueError):
         return ''
     return f'${numero:,.0f}'.replace(',', '.')
+
+
+@register.filter
+def porcentaje(valor):
+    try:
+        numero = Decimal(valor)
+    except (InvalidOperation, TypeError, ValueError):
+        return ''
+    texto = format(numero, 'f').rstrip('0').rstrip('.')
+    return texto.replace('.', ',')

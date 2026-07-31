@@ -39,6 +39,22 @@ def archivo_pdf(nombre='soporte.pdf', marca=b'contenido'):
     )
 
 
+def archivo_jpeg(nombre='captura.jpg', marca=b'contenido'):
+    return SimpleUploadedFile(
+        nombre,
+        b'\xff\xd8\xff' + marca + b'\xff\xd9',
+        content_type='application/octet-stream',
+    )
+
+
+def archivo_png(nombre='captura.png', marca=b'contenido'):
+    return SimpleUploadedFile(
+        nombre,
+        b'\x89PNG\r\n\x1a\n' + marca + b'IEND',
+        content_type='application/octet-stream',
+    )
+
+
 class DocumentosPrivadosFase4Tests(TestCase):
     def setUp(self):
         self.private_root = TemporaryDirectory()
@@ -66,10 +82,9 @@ class DocumentosPrivadosFase4Tests(TestCase):
             password='Clave-2026',
             is_staff=True,
         )
-        self.solicitud = crear_solicitud()
-        self.solicitud.usuario = self.usuario
+        self.solicitud = crear_solicitud(usuario=self.usuario)
         self.solicitud.estado = EstadoSolicitudFinanciacion.PENDING_DOCUMENT
-        self.solicitud.save(update_fields=['usuario', 'estado'])
+        self.solicitud.save(update_fields=['estado'])
         self.participante = registrar_o_actualizar_participante(
             solicitud=self.solicitud,
             actor=self.usuario,
@@ -221,3 +236,84 @@ class DocumentosPrivadosFase4Tests(TestCase):
         self.assertIn('no-store', respuesta['Cache-Control'])
         self.assertNotIn(self.private_root.name, str(respuesta.headers))
         respuesta.close()
+
+    def test_previsualizacion_es_inline_privada_y_solo_mismo_origen(self):
+        documento = self._registrar()
+        url = reverse(
+            'financiacion_educativa_web:documento-previsualizar',
+            kwargs={
+                'solicitud_id': self.solicitud.pk,
+                'documento_id': documento.pk,
+            },
+        )
+
+        self.assertEqual(self.client.get(url).status_code, 302)
+        self.client.force_login(self.otro)
+        self.assertEqual(self.client.get(url).status_code, 404)
+        self.client.force_login(self.usuario)
+        respuesta = self.client.get(url)
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta['Content-Type'], 'application/pdf')
+        self.assertIn('inline;', respuesta['Content-Disposition'])
+        self.assertEqual(respuesta['X-Frame-Options'], 'SAMEORIGIN')
+        self.assertEqual(
+            respuesta['Cross-Origin-Resource-Policy'],
+            'same-origin',
+        )
+        self.assertIn("frame-ancestors 'self'", respuesta['Content-Security-Policy'])
+        self.assertIn("object-src 'none'", respuesta['Content-Security-Policy'])
+        self.assertNotIn('sandbox', respuesta['Content-Security-Policy'])
+        self.assertIn('no-store', respuesta['Cache-Control'])
+        self.assertNotIn(self.private_root.name, str(respuesta.headers))
+        respuesta.close()
+
+    def test_previsualizacion_privada_admite_pdf_jpeg_y_png_reales(self):
+        casos = (
+            (TipoDocumentoFinanciacion.OTHER_EDUCATIONAL, archivo_pdf(), 'application/pdf'),
+            (TipoDocumentoFinanciacion.OTHER, archivo_jpeg(), 'image/jpeg'),
+            (TipoDocumentoFinanciacion.INCOME_CERTIFICATE, archivo_png(), 'image/png'),
+        )
+        self.client.force_login(self.usuario)
+
+        for indice, (tipo, archivo, mime) in enumerate(casos):
+            with self.subTest(mime=mime):
+                documento = registrar_documento(
+                    solicitud=self.solicitud,
+                    participante=(
+                        self.participante
+                        if tipo == TipoDocumentoFinanciacion.INCOME_CERTIFICATE
+                        else None
+                    ),
+                    tipo=tipo,
+                    origen_captura=OrigenCapturaDocumento.USER_UPLOAD,
+                    archivo=archivo,
+                    actor=self.usuario,
+                )
+                url = reverse(
+                    'financiacion_educativa_web:documento-previsualizar',
+                    kwargs={
+                        'solicitud_id': self.solicitud.pk,
+                        'documento_id': documento.pk,
+                    },
+                )
+                respuesta = self.client.get(url)
+                self.assertEqual(respuesta.status_code, 200)
+                self.assertEqual(respuesta['Content-Type'], mime)
+                self.assertIn('inline;', respuesta['Content-Disposition'])
+                respuesta.close()
+
+    def test_previsualizacion_rechaza_mime_no_permitido(self):
+        documento = self._registrar()
+        documento.content_type = 'text/html'
+        documento.save(update_fields=['content_type'])
+        self.client.force_login(self.usuario)
+        url = reverse(
+            'financiacion_educativa_web:documento-previsualizar',
+            kwargs={
+                'solicitud_id': self.solicitud.pk,
+                'documento_id': documento.pk,
+            },
+        )
+
+        self.assertEqual(self.client.get(url).status_code, 404)

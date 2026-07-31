@@ -23,8 +23,6 @@ from financiacion_educativa.tests.factories import crear_solicitud
 @override_settings(BRAND_PUBLIC_BASE_URL='https://credito.example.com')
 class AsociacionUsuarioTests(TestCase):
     def setUp(self):
-        self.solicitud = crear_solicitud()
-        self.emitida = emitir_invitacion_continuacion(solicitud=self.solicitud)
         User = get_user_model()
         self.usuario = User.objects.create_user(
             username='usuario@example.com',
@@ -36,6 +34,8 @@ class AsociacionUsuarioTests(TestCase):
             email='otro@example.com',
             password='OtraClaveSegura-2026',
         )
+        self.solicitud = crear_solicitud(correo=self.usuario.email)
+        self.emitida = emitir_invitacion_continuacion(solicitud=self.solicitud)
 
     def test_asocia_usuario_consume_token_transiciona_y_audita(self):
         resultado = asociar_usuario_mediante_invitacion(
@@ -81,6 +81,20 @@ class AsociacionUsuarioTests(TestCase):
             ).count(),
             1,
         )
+
+    def test_asociacion_consumida_rechaza_cuenta_con_correo_modificado(self):
+        asociar_usuario_mediante_invitacion(
+            invitacion_id=self.emitida.invitacion.pk,
+            usuario=self.usuario,
+        )
+        self.usuario.email = 'correo-cambiado@example.com'
+        self.usuario.save(update_fields=['email'])
+
+        with self.assertRaises(InvitacionNoValida):
+            asociar_usuario_mediante_invitacion(
+                invitacion_id=self.emitida.invitacion.pk,
+                usuario=self.usuario,
+            )
 
     def test_otra_cuenta_no_puede_apropiarse_de_solicitud(self):
         asociar_usuario_mediante_invitacion(

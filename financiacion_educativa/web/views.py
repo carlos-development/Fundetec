@@ -1,17 +1,34 @@
+import logging
+from urllib.parse import urlencode
+
+from django.conf import settings
+from django.contrib import messages
 from django.contrib.auth import login as auth_login
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
-from django.http import FileResponse, Http404
+from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils import timezone
 from django.views.decorators.cache import never_cache
-from django.views.decorators.http import require_GET, require_http_methods
+from django.views.decorators.debug import sensitive_post_parameters
+from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
-from financiacion_educativa.choices import EstadoSolicitudFinanciacion
+from financiacion_educativa.choices import (
+    EstadoEnlaceCapturaMovil,
+    EstadoEntregaCapturaMovil,
+    EstadoSolicitudFinanciacion,
+    OrigenCapturaDocumento,
+    RelacionEstudiante,
+    RolParticipante,
+    TipoDocumentoFinanciacion,
+    TipoEventoSeguridadFinanciacion,
+)
 from financiacion_educativa.models import (
     CondicionesFinancieras,
     DocumentoFinanciacion,
+    EnlaceCapturaMovil,
     EvidenciaMatricula,
     ParticipanteFinanciacion,
     SolicitudFinanciacionEducativa,
@@ -19,6 +36,16 @@ from financiacion_educativa.models import (
 )
 from financiacion_educativa.services.asociacion import (
     asociar_usuario_mediante_invitacion,
+)
+from financiacion_educativa.services.autorizacion import (
+    registrar_evento_seguridad,
+    usuario_coincide_con_correo,
+    usuario_es_propietario_solicitud,
+)
+from financiacion_educativa.services.captura_movil import (
+    consumir_enlace_captura_movil,
+    emitir_enlace_captura_movil,
+    obtener_enlace_vigente_por_token,
 )
 from financiacion_educativa.services.invitaciones import (
     InvitacionNoValida,
@@ -36,9 +63,16 @@ from financiacion_educativa.services.documentos import (
 from financiacion_educativa.services.matricula import (
     registrar_o_actualizar_evidencia_matricula,
 )
+from financiacion_educativa.services.ficha_matricula import (
+    construir_mapeo_ficha_matricula,
+)
 from financiacion_educativa.services.participantes import (
     DatosParticipante,
+    calcular_edad,
+    fecha_referencia_solicitud,
     registrar_o_actualizar_participante,
+    sincronizar_estudiante_desde_solicitud,
+    solicitud_requiere_tutor,
 )
 from financiacion_educativa.services.requisitos_documentales import (
     calcular_requisitos_documentales,
@@ -51,22 +85,36 @@ from financiacion_educativa.services.proyecciones_financieras import (
 from financiacion_educativa.services.reglas_financieras import (
     crear_fotografia_condiciones_financieras,
 )
-from financiacion_educativa.choices import OrigenCapturaDocumento
-
+from financiacion_educativa.services.configuracion_financiera import (
+    ConfiguracionFinancieraAmbigua,
+    ConfiguracionFinancieraNoDisponible,
+    seleccionar_configuracion_vigente,
+)
 from .forms import (
     AccesoFinanciacionForm,
+    EstudianteFinanciacionForm,
     DocumentoFinanciacionForm,
     EvidenciaMatriculaForm,
     CrearFotografiaFinancieraForm,
-    ParticipanteFinanciacionForm,
     RegistroFinanciacionForm,
     ReemplazoDocumentoForm,
+    TutorFinanciacionForm,
     ProyeccionAbonoForm,
     ProyeccionPagoTotalForm,
 )
 
 
 SESSION_INVITACION_ID = 'financiacion_educativa_invitacion_id'
+SESSION_ENLACE_CAPTURA_MOVIL_ID = (
+    'financiacion_educativa_enlace_captura_movil_id'
+)
+SESSION_CAPTURA_MOVIL_GRANT = 'financiacion_educativa_captura_movil_grant'
+logger = logging.getLogger(__name__)
+MIME_PREVISUALIZABLES = {
+    'application/pdf',
+    'image/jpeg',
+    'image/png',
+}
 
 
 def _sin_referer(response):
@@ -85,9 +133,92 @@ def _render_invitacion_invalida(request):
     )
 
 
+def _render_enlace_captura_invalido(request):
+    request.session.pop(SESSION_ENLACE_CAPTURA_MOVIL_ID, None)
+    return _sin_referer(
+        render(
+            request,
+            'financiacion_educativa/captura_movil_invalida.html',
+            status=410,
+        )
+    )
+
+
+def _endpoint_actual(request):
+    resolver_match = getattr(request, 'resolver_match', None)
+    return getattr(resolver_match, 'view_name', '') or 'unknown'
+
+
+def _registrar_evento_seguro(request, *, tipo, solicitud=None, actor=None):
+    try:
+        registrar_evento_seguridad(
+            tipo=tipo,
+            endpoint=_endpoint_actual(request),
+            solicitud=solicitud,
+            actor=actor if actor is not None else request.user,
+            metodo=request.method,
+        )
+    except Exception:
+        logger.exception('No fue posible registrar un evento de seguridad.')
+
+
+def _render_cuenta_no_coincide(request, solicitud):
+    request.session.pop(SESSION_INVITACION_ID, None)
+    _registrar_evento_seguro(
+        request,
+        tipo=TipoEventoSeguridadFinanciacion.INVITATION_ACCOUNT_MISMATCH,
+        solicitud=solicitud,
+    )
+    return _sin_referer(
+        render(
+            request,
+            'financiacion_educativa/cuenta_no_coincide.html',
+            status=404,
+        )
+    )
+
+
+def _es_contexto_movil(request):
+    client_hint = request.headers.get('Sec-CH-UA-Mobile', '').strip()
+    if client_hint:
+        return client_hint == '?1'
+    user_agent = request.headers.get('User-Agent', '').casefold()
+    indicadores = (
+        'android',
+        'iphone',
+        'ipad',
+        'ipod',
+        'mobile',
+        'windows phone',
+    )
+    return any(indicador in user_agent for indicador in indicadores)
+
+
+def _render_requiere_dispositivo_movil(request):
+    request.session.pop(SESSION_ENLACE_CAPTURA_MOVIL_ID, None)
+    return _sin_referer(
+        render(
+            request,
+            'financiacion_educativa/captura_movil_requerida.html',
+            status=400,
+        )
+    )
+
+
 def _invitacion_de_sesion(request):
     return obtener_invitacion_vigente_por_id(
         request.session.get(SESSION_INVITACION_ID)
+    )
+
+
+def _usuario_puede_usar_invitacion(usuario, invitacion):
+    solicitud = invitacion.solicitud
+    return bool(
+        usuario_coincide_con_correo(usuario, solicitud.correo)
+        and (
+            solicitud.usuario_id is None
+            or solicitud.usuario_id == usuario.pk
+        )
     )
 
 
@@ -97,6 +228,11 @@ def continuar_invitacion_view(request, token):
     invitacion = obtener_invitacion_vigente_por_token(token)
     if not invitacion:
         return _render_invitacion_invalida(request)
+    if (
+        request.user.is_authenticated
+        and not _usuario_puede_usar_invitacion(request.user, invitacion)
+    ):
+        return _render_cuenta_no_coincide(request, invitacion.solicitud)
 
     request.session[SESSION_INVITACION_ID] = str(invitacion.pk)
     return _sin_referer(
@@ -107,9 +243,12 @@ def continuar_invitacion_view(request, token):
 @never_cache
 @require_GET
 def inicio_continuacion_view(request):
-    if not _invitacion_de_sesion(request):
+    invitacion = _invitacion_de_sesion(request)
+    if not invitacion:
         return _render_invitacion_invalida(request)
     if request.user.is_authenticated:
+        if not _usuario_puede_usar_invitacion(request.user, invitacion):
+            return _render_cuenta_no_coincide(request, invitacion.solicitud)
         return redirect('financiacion_educativa_web:confirmar')
     return render(
         request,
@@ -124,15 +263,32 @@ def inicio_continuacion_view(request):
 @never_cache
 @require_http_methods(['GET', 'POST'])
 def acceso_view(request):
-    if not _invitacion_de_sesion(request):
+    invitacion = _invitacion_de_sesion(request)
+    if not invitacion:
         return _render_invitacion_invalida(request)
     if request.user.is_authenticated:
         return redirect('financiacion_educativa_web:confirmar')
 
     form = AccesoFinanciacionForm(request=request, data=request.POST or None)
     if request.method == 'POST' and form.is_valid():
-        auth_login(request, form.get_user())
-        return redirect('financiacion_educativa_web:confirmar')
+        usuario = form.get_user()
+        if not _usuario_puede_usar_invitacion(usuario, invitacion):
+            _registrar_evento_seguro(
+                request,
+                tipo=(
+                    TipoEventoSeguridadFinanciacion
+                    .INVITATION_ACCOUNT_MISMATCH
+                ),
+                solicitud=invitacion.solicitud,
+                actor=usuario,
+            )
+            form.add_error(
+                None,
+                'Usa la cuenta correspondiente al correo que recibio la invitacion.',
+            )
+        else:
+            auth_login(request, usuario)
+            return redirect('financiacion_educativa_web:confirmar')
     return render(
         request,
         'financiacion_educativa/acceso.html',
@@ -146,12 +302,16 @@ def acceso_view(request):
 @never_cache
 @require_http_methods(['GET', 'POST'])
 def registro_view(request):
-    if not _invitacion_de_sesion(request):
+    invitacion = _invitacion_de_sesion(request)
+    if not invitacion:
         return _render_invitacion_invalida(request)
     if request.user.is_authenticated:
         return redirect('financiacion_educativa_web:confirmar')
 
-    form = RegistroFinanciacionForm(request.POST or None)
+    form = RegistroFinanciacionForm(
+        request.POST or None,
+        expected_email=invitacion.solicitud.correo,
+    )
     if request.method == 'POST' and form.is_valid():
         try:
             with transaction.atomic():
@@ -185,6 +345,8 @@ def confirmar_asociacion_view(request):
     invitacion = _invitacion_de_sesion(request)
     if not invitacion:
         return _render_invitacion_invalida(request)
+    if not _usuario_puede_usar_invitacion(request.user, invitacion):
+        return _render_cuenta_no_coincide(request, invitacion.solicitud)
 
     if request.method == 'POST':
         try:
@@ -193,6 +355,11 @@ def confirmar_asociacion_view(request):
                 usuario=request.user,
             )
         except InvitacionNoValida:
+            _registrar_evento_seguro(
+                request,
+                tipo=TipoEventoSeguridadFinanciacion.REASSOCIATION_ATTEMPT,
+                solicitud=invitacion.solicitud,
+            )
             return _render_invitacion_invalida(request)
         request.session.pop(SESSION_INVITACION_ID, None)
         return redirect(
@@ -207,12 +374,53 @@ def confirmar_asociacion_view(request):
     )
 
 
-def _solicitud_del_usuario(request, solicitud_id):
-    return get_object_or_404(
+def _solicitud_del_usuario(request, solicitud_id, *, permitir_revisor=False):
+    solicitud = get_object_or_404(
         SolicitudFinanciacionEducativa,
         pk=solicitud_id,
-        usuario=request.user,
     )
+    if usuario_es_propietario_solicitud(request.user, solicitud):
+        return solicitud
+    if (
+        permitir_revisor
+        and request.user.is_authenticated
+        and request.user.has_perm(
+            'financiacion_educativa.revisar_solicitud_financiacion'
+        )
+    ):
+        return solicitud
+    _registrar_evento_seguro(
+        request,
+        tipo=TipoEventoSeguridadFinanciacion.UNAUTHORIZED_APPLICATION_ACCESS,
+        solicitud=solicitud,
+    )
+    raise Http404
+
+
+def _estado_documental_editable(solicitud):
+    return solicitud.estado in {
+        EstadoSolicitudFinanciacion.PENDING_DOCUMENT,
+        EstadoSolicitudFinanciacion.CORRECTION_REQUIRED,
+    }
+
+
+def _captura_movil_autorizada(request, solicitud, persona):
+    grant = request.session.get(SESSION_CAPTURA_MOVIL_GRANT)
+    if not isinstance(grant, dict) or not _es_contexto_movil(request):
+        return False
+    if (
+        grant.get('solicitud_id') != str(solicitud.pk)
+        or grant.get('persona') != persona
+    ):
+        return False
+    return EnlaceCapturaMovil.objects.filter(
+        pk=grant.get('enlace_id'),
+        solicitud=solicitud,
+        persona=TIPOS_IDENTIDAD_POR_PERSONA.get(persona, {}).get('rol'),
+        estado=EstadoEnlaceCapturaMovil.CONSUMED,
+        consumida_por=request.user,
+        vence_en__gt=timezone.now(),
+    ).exists()
 
 
 def _agregar_error_formulario(form, error):
@@ -269,6 +477,10 @@ def terminos_view(request, solicitud_id):
                 )
             else:
                 request.session.pop(session_key, None)
+                sincronizar_estudiante_desde_solicitud(
+                    solicitud=resultado.solicitud,
+                    actor=request.user,
+                )
                 return redirect(
                     'financiacion_educativa_web:siguiente',
                     solicitud_id=resultado.solicitud.pk,
@@ -307,23 +519,55 @@ def documentacion_view(request, solicitud_id):
     if solicitud.estado not in {
         EstadoSolicitudFinanciacion.PENDING_DOCUMENT,
         EstadoSolicitudFinanciacion.PENDING_MANUAL_REVIEW,
+        EstadoSolicitudFinanciacion.CORRECTION_REQUIRED,
+        EstadoSolicitudFinanciacion.APPROVED,
+        EstadoSolicitudFinanciacion.REJECTED,
     }:
         raise Http404
     try:
         matricula = solicitud.evidencia_matricula
     except EvidenciaMatricula.DoesNotExist:
         matricula = None
+    participantes = solicitud.participantes.prefetch_related('roles')
+    estudiante_asignado = solicitud.roles_participantes.select_related(
+        'participante'
+    ).filter(rol=RolParticipante.STUDENT).first()
+    tutor_asignado = solicitud.roles_participantes.select_related(
+        'participante'
+    ).filter(rol=RolParticipante.GUARDIAN).first()
+    deudor_asignado = solicitud.roles_participantes.select_related(
+        'participante'
+    ).filter(rol=RolParticipante.PRINCIPAL_DEBTOR).first()
+    estudiante = (
+        estudiante_asignado.participante if estudiante_asignado else None
+    )
+    requiere_tutor = solicitud_requiere_tutor(solicitud)
+    requisitos = calcular_requisitos_documentales(solicitud)
+    ultima_decision = solicitud.decisiones_revision.order_by(
+        '-creada_en',
+        '-id',
+    ).first()
     return render(
         request,
         'financiacion_educativa/documentacion.html',
         {
             'solicitud': solicitud,
-            'participantes': solicitud.participantes.prefetch_related('roles'),
+            'participantes': participantes,
+            'estudiante': estudiante,
+            'tutor': tutor_asignado.participante if tutor_asignado else None,
+            'deudor': deudor_asignado.participante if deudor_asignado else None,
+            'requiere_tutor': requiere_tutor,
             'documentos': solicitud.documentos.filter(activo=True).select_related(
                 'participante'
             ),
             'matricula': matricula,
-            'requisitos': calcular_requisitos_documentales(solicitud),
+            'fotografia': _fotografia_activa(solicitud),
+            'requisitos': requisitos,
+            'pendientes': [
+                requisito for requisito in requisitos if not requisito.cumplido
+            ],
+            'documental_editable': _estado_documental_editable(solicitud),
+            'ultima_decision': ultima_decision,
         },
     )
 
@@ -333,7 +577,7 @@ def documentacion_view(request, solicitud_id):
 @require_http_methods(['GET', 'POST'])
 def participante_view(request, solicitud_id, participante_id=None):
     solicitud = _solicitud_del_usuario(request, solicitud_id)
-    if solicitud.estado != EstadoSolicitudFinanciacion.PENDING_DOCUMENT:
+    if not _estado_documental_editable(solicitud):
         raise Http404
     participante = None
     if participante_id:
@@ -342,8 +586,48 @@ def participante_view(request, solicitud_id, participante_id=None):
             pk=participante_id,
             solicitud=solicitud,
         )
-    initial = None
+    roles_participante = set()
     if participante:
+        roles_participante = set(
+            participante.roles.values_list('rol', flat=True)
+        )
+
+    tipo_persona = request.POST.get('tipo_persona') or request.GET.get(
+        'tipo'
+    )
+    if participante:
+        tipo_persona = (
+            'estudiante'
+            if RolParticipante.STUDENT in roles_participante
+            else 'tutor'
+        )
+    elif tipo_persona not in {'estudiante', 'tutor'}:
+        tiene_estudiante = solicitud.roles_participantes.filter(
+            rol=RolParticipante.STUDENT
+        ).exists()
+        if tiene_estudiante and solicitud_requiere_tutor(solicitud):
+            tipo_persona = 'tutor'
+        elif tiene_estudiante:
+            raise Http404
+        else:
+            tipo_persona = 'estudiante'
+
+    if tipo_persona == 'tutor':
+        tiene_estudiante = solicitud.roles_participantes.filter(
+            rol=RolParticipante.STUDENT
+        ).exists()
+        if not tiene_estudiante or not solicitud_requiere_tutor(solicitud):
+            raise Http404
+
+    if tipo_persona == 'estudiante':
+        initial = {
+            'tipo_documento': participante.tipo_documento,
+            'numero_documento': participante.numero_documento,
+            'pais_expedicion': participante.pais_expedicion,
+            'fecha_nacimiento': participante.fecha_nacimiento,
+        } if participante else None
+        form = EstudianteFinanciacionForm(request.POST or None, initial=initial)
+    else:
         initial = {
             'nombres': participante.nombres,
             'apellidos': participante.apellidos,
@@ -354,28 +638,55 @@ def participante_view(request, solicitud_id, participante_id=None):
             'correo': participante.correo,
             'telefono': participante.telefono,
             'relacion_estudiante': participante.relacion_estudiante,
-            'roles': list(participante.roles.values_list('rol', flat=True)),
-        }
-    form = ParticipanteFinanciacionForm(request.POST or None, initial=initial)
+        } if participante else None
+        form = TutorFinanciacionForm(request.POST or None, initial=initial)
+
     if request.method == 'POST' and form.is_valid():
+        es_estudiante = tipo_persona == 'estudiante'
+        if es_estudiante:
+            nombres = solicitud.nombres
+            apellidos = solicitud.apellidos
+            correo = solicitud.correo
+            telefono = solicitud.celular
+            relacion = RelacionEstudiante.SELF
+            roles = {RolParticipante.STUDENT}
+            edad = calcular_edad(
+                form.cleaned_data['fecha_nacimiento'],
+                fecha_referencia_solicitud(solicitud),
+            )
+            if (
+                edad is not None
+                and edad >= settings.FINANCIACION_EDUCATIVA_MAYORIA_EDAD
+            ):
+                roles.add(RolParticipante.PRINCIPAL_DEBTOR)
+        else:
+            nombres = form.cleaned_data['nombres']
+            apellidos = form.cleaned_data['apellidos']
+            correo = form.cleaned_data['correo']
+            telefono = form.cleaned_data['telefono']
+            relacion = form.cleaned_data['relacion_estudiante']
+            roles = {
+                RolParticipante.GUARDIAN,
+                RolParticipante.PRINCIPAL_DEBTOR,
+            }
         datos = DatosParticipante(
-            nombres=form.cleaned_data['nombres'],
-            apellidos=form.cleaned_data['apellidos'],
+            nombres=nombres,
+            apellidos=apellidos,
             tipo_documento=form.cleaned_data['tipo_documento'],
             numero_documento=form.cleaned_data['numero_documento'],
             pais_expedicion=form.cleaned_data['pais_expedicion'],
             fecha_nacimiento=form.cleaned_data['fecha_nacimiento'],
             fecha_nacimiento_confirmada=False,
-            correo=form.cleaned_data['correo'],
-            telefono=form.cleaned_data['telefono'],
-            relacion_estudiante=form.cleaned_data['relacion_estudiante'],
+            correo=correo,
+            telefono=telefono,
+            relacion_estudiante=relacion,
         )
         try:
             registrar_o_actualizar_participante(
                 solicitud=solicitud,
                 actor=request.user,
                 datos=datos,
-                roles=form.cleaned_data['roles'],
+                roles=roles,
                 participante_id=getattr(participante, 'pk', None),
             )
         except ValidationError as error:
@@ -388,7 +699,12 @@ def participante_view(request, solicitud_id, participante_id=None):
     return render(
         request,
         'financiacion_educativa/participante_form.html',
-        {'solicitud': solicitud, 'participante': participante, 'form': form},
+        {
+            'solicitud': solicitud,
+            'participante': participante,
+            'form': form,
+            'tipo_persona': tipo_persona,
+        },
     )
 
 
@@ -397,12 +713,14 @@ def participante_view(request, solicitud_id, participante_id=None):
 @require_http_methods(['GET', 'POST'])
 def cargar_documento_view(request, solicitud_id):
     solicitud = _solicitud_del_usuario(request, solicitud_id)
-    if solicitud.estado != EstadoSolicitudFinanciacion.PENDING_DOCUMENT:
+    if not _estado_documental_editable(solicitud):
         raise Http404
     form = DocumentoFinanciacionForm(
         request.POST or None,
         request.FILES or None,
         solicitud=solicitud,
+        tipo_inicial=request.GET.get('tipo', ''),
+        participante_inicial=request.GET.get('participante', ''),
     )
     if request.method == 'POST' and form.is_valid():
         try:
@@ -428,12 +746,255 @@ def cargar_documento_view(request, solicitud_id):
     )
 
 
+TIPOS_IDENTIDAD_POR_PERSONA = {
+    'estudiante': {
+        'rol': RolParticipante.STUDENT,
+        'frente': TipoDocumentoFinanciacion.STUDENT_ID_FRONT,
+        'reverso': TipoDocumentoFinanciacion.STUDENT_ID_BACK,
+    },
+    'tutor': {
+        'rol': RolParticipante.GUARDIAN,
+        'frente': TipoDocumentoFinanciacion.GUARDIAN_ID_FRONT,
+        'reverso': TipoDocumentoFinanciacion.GUARDIAN_ID_BACK,
+    },
+}
+
+
+def _error_json_validacion(error):
+    if hasattr(error, 'message_dict'):
+        mensajes = [
+            str(mensaje)
+            for lista in error.message_dict.values()
+            for mensaje in lista
+        ]
+    else:
+        mensajes = [str(mensaje) for mensaje in error.messages]
+    return JsonResponse(
+        {'ok': False, 'error': mensajes[0] if mensajes else 'Captura no valida.'},
+        status=400,
+    )
+
+
+@never_cache
+@login_required(login_url='/financiacion-educativa/acceso/')
+@require_http_methods(['GET', 'POST'])
+def capturar_identidad_view(request, solicitud_id, persona):
+    solicitud = _solicitud_del_usuario(request, solicitud_id)
+    if not _estado_documental_editable(solicitud):
+        raise Http404
+    configuracion = TIPOS_IDENTIDAD_POR_PERSONA.get(persona)
+    if not configuracion:
+        raise Http404
+    asignacion = solicitud.roles_participantes.select_related(
+        'participante'
+    ).filter(rol=configuracion['rol']).first()
+    if not asignacion:
+        raise Http404
+    participante = asignacion.participante
+    captura_movil_autorizada = _captura_movil_autorizada(
+        request,
+        solicitud,
+        persona,
+    )
+
+    if request.method == 'POST':
+        if not captura_movil_autorizada:
+            _registrar_evento_seguro(
+                request,
+                tipo=(
+                    TipoEventoSeguridadFinanciacion
+                    .MOBILE_CAPTURE_CONTEXT_MISMATCH
+                ),
+                solicitud=solicitud,
+            )
+            raise Http404
+        lado = request.POST.get('lado', '')
+        tipo = configuracion.get(lado)
+        captura = request.FILES.get('captura')
+        if not tipo or not captura:
+            return JsonResponse(
+                {'ok': False, 'error': 'Indica el lado y realiza la captura.'},
+                status=400,
+            )
+        existente = solicitud.documentos.filter(
+            participante=participante,
+            tipo=tipo,
+            activo=True,
+        ).first()
+        if existente and request.POST.get('confirmar_reemplazo') != '1':
+            return JsonResponse(
+                {
+                    'ok': False,
+                    'error': (
+                        'La captura ya existe. Confirma expresamente '
+                        'que deseas reemplazarla.'
+                    ),
+                },
+                status=409,
+            )
+        try:
+            if existente:
+                documento = reemplazar_documento(
+                    documento=existente,
+                    archivo=captura,
+                    actor=request.user,
+                    origen_captura=OrigenCapturaDocumento.CAMERA,
+                )
+            else:
+                documento = registrar_documento(
+                    solicitud=solicitud,
+                    participante=participante,
+                    tipo=tipo,
+                    origen_captura=OrigenCapturaDocumento.CAMERA,
+                    archivo=captura,
+                    actor=request.user,
+                )
+        except ValidationError as error:
+            return _error_json_validacion(error)
+        tipos_requeridos = (configuracion['frente'], configuracion['reverso'])
+        if (
+            solicitud.documentos.filter(
+                participante=participante,
+                tipo__in=tipos_requeridos,
+                activo=True,
+            ).values('tipo').distinct().count()
+            == 2
+        ):
+            request.session.pop(SESSION_CAPTURA_MOVIL_GRANT, None)
+        return JsonResponse({
+            'ok': True,
+            'lado': lado,
+            'documento_id': str(documento.pk),
+            'estado': documento.get_estado_validacion_display(),
+        })
+
+    documentos = {
+        documento.tipo: documento
+        for documento in solicitud.documentos.filter(
+            participante=participante,
+            tipo__in=(configuracion['frente'], configuracion['reverso']),
+            activo=True,
+        )
+    }
+    return render(
+        request,
+        'financiacion_educativa/captura_identidad.html',
+        {
+            'solicitud': solicitud,
+            'participante': participante,
+            'persona': persona,
+            'documento_frente': documentos.get(configuracion['frente']),
+            'documento_reverso': documentos.get(configuracion['reverso']),
+            'captura_movil_autorizada': captura_movil_autorizada,
+        },
+    )
+
+
+@never_cache
+@login_required(login_url='/accounts/login/')
+@require_POST
+def enviar_enlace_captura_movil_view(request, solicitud_id, persona):
+    solicitud = _solicitud_del_usuario(request, solicitud_id)
+    try:
+        resultado = emitir_enlace_captura_movil(
+            solicitud=solicitud,
+            persona=persona,
+            actor=request.user,
+        )
+    except ValidationError as error:
+        messages.error(request, error.messages[0])
+    else:
+        resultado.enlace.refresh_from_db(fields=['estado_entrega'])
+        if resultado.enlace.estado_entrega != EstadoEntregaCapturaMovil.SENT:
+            messages.error(
+                request,
+                (
+                    'No fue posible enviar el correo. Intenta nuevamente '
+                    'mas tarde.'
+                ),
+            )
+            return redirect(
+                'financiacion_educativa_web:capturar-identidad',
+                solicitud_id=solicitud.pk,
+                persona=persona,
+            )
+        messages.success(
+            request,
+            (
+                'Enviamos el enlace al correo registrado. Revisa tambien la '
+                'carpeta de correo no deseado. El enlace vence en 30 minutos '
+                'y solo puede utilizarse una vez.'
+            ),
+        )
+    return redirect(
+        'financiacion_educativa_web:capturar-identidad',
+        solicitud_id=solicitud.pk,
+        persona=persona,
+    )
+
+
+@never_cache
+@sensitive_post_parameters('token')
+@require_http_methods(['GET', 'POST'])
+def captura_movil_token_view(request):
+    if request.method == 'GET':
+        return render(
+            request,
+            'financiacion_educativa/captura_movil_handoff.html',
+        )
+    if not _es_contexto_movil(request):
+        return _render_requiere_dispositivo_movil(request)
+    token = request.POST.get('token', '')
+    enlace = obtener_enlace_vigente_por_token(token)
+    if not enlace:
+        return _render_enlace_captura_invalido(request)
+    request.session[SESSION_ENLACE_CAPTURA_MOVIL_ID] = str(enlace.pk)
+    destino = reverse(
+        'financiacion_educativa_web:captura-movil-continuar'
+    )
+    if request.user.is_authenticated:
+        return _sin_referer(redirect(destino))
+    login_url = f'{settings.LOGIN_URL}?{urlencode({"next": destino})}'
+    return _sin_referer(redirect(login_url))
+
+
+@never_cache
+@login_required(login_url='/accounts/login/')
+@require_GET
+def captura_movil_continuar_view(request):
+    if not _es_contexto_movil(request):
+        return _render_requiere_dispositivo_movil(request)
+    enlace_id = request.session.pop(
+        SESSION_ENLACE_CAPTURA_MOVIL_ID,
+        None,
+    )
+    resultado = consumir_enlace_captura_movil(
+        enlace_id=enlace_id,
+        usuario=request.user,
+    )
+    if not resultado:
+        return _render_enlace_captura_invalido(request)
+    enlace, persona = resultado
+    request.session[SESSION_CAPTURA_MOVIL_GRANT] = {
+        'enlace_id': str(enlace.pk),
+        'solicitud_id': str(enlace.solicitud_id),
+        'persona': persona,
+    }
+    return _sin_referer(
+        redirect(
+            'financiacion_educativa_web:capturar-identidad',
+            solicitud_id=enlace.solicitud_id,
+            persona=persona,
+        )
+    )
+
+
 @never_cache
 @login_required(login_url='/financiacion-educativa/acceso/')
 @require_http_methods(['GET', 'POST'])
 def reemplazar_documento_view(request, solicitud_id, documento_id):
     solicitud = _solicitud_del_usuario(request, solicitud_id)
-    if solicitud.estado != EstadoSolicitudFinanciacion.PENDING_DOCUMENT:
+    if not _estado_documental_editable(solicitud):
         raise Http404
     documento = get_object_or_404(
         DocumentoFinanciacion,
@@ -441,6 +1002,13 @@ def reemplazar_documento_view(request, solicitud_id, documento_id):
         solicitud=solicitud,
         activo=True,
     )
+    if documento.tipo in {
+        TipoDocumentoFinanciacion.STUDENT_ID_FRONT,
+        TipoDocumentoFinanciacion.STUDENT_ID_BACK,
+        TipoDocumentoFinanciacion.GUARDIAN_ID_FRONT,
+        TipoDocumentoFinanciacion.GUARDIAN_ID_BACK,
+    }:
+        raise Http404
     form = ReemplazoDocumentoForm(request.POST or None, request.FILES or None)
     if request.method == 'POST' and form.is_valid():
         try:
@@ -472,7 +1040,11 @@ def reemplazar_documento_view(request, solicitud_id, documento_id):
 @login_required(login_url='/financiacion-educativa/acceso/')
 @require_GET
 def descargar_documento_view(request, solicitud_id, documento_id):
-    solicitud = _solicitud_del_usuario(request, solicitud_id)
+    solicitud = _solicitud_del_usuario(
+        request,
+        solicitud_id,
+        permitir_revisor=True,
+    )
     documento = get_object_or_404(
         DocumentoFinanciacion,
         pk=documento_id,
@@ -495,17 +1067,52 @@ def descargar_documento_view(request, solicitud_id, documento_id):
 
 @never_cache
 @login_required(login_url='/financiacion-educativa/acceso/')
+@require_GET
+def previsualizar_documento_view(request, solicitud_id, documento_id):
+    solicitud = _solicitud_del_usuario(
+        request,
+        solicitud_id,
+        permitir_revisor=True,
+    )
+    documento = get_object_or_404(
+        DocumentoFinanciacion,
+        pk=documento_id,
+        solicitud=solicitud,
+        activo=True,
+    )
+    if (
+        not documento.archivo
+        or documento.content_type not in MIME_PREVISUALIZABLES
+    ):
+        raise Http404
+    respuesta = FileResponse(
+        documento.archivo.open('rb'),
+        as_attachment=False,
+        filename=documento.nombre_original or 'documento',
+        content_type=documento.content_type,
+    )
+    respuesta['X-Content-Type-Options'] = 'nosniff'
+    respuesta['X-Frame-Options'] = 'SAMEORIGIN'
+    respuesta['Content-Security-Policy'] = (
+        "default-src 'none'; img-src 'self' data:; object-src 'none'; "
+        "base-uri 'none'; frame-ancestors 'self'"
+    )
+    respuesta['Cross-Origin-Resource-Policy'] = 'same-origin'
+    respuesta['Referrer-Policy'] = 'no-referrer'
+    return respuesta
+
+
+@never_cache
+@login_required(login_url='/financiacion-educativa/acceso/')
 @require_http_methods(['GET', 'POST'])
 def matricula_view(request, solicitud_id):
     solicitud = _solicitud_del_usuario(request, solicitud_id)
-    if solicitud.estado != EstadoSolicitudFinanciacion.PENDING_DOCUMENT:
+    if not _estado_documental_editable(solicitud):
         raise Http404
     evidencia = EvidenciaMatricula.objects.filter(solicitud=solicitud).first()
     initial = None
     if evidencia:
         initial = {
-            'institucion_declarada': evidencia.institucion_declarada,
-            'programa_curso': evidencia.programa_curso,
             'periodo_academico': evidencia.periodo_academico,
             'referencia_matricula': evidencia.referencia_matricula,
         }
@@ -514,16 +1121,24 @@ def matricula_view(request, solicitud_id):
         request.FILES or None,
         initial=initial,
         requiere_archivo=evidencia is None,
+        periodo_institucional=solicitud.periodo_academico,
+        codigo_institucional=solicitud.codigo_matricula,
     )
     if request.method == 'POST' and form.is_valid():
         try:
             registrar_o_actualizar_evidencia_matricula(
                 solicitud=solicitud,
                 actor=request.user,
-                institucion_declarada=form.cleaned_data['institucion_declarada'],
-                programa_curso=form.cleaned_data['programa_curso'],
-                periodo_academico=form.cleaned_data['periodo_academico'],
-                referencia_matricula=form.cleaned_data['referencia_matricula'],
+                institucion_declarada=solicitud.institucion.nombre_comercial,
+                programa_curso=solicitud.nombre_curso,
+                periodo_academico=(
+                    solicitud.periodo_academico
+                    or form.cleaned_data['periodo_academico']
+                ),
+                referencia_matricula=(
+                    solicitud.codigo_matricula
+                    or form.cleaned_data['referencia_matricula']
+                ),
                 archivo=form.cleaned_data['archivo'],
             )
         except ValidationError as error:
@@ -542,13 +1157,65 @@ def matricula_view(request, solicitud_id):
 
 @never_cache
 @login_required(login_url='/financiacion-educativa/acceso/')
+@require_GET
+def ficha_matricula_view(request, solicitud_id):
+    solicitud = _solicitud_del_usuario(request, solicitud_id)
+    if solicitud.estado not in {
+        EstadoSolicitudFinanciacion.PENDING_DOCUMENT,
+        EstadoSolicitudFinanciacion.PENDING_MANUAL_REVIEW,
+        EstadoSolicitudFinanciacion.CORRECTION_REQUIRED,
+        EstadoSolicitudFinanciacion.APPROVED,
+        EstadoSolicitudFinanciacion.REJECTED,
+    }:
+        raise Http404
+    return _sin_referer(
+        render(
+            request,
+            'financiacion_educativa/ficha_matricula.html',
+            {
+                'solicitud': solicitud,
+                'mapeo_ficha': construir_mapeo_ficha_matricula(solicitud),
+            },
+        )
+    )
+
+
+@never_cache
+@login_required(login_url='/financiacion-educativa/acceso/')
 @require_http_methods(['POST'])
 def completar_documentacion_view(request, solicitud_id):
     solicitud = _solicitud_del_usuario(request, solicitud_id)
     try:
-        completar_fase_documental(solicitud=solicitud, actor=request.user)
+        resultado = completar_fase_documental(
+            solicitud=solicitud,
+            actor=request.user,
+        )
     except ValidationError:
-        pass
+        pendientes = [
+            requisito
+            for requisito in calcular_requisitos_documentales(solicitud)
+            if not requisito.cumplido
+        ]
+        detalle = '; '.join(
+            requisito.descripcion for requisito in pendientes
+        )
+        messages.error(
+            request,
+            (
+                f'No fue posible enviar el expediente. '
+                f'Pendientes: {detalle}.'
+            ),
+        )
+    else:
+        messages.success(
+            request,
+            (
+                'Expediente enviado a revision correctamente.'
+                if resultado.estado
+                == EstadoSolicitudFinanciacion.PENDING_MANUAL_REVIEW
+                else 'El expediente ya habia sido enviado a revision.'
+            ),
+        )
     return redirect(
         'financiacion_educativa_web:documentacion',
         solicitud_id=solicitud.pk,
@@ -569,7 +1236,7 @@ def _contexto_financiero(solicitud, **extra):
         'solicitud': solicitud,
         'fotografia': fotografia,
         'crear_form': CrearFotografiaFinancieraForm(),
-        'abono_form': ProyeccionAbonoForm(solicitud=solicitud),
+        'abono_form': ProyeccionAbonoForm(),
         'pago_total_form': ProyeccionPagoTotalForm(solicitud=solicitud),
         **extra,
     }
@@ -583,6 +1250,24 @@ def finanzas_view(request, solicitud_id):
     fotografia = _fotografia_activa(solicitud)
     crear_form = CrearFotografiaFinancieraForm(request.POST or None)
     error = ''
+    configuracion_disponible = True
+    if not fotografia:
+        try:
+            seleccionar_configuracion_vigente(
+                fecha_aplicacion=timezone.localdate(),
+            )
+        except ConfiguracionFinancieraNoDisponible:
+            configuracion_disponible = False
+            error = (
+                'No hay una politica financiera activa para la fecha de hoy. '
+                'Solicita a un administrador que configure la financiacion educativa.'
+            )
+        except ConfiguracionFinancieraAmbigua:
+            configuracion_disponible = False
+            error = (
+                'La configuracion financiera requiere revision administrativa '
+                'antes de calcular el plan.'
+            )
     if request.method == 'POST':
         if fotografia:
             return redirect(
@@ -596,8 +1281,26 @@ def finanzas_view(request, solicitud_id):
                     fecha_inicio_plan=crear_form.cleaned_data['fecha_inicio_plan'],
                     actor=request.user,
                 )
-            except ValidationError as exc:
-                error = ' '.join(exc.messages)
+            except ConfiguracionFinancieraNoDisponible:
+                configuracion_disponible = False
+                error = (
+                    'No hay una politica financiera activa para la fecha de hoy. '
+                    'Solicita a un administrador que configure la financiacion educativa.'
+                )
+            except ConfiguracionFinancieraAmbigua:
+                configuracion_disponible = False
+                error = (
+                    'La configuracion financiera requiere revision administrativa '
+                    'antes de calcular el plan.'
+                )
+            except ValidationError:
+                logger.exception(
+                    'Fallo controlado al calcular financiacion educativa.'
+                )
+                error = (
+                    'No fue posible calcular el plan con los datos actuales. '
+                    'Revisa la fecha e intenta nuevamente.'
+                )
             else:
                 return redirect(
                     'financiacion_educativa_web:finanzas',
@@ -607,6 +1310,7 @@ def finanzas_view(request, solicitud_id):
         solicitud,
         crear_form=crear_form,
         error=error,
+        configuracion_disponible=configuracion_disponible,
     )
     return render(
         request,
@@ -623,7 +1327,7 @@ def proyectar_abono_view(request, solicitud_id):
     fotografia = _fotografia_activa(solicitud)
     if not fotografia:
         raise Http404
-    form = ProyeccionAbonoForm(request.POST, solicitud=solicitud)
+    form = ProyeccionAbonoForm(request.POST)
     resultado = None
     if form.is_valid():
         try:
@@ -631,15 +1335,26 @@ def proyectar_abono_view(request, solicitud_id):
                 fotografia=fotografia,
                 valor_pago=form.cleaned_data['valor_pago'],
                 fecha_efectiva=form.cleaned_data['fecha_efectiva'],
-                cuotas_cubiertas=form.cleaned_data['cuotas_cubiertas'],
-                participante_pagante_id=getattr(
-                    form.cleaned_data['participante_pagante'],
-                    'pk',
-                    None,
-                ),
             )
         except ValidationError as exc:
             _agregar_error_formulario(form, exc)
+            messages.error(
+                request,
+                'No fue posible calcular la proyeccion. Revisa los campos marcados.',
+            )
+        else:
+            messages.success(
+                request,
+                (
+                    'Proyeccion calculada. Es informativa y no registra '
+                    'ningun pago ni movimiento.'
+                ),
+            )
+    else:
+        messages.error(
+            request,
+            'Revisa los campos marcados para calcular la proyeccion.',
+        )
     return render(
         request,
         'financiacion_educativa/finanzas.html',
@@ -647,6 +1362,7 @@ def proyectar_abono_view(request, solicitud_id):
             solicitud,
             abono_form=form,
             proyeccion_abono=resultado,
+            focus_projections=True,
         ),
     )
 
@@ -675,6 +1391,23 @@ def proyectar_pago_total_view(request, solicitud_id):
             )
         except ValidationError as exc:
             _agregar_error_formulario(form, exc)
+            messages.error(
+                request,
+                'No fue posible calcular la liquidacion. Revisa los campos marcados.',
+            )
+        else:
+            messages.success(
+                request,
+                (
+                    'Liquidacion informativa calculada. No registra '
+                    'ningun pago ni cancela la obligacion.'
+                ),
+            )
+    else:
+        messages.error(
+            request,
+            'Revisa los campos marcados para calcular la liquidacion.',
+        )
     return render(
         request,
         'financiacion_educativa/finanzas.html',
@@ -682,5 +1415,6 @@ def proyectar_pago_total_view(request, solicitud_id):
             solicitud,
             pago_total_form=form,
             proyeccion_pago_total=resultado,
+            focus_projections=True,
         ),
     )

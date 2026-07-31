@@ -1,129 +1,272 @@
-{% extends "account/libranza/_base.html" %}
+{% extends "financiacion_educativa/_base.html" %}
+{% load financiacion_format %}
 
-{% block title %}Documentacion educativa{% endblock %}
+{% block title %}Expediente educativo | Aprobado{% endblock %}
 
 {% block content %}
-{% include "account/common/_auth_content_styles.html" %}
-<main class="section-main">
-  <section class="hero-section-account">
-    <div class="container-account" style="max-width: 920px;">
-      <div class="div-card-agent-account text-start">
-        <h1>Documentacion educativa</h1>
-        <p class="auth-desc">
-          La edad y las relaciones registradas son declaradas y requieren revision.
-        </p>
+<section class="edu-flow-page">
+    <div class="edu-flow-container">
+        {% include "financiacion_educativa/_progress.html" with current_step="documents" %}
+        <div class="edu-flow-grid">
+            <article class="edu-surface">
+                <div class="edu-page-heading">
+                    <p class="edu-eyebrow">Expediente educativo</p>
+                    <h1>Completa la informaci&oacute;n requerida</h1>
+                    <p>Revisa lo pendiente antes de enviar el expediente. La edad, identidad y relaciones registradas son declaradas y requieren validaci&oacute;n.</p>
+                </div>
+                {% if solicitud.estado == "PENDING_MANUAL_REVIEW" %}
+                    <div class="alert-info" role="status">
+                        <strong>Expediente enviado.</strong> La documentaci&oacute;n se encuentra en revisi&oacute;n de identidad.
+                    </div>
+                {% elif solicitud.estado == "CORRECTION_REQUIRED" %}
+                    <div class="edu-error-summary" role="status">
+                        <strong>Necesitamos una correcci&oacute;n.</strong>
+                        {{ ultima_decision.mensaje_solicitante }}
+                    </div>
+                {% elif solicitud.estado == "APPROVED" %}
+                    <div class="alert-info" role="status">
+                        <strong>Financiaci&oacute;n aprobada.</strong>
+                        La instituci&oacute;n aliada puede activar el curso.
+                    </div>
+                {% elif solicitud.estado == "REJECTED" %}
+                    <div class="edu-error-summary" role="status">
+                        <strong>Solicitud rechazada.</strong>
+                        {{ ultima_decision.mensaje_solicitante }}
+                    </div>
+                {% endif %}
 
-        <h2 class="h5 mt-4">Requisitos</h2>
-        <ul class="list-group mb-4">
-          {% for requisito in requisitos %}
-            <li class="list-group-item d-flex justify-content-between align-items-center">
-              <span>{{ requisito.descripcion }}</span>
-              {% if requisito.cumplido %}
-                <span class="badge text-bg-success">Completo</span>
-              {% else %}
-                <span class="badge text-bg-warning">Pendiente</span>
-              {% endif %}
-            </li>
-          {% endfor %}
-        </ul>
+                <section class="edu-section-block" aria-labelledby="requirements-title">
+                    <div class="edu-section-title">
+                        <h2 id="requirements-title">Estado de los requisitos</h2>
+                    </div>
+                    <ul class="edu-requirements">
+                        {% for requisito in requisitos %}
+                            <li class="edu-requirement {% if requisito.cumplido %}is-complete{% endif %}">
+                                <span>
+                                    {{ requisito.descripcion }}
+                                    {% if not requisito.cumplido %}
+                                        {% if requisito.codigo == "STUDENT" %}
+                                            <a href="{% url 'financiacion_educativa_web:participante-nuevo' solicitud.id %}?tipo=estudiante">Completar</a>
+                                        {% elif requisito.codigo == "GUARDIAN" %}
+                                            <a href="{% url 'financiacion_educativa_web:participante-nuevo' solicitud.id %}?tipo=tutor">Registrar tutor</a>
+                                        {% elif requisito.codigo == "STUDENT_ID_FRONT" or requisito.codigo == "STUDENT_ID_BACK" %}
+                                            <a href="{% url 'financiacion_educativa_web:capturar-identidad' solicitud.id 'estudiante' %}">Abrir c&aacute;mara</a>
+                                        {% elif requisito.codigo == "GUARDIAN_ID_FRONT" or requisito.codigo == "GUARDIAN_ID_BACK" %}
+                                            <a href="{% url 'financiacion_educativa_web:capturar-identidad' solicitud.id 'tutor' %}">Abrir c&aacute;mara</a>
+                                        {% elif requisito.codigo == "INCOME_CERTIFICATE" and deudor %}
+                                            <a href="{% url 'financiacion_educativa_web:documento-cargar' solicitud.id %}?tipo=INCOME_CERTIFICATE&amp;participante={{ deudor.id }}">Cargar certificado</a>
+                                        {% elif requisito.codigo == "DEBTOR_IDENTIFICATION" %}
+                                            <a href="{% url 'financiacion_educativa_web:documento-cargar' solicitud.id %}">Cargar o corregir</a>
+                                        {% elif requisito.codigo == "ENROLLMENT_EVIDENCE" %}
+                                            <a href="{% url 'financiacion_educativa_web:matricula' solicitud.id %}">Completar evidencia</a>
+                                        {% endif %}
+                                    {% endif %}
+                                </span>
+                                {% if requisito.cumplido %}
+                                    <span class="edu-badge edu-badge-success"><i class="bi bi-check-circle" aria-hidden="true"></i> Completo</span>
+                                {% else %}
+                                    <span class="edu-badge edu-badge-warning"><i class="bi bi-clock" aria-hidden="true"></i> Pendiente</span>
+                                {% endif %}
+                            </li>
+                        {% endfor %}
+                    </ul>
+                </section>
 
-        <div class="d-flex justify-content-between align-items-center mb-2">
-          <h2 class="h5 mb-0">Personas y roles</h2>
-          {% if solicitud.estado == "PENDING_DOCUMENT" %}
-            <a class="btn btn-outline-primary" href="{% url 'financiacion_educativa_web:participante-nuevo' solicitud.id %}">
-              Agregar persona
-            </a>
-          {% endif %}
-        </div>
-        <div class="table-responsive mb-4">
-          <table class="table align-middle">
-            <thead><tr><th>Persona</th><th>Identificacion</th><th>Roles</th><th></th></tr></thead>
-            <tbody>
-              {% for participante in participantes %}
-                <tr>
-                  <td>{{ participante.nombre_completo }}</td>
-                  <td>{{ participante.identificacion_enmascarada }}</td>
-                  <td>
-                    {% for asignacion in participante.roles.all %}
-                      <span class="badge text-bg-light border">{{ asignacion.get_rol_display }}</span>
-                    {% empty %}Sin rol{% endfor %}
-                  </td>
-                  <td>
-                    {% if solicitud.estado == "PENDING_DOCUMENT" %}
-                      <a href="{% url 'financiacion_educativa_web:participante-editar' solicitud.id participante.id %}">Editar</a>
+                <section class="edu-section-block" aria-labelledby="people-title">
+                    <div class="edu-section-title">
+                        <h2 id="people-title">Personas del expediente</h2>
+                    </div>
+                    <div class="edu-people-list">
+                        <div class="edu-person-row">
+                            <div>
+                                <span class="edu-person-role">Estudiante titular</span>
+                                <strong>{{ solicitud.nombres }} {{ solicitud.apellidos }}</strong>
+                            </div>
+                            {% if estudiante %}
+                                <span class="edu-document-meta">{{ estudiante.identificacion_enmascarada }}</span>
+                                {% if documental_editable and not solicitud.identidad_estudiante_completa %}
+                                    <a href="{% url 'financiacion_educativa_web:participante-editar' solicitud.id estudiante.id %}">Editar identificaci&oacute;n</a>
+                                {% endif %}
+                            {% elif documental_editable %}
+                                <a class="edu-button-secondary" href="{% url 'financiacion_educativa_web:participante-nuevo' solicitud.id %}?tipo=estudiante">Completar identificaci&oacute;n</a>
+                            {% endif %}
+                        </div>
+                        {% if requiere_tutor %}
+                        <div class="edu-person-row">
+                            <div>
+                                <span class="edu-person-role">Tutor o responsable</span>
+                                {% if tutor %}
+                                    <strong>{{ tutor.nombre_completo }}</strong>
+                                    <small>{{ tutor.get_relacion_estudiante_display }}</small>
+                                {% else %}
+                                    <strong>Pendiente</strong>
+                                    <small>El estudiante menor requiere una persona adulta relacionada.</small>
+                                {% endif %}
+                            </div>
+                            {% if tutor %}
+                                <span class="edu-document-meta">{{ tutor.identificacion_enmascarada }}</span>
+                                {% if documental_editable %}
+                                    <a href="{% url 'financiacion_educativa_web:participante-editar' solicitud.id tutor.id %}">Editar tutor</a>
+                                {% endif %}
+                            {% elif documental_editable and requiere_tutor %}
+                                <a class="edu-button-secondary" href="{% url 'financiacion_educativa_web:participante-nuevo' solicitud.id %}?tipo=tutor">Registrar tutor</a>
+                            {% endif %}
+                        </div>
+                        {% else %}
+                            <div class="alert-info" role="status">
+                                No se requiere tutor para esta solicitud. El estudiante adulto act&uacute;a como solicitante contractual.
+                            </div>
+                        {% endif %}
+                    </div>
+                </section>
+
+                <section class="edu-section-block" aria-labelledby="documents-title">
+                    <div class="edu-section-title">
+                        <h2 id="documents-title">Documentos aportados</h2>
+                        {% if documental_editable %}
+                            <div class="edu-inline-actions">
+                                {% if estudiante %}
+                                    <a class="edu-button-secondary" href="{% url 'financiacion_educativa_web:capturar-identidad' solicitud.id 'estudiante' %}">
+                                        <i class="bi bi-camera" aria-hidden="true"></i> Identificaci&oacute;n estudiante
+                                    </a>
+                                {% endif %}
+                                {% if requiere_tutor and tutor %}
+                                    <a class="edu-button-secondary" href="{% url 'financiacion_educativa_web:capturar-identidad' solicitud.id 'tutor' %}">
+                                        <i class="bi bi-camera" aria-hidden="true"></i> Identificaci&oacute;n tutor
+                                    </a>
+                                {% endif %}
+                                <a class="edu-button-secondary" href="{% url 'financiacion_educativa_web:documento-cargar' solicitud.id %}">
+                                    <i class="bi bi-cloud-arrow-up" aria-hidden="true"></i> Cargar soporte
+                                </a>
+                            </div>
+                        {% endif %}
+                    </div>
+                    {% if documentos %}
+                        <div class="edu-document-list">
+                            {% for documento in documentos %}
+                                <div class="edu-document-row">
+                                    <div>
+                                        <strong class="edu-document-name">{{ documento.get_tipo_display }}</strong>
+                                        <span class="edu-document-meta">
+                                            {% if documento.participante %}Pertenece a {{ documento.participante.nombre_completo }}{% else %}Documento general de la solicitud{% endif %}
+                                        </span>
+                                    </div>
+                                    <div>
+                                        <span class="edu-badge">{{ documento.get_estado_escaneo_display }}</span>
+                                        <span class="edu-badge {% if documento.estado_validacion == 'APPROVED' %}edu-badge-success{% elif documento.estado_validacion == 'REJECTED' %}edu-badge-warning{% endif %}">
+                                            {{ documento.get_estado_validacion_display }}
+                                        </span>
+                                    </div>
+                                    <div class="edu-inline-actions">
+                                        {% if documento.content_type == "application/pdf" or documento.content_type == "image/jpeg" or documento.content_type == "image/png" %}
+                                            <button
+                                                class="edu-inline-button"
+                                                type="button"
+                                                data-document-preview
+                                                data-preview-url="{% url 'financiacion_educativa_web:documento-previsualizar' solicitud.id documento.id %}"
+                                                data-download-url="{% url 'financiacion_educativa_web:documento-descargar' solicitud.id documento.id %}"
+                                                data-preview-type="{{ documento.content_type }}"
+                                                data-preview-title="{{ documento.get_tipo_display }}"
+                                            >Previsualizar</button>
+                                        {% endif %}
+                                        <a href="{% url 'financiacion_educativa_web:documento-descargar' solicitud.id documento.id %}">Descargar</a>
+                                        {% if documental_editable %}
+                                            {% if documento.tipo == "STUDENT_ID_FRONT" or documento.tipo == "STUDENT_ID_BACK" %}
+                                                <a href="{% url 'financiacion_educativa_web:capturar-identidad' solicitud.id 'estudiante' %}">Repetir captura</a>
+                                            {% elif documento.tipo == "GUARDIAN_ID_FRONT" or documento.tipo == "GUARDIAN_ID_BACK" %}
+                                                <a href="{% url 'financiacion_educativa_web:capturar-identidad' solicitud.id 'tutor' %}">Repetir captura</a>
+                                            {% else %}
+                                                <a href="{% url 'financiacion_educativa_web:documento-reemplazar' solicitud.id documento.id %}">Reemplazar</a>
+                                            {% endif %}
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="edu-empty">A&uacute;n no hay documentos cargados.</div>
                     {% endif %}
-                  </td>
-                </tr>
-              {% empty %}
-                <tr><td colspan="4">Aun no hay personas registradas.</td></tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
+                </section>
 
-        <div class="d-flex justify-content-between align-items-center mb-2">
-          <h2 class="h5 mb-0">Documentos</h2>
-          {% if solicitud.estado == "PENDING_DOCUMENT" %}
-            <a class="btn btn-outline-primary" href="{% url 'financiacion_educativa_web:documento-cargar' solicitud.id %}">
-              Cargar documento
-            </a>
-          {% endif %}
-        </div>
-        <div class="table-responsive mb-4">
-          <table class="table align-middle">
-            <thead><tr><th>Tipo</th><th>Escaneo</th><th>Revision</th><th></th></tr></thead>
-            <tbody>
-              {% for documento in documentos %}
-                <tr>
-                  <td>{{ documento.get_tipo_display }}</td>
-                  <td>{{ documento.get_estado_escaneo_display }}</td>
-                  <td>{{ documento.get_estado_validacion_display }}</td>
-                  <td>
-                    <a href="{% url 'financiacion_educativa_web:documento-descargar' solicitud.id documento.id %}">Descargar</a>
-                    {% if solicitud.estado == "PENDING_DOCUMENT" %}
-                      <span aria-hidden="true"> | </span>
-                      <a href="{% url 'financiacion_educativa_web:documento-reemplazar' solicitud.id documento.id %}">Reemplazar</a>
+                <section class="edu-section-block" aria-labelledby="enrollment-title">
+                    <div class="edu-section-title">
+                        <h2 id="enrollment-title">Ficha y evidencia acad&eacute;mica</h2>
+                        {% if documental_editable %}
+                            <a class="edu-button-secondary" href="{% url 'financiacion_educativa_web:matricula' solicitud.id %}">
+                                <i class="bi bi-journal-plus" aria-hidden="true"></i>
+                                {% if matricula %}Actualizar evidencia{% else %}Registrar evidencia{% endif %}
+                            </a>
+                        {% endif %}
+                    </div>
+                    {% if matricula %}
+                        <div class="edu-document-row">
+                            <div>
+                                <strong class="edu-document-name">{{ matricula.programa_curso }}</strong>
+                                <span class="edu-document-meta">{{ matricula.periodo_academico }}</span>
+                            </div>
+                            <span class="edu-badge">{{ matricula.get_estado_display }}</span>
+                            <span class="edu-document-meta">Sujeta a revisi&oacute;n</span>
+                        </div>
+                    {% else %}
+                        <div class="edu-empty">No se ha registrado evidencia de matr&iacute;cula.</div>
                     {% endif %}
-                  </td>
-                </tr>
-              {% empty %}
-                <tr><td colspan="4">Aun no hay documentos cargados.</td></tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
+                    <a class="edu-inline-link" href="{% url 'financiacion_educativa_web:ficha-matricula' solicitud.id %}">Consultar datos disponibles para la ficha</a>
+                </section>
 
-        <h2 class="h5">Matricula</h2>
-        {% if matricula %}
-          <p>
-            {{ matricula.programa_curso }} · {{ matricula.periodo_academico }} ·
-            {{ matricula.get_estado_display }}
-          </p>
-        {% else %}
-          <p>No se ha registrado evidencia de matricula.</p>
-        {% endif %}
-        {% if solicitud.estado == "PENDING_DOCUMENT" %}
-          <p>
-            <a class="btn btn-outline-primary" href="{% url 'financiacion_educativa_web:matricula' solicitud.id %}">
-              {% if matricula %}Actualizar matricula{% else %}Registrar matricula{% endif %}
-            </a>
-          </p>
-          <form method="post" action="{% url 'financiacion_educativa_web:documentacion-completar' solicitud.id %}">
-            {% csrf_token %}
-            <button class="btn-account" type="submit">Finalizar fase documental</button>
-          </form>
-        {% else %}
-          <div class="alert alert-info mb-0">
-            La documentacion fue enviada a revision de identidad.
-          </div>
-        {% endif %}
-        <p class="mt-3 mb-0">
-          <a href="{% url 'financiacion_educativa_web:finanzas' solicitud.id %}">
-            Consultar financiacion y proyecciones
-          </a>
-        </p>
-      </div>
+                <section class="edu-section-block" aria-labelledby="finance-review-title">
+                    <div class="edu-section-title">
+                        <h2 id="finance-review-title">Financiaci&oacute;n</h2>
+                        <a class="edu-button-secondary" href="{% url 'financiacion_educativa_web:finanzas' solicitud.id %}">Consultar financiaci&oacute;n</a>
+                    </div>
+                    {% if fotografia %}
+                        <dl class="edu-finance-compact">
+                            <div><dt>Valor del plan</dt><dd>{{ fotografia.valor_financiado|cop }}</dd></div>
+                            <div><dt>Plazo</dt><dd>{{ fotografia.plazo_meses }} meses</dd></div>
+                            <div><dt>Capital financiado</dt><dd>{{ fotografia.capital_financiado|cop }}</dd></div>
+                            <div class="is-emphasis"><dt>Cuota informativa</dt><dd>{{ fotografia.valor_cuota_estimada|cop }}</dd></div>
+                        </dl>
+                    {% else %}
+                        <div class="edu-empty">La consulta financiera a&uacute;n no ha sido generada.</div>
+                    {% endif %}
+                </section>
+
+                <section id="enviar-revision" class="edu-section-block">
+                    {% if documental_editable %}
+                        {% if pendientes %}
+                            <div class="edu-error-summary" role="status">
+                                El expediente tiene {{ pendientes|length }} requisito(s) pendiente(s). Puedes enviarlo cuando todos figuren como completos.
+                            </div>
+                        {% endif %}
+                        <div class="edu-form-actions">
+                            <form class="edu-form" method="post" action="{% url 'financiacion_educativa_web:documentacion-completar' solicitud.id %}">
+                                {% csrf_token %}
+                                <button class="edu-button" type="submit">Enviar expediente a revisi&oacute;n</button>
+                            </form>
+                        </div>
+                    {% else %}
+                        <a href="{% url 'financiacion_educativa_web:finanzas' solicitud.id %}">Consultar financiaci&oacute;n y proyecciones</a>
+                    {% endif %}
+                </section>
+            </article>
+            {% include "financiacion_educativa/_application_summary.html" %}
+        </div>
     </div>
-  </section>
-</main>
+</section>
+
+<dialog class="edu-document-viewer" data-document-dialog aria-labelledby="document-viewer-title">
+    <div class="edu-document-viewer-header">
+        <h2 id="document-viewer-title" data-document-title>Previsualizaci&oacute;n protegida</h2>
+        <button class="edu-icon-button" type="button" data-document-close aria-label="Cerrar previsualizaci&oacute;n">
+            <i class="bi bi-x-lg" aria-hidden="true"></i>
+        </button>
+    </div>
+    <div class="edu-document-viewer-body">
+        <img data-document-image alt="" hidden>
+        <iframe data-document-pdf title="Documento PDF" hidden></iframe>
+    </div>
+    <div class="edu-document-viewer-footer">
+        <p>Vista privada. El archivo no se comparte con servicios externos.</p>
+        <a class="edu-button-secondary" data-document-download href="#">Descargar</a>
+    </div>
+</dialog>
 {% endblock %}

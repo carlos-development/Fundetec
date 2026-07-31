@@ -8,18 +8,17 @@ from financiacion_educativa.choices import (
     EstadoEvidenciaMatricula,
     EstadoSolicitudFinanciacion,
     EstadoValidacionDocumento,
+    RequisitoCorreccionEducativa,
     RolParticipante,
+    TipoDecisionRevisionEducativa,
     TipoDocumentoFinanciacion,
 )
-from financiacion_educativa.models import (
-    EvidenciaMatricula,
-    SolicitudFinanciacionEducativa,
-)
+from financiacion_educativa.models import EvidenciaMatricula, SolicitudFinanciacionEducativa
 from financiacion_educativa.services.estados import transicionar_solicitud
 from financiacion_educativa.services.participantes import (
-    estudiante_requiere_tutor,
-    fecha_referencia_solicitud,
+    solicitud_requiere_tutor,
 )
+from financiacion_educativa.services.terminos import terminos_obligatorios_aceptados
 
 
 @dataclass(frozen=True)
@@ -29,14 +28,118 @@ class RequisitoDocumental:
     cumplido: bool
 
 
-def _documento_cumple(solicitud, tipo, participante=None):
+def _documento_apto_para_revision(solicitud, tipo, participante=None):
     return solicitud.documentos.filter(
         tipo=tipo,
         participante=participante,
         activo=True,
-        estado_escaneo=EstadoEscaneoDocumento.SAFE,
-        estado_validacion=EstadoValidacionDocumento.APPROVED,
+    ).exclude(
+        estado_escaneo=EstadoEscaneoDocumento.BLOCKED,
+    ).exclude(
+        estado_validacion=EstadoValidacionDocumento.REJECTED,
     ).exists()
+
+
+def _requisito_actualizado_despues_de_correccion(
+    *,
+    solicitud,
+    requisito,
+    decision,
+    estudiante,
+    tutor,
+    deudor,
+    evidencia,
+):
+    if requisito == RequisitoCorreccionEducativa.STUDENT:
+        return bool(
+            estudiante
+            and estudiante.actualizado_en > decision.creada_en
+        )
+    if requisito == RequisitoCorreccionEducativa.GUARDIAN:
+        return bool(tutor and tutor.actualizado_en > decision.creada_en)
+
+    documentos = {
+        RequisitoCorreccionEducativa.STUDENT_ID_FRONT: (
+            TipoDocumentoFinanciacion.STUDENT_ID_FRONT,
+            estudiante,
+        ),
+        RequisitoCorreccionEducativa.STUDENT_ID_BACK: (
+            TipoDocumentoFinanciacion.STUDENT_ID_BACK,
+            estudiante,
+        ),
+        RequisitoCorreccionEducativa.GUARDIAN_ID_FRONT: (
+            TipoDocumentoFinanciacion.GUARDIAN_ID_FRONT,
+            tutor,
+        ),
+        RequisitoCorreccionEducativa.GUARDIAN_ID_BACK: (
+            TipoDocumentoFinanciacion.GUARDIAN_ID_BACK,
+            tutor,
+        ),
+        RequisitoCorreccionEducativa.INCOME_CERTIFICATE: (
+            TipoDocumentoFinanciacion.INCOME_CERTIFICATE,
+            deudor,
+        ),
+    }
+    if requisito in documentos:
+        tipo, participante = documentos[requisito]
+        return solicitud.documentos.filter(
+            tipo=tipo,
+            participante=participante,
+            activo=True,
+            actualizado_en__gt=decision.creada_en,
+        ).exists()
+    if requisito == RequisitoCorreccionEducativa.ENROLLMENT_EVIDENCE:
+        return bool(
+            evidencia
+            and (
+                evidencia.actualizada_en > decision.creada_en
+                or evidencia.documento_soporte.actualizado_en
+                > decision.creada_en
+            )
+        )
+    return False
+
+
+def _aplicar_correccion_vigente(
+    *,
+    solicitud,
+    requisitos,
+    estudiante,
+    tutor,
+    deudor,
+    evidencia,
+):
+    if solicitud.estado != EstadoSolicitudFinanciacion.CORRECTION_REQUIRED:
+        return requisitos
+    decision = solicitud.decisiones_revision.filter(
+        tipo=TipoDecisionRevisionEducativa.CORRECTION_REQUESTED,
+    ).first()
+    if not decision:
+        return requisitos
+
+    pendientes = set(decision.requisitos_pendientes)
+    return [
+        RequisitoDocumental(
+            codigo=requisito.codigo,
+            descripcion=requisito.descripcion,
+            cumplido=(
+                requisito.cumplido
+                and (
+                    requisito.codigo not in pendientes
+                    or _requisito_actualizado_despues_de_correccion(
+                        solicitud=solicitud,
+                        requisito=requisito.codigo,
+                        decision=decision,
+                        estudiante=estudiante,
+                        tutor=tutor,
+                        deudor=deudor,
+                        evidencia=evidencia,
+                    )
+                )
+            ),
+        )
+        for requisito in requisitos
+    ]
 
 
 def calcular_requisitos_documentales(solicitud):
@@ -53,30 +156,31 @@ def calcular_requisitos_documentales(solicitud):
 
     requisitos.append(
         RequisitoDocumental(
+            'TERMS',
+            'Terminos y autorizaciones aceptados',
+            terminos_obligatorios_aceptados(solicitud=solicitud),
+        )
+    )
+    requisitos.append(
+        RequisitoDocumental(
             'STUDENT',
             'Registrar la persona estudiante',
             estudiante is not None and estudiante.fecha_nacimiento is not None,
         )
     )
-    requiere_tutor = bool(
-        estudiante
-        and estudiante.fecha_nacimiento
-        and estudiante_requiere_tutor(
-            estudiante,
-            fecha_referencia=fecha_referencia_solicitud(solicitud),
+    requiere_tutor = solicitud_requiere_tutor(solicitud)
+    if requiere_tutor:
+        requisitos.append(
+            RequisitoDocumental(
+                'GUARDIAN',
+                'Registrar tutor o representante declarado',
+                tutor is not None,
+            )
         )
-    )
-    requisitos.append(
-        RequisitoDocumental(
-            'GUARDIAN',
-            'Registrar tutor o representante declarado',
-            not requiere_tutor or tutor is not None,
-        )
-    )
     requisitos.append(
         RequisitoDocumental(
             'POTENTIAL_DEBTOR',
-            'Identificar un posible deudor principal',
+            'Definir el responsable contractual',
             deudor is not None,
         )
     )
@@ -84,16 +188,22 @@ def calcular_requisitos_documentales(solicitud):
     if estudiante:
         requisitos.append(
             RequisitoDocumental(
-                'STUDENT_IDENTIFICATION',
-                'Identificacion del estudiante aceptada',
-                _documento_cumple(
-                    solicitud,
-                    TipoDocumentoFinanciacion.STUDENT_IDENTIFICATION,
-                    estudiante,
-                )
-                or _documento_cumple(
+                'STUDENT_ID_FRONT',
+                'Frente de la identificacion del estudiante capturado por camara',
+                _documento_apto_para_revision(
                     solicitud,
                     TipoDocumentoFinanciacion.STUDENT_ID_FRONT,
+                    estudiante,
+                ),
+            )
+        )
+        requisitos.append(
+            RequisitoDocumental(
+                'STUDENT_ID_BACK',
+                'Reverso de la identificacion del estudiante capturado por camara',
+                _documento_apto_para_revision(
+                    solicitud,
+                    TipoDocumentoFinanciacion.STUDENT_ID_BACK,
                     estudiante,
                 ),
             )
@@ -101,16 +211,22 @@ def calcular_requisitos_documentales(solicitud):
     if requiere_tutor and tutor:
         requisitos.append(
             RequisitoDocumental(
-                'GUARDIAN_IDENTIFICATION',
-                'Identificacion del tutor aceptada',
-                _documento_cumple(
-                    solicitud,
-                    TipoDocumentoFinanciacion.GUARDIAN_IDENTIFICATION,
-                    tutor,
-                )
-                or _documento_cumple(
+                'GUARDIAN_ID_FRONT',
+                'Frente de la identificacion del tutor capturado por camara',
+                _documento_apto_para_revision(
                     solicitud,
                     TipoDocumentoFinanciacion.GUARDIAN_ID_FRONT,
+                    tutor,
+                ),
+            )
+        )
+        requisitos.append(
+            RequisitoDocumental(
+                'GUARDIAN_ID_BACK',
+                'Reverso de la identificacion del tutor capturado por camara',
+                _documento_apto_para_revision(
+                    solicitud,
+                    TipoDocumentoFinanciacion.GUARDIAN_ID_BACK,
                     tutor,
                 ),
             )
@@ -119,10 +235,22 @@ def calcular_requisitos_documentales(solicitud):
         requisitos.append(
             RequisitoDocumental(
                 'DEBTOR_IDENTIFICATION',
-                'Identificacion del posible deudor aceptada',
-                _documento_cumple(
+                'Identificacion del responsable contractual aportada',
+                _documento_apto_para_revision(
                     solicitud,
                     TipoDocumentoFinanciacion.DEBTOR_IDENTIFICATION,
+                    deudor,
+                ),
+            )
+        )
+    if deudor:
+        requisitos.append(
+            RequisitoDocumental(
+                'INCOME_CERTIFICATE',
+                'Certificado de ingresos del responsable contractual aportado',
+                _documento_apto_para_revision(
+                    solicitud,
+                    TipoDocumentoFinanciacion.INCOME_CERTIFICATE,
                     deudor,
                 ),
             )
@@ -132,23 +260,30 @@ def calcular_requisitos_documentales(solicitud):
         evidencia = solicitud.evidencia_matricula
     except EvidenciaMatricula.DoesNotExist:
         evidencia = None
-    evidencia_aceptada = bool(
+    evidencia_apta = bool(
         evidencia
-        and evidencia.estado == EstadoEvidenciaMatricula.ACCEPTED
+        and evidencia.estado != EstadoEvidenciaMatricula.REJECTED
         and evidencia.documento_soporte.activo
         and evidencia.documento_soporte.estado_escaneo
-        == EstadoEscaneoDocumento.SAFE
+        != EstadoEscaneoDocumento.BLOCKED
         and evidencia.documento_soporte.estado_validacion
-        == EstadoValidacionDocumento.APPROVED
+        != EstadoValidacionDocumento.REJECTED
     )
     requisitos.append(
         RequisitoDocumental(
             'ENROLLMENT_EVIDENCE',
-            'Evidencia de matricula aceptada',
-            evidencia_aceptada,
+            'Evidencia de matricula aportada y sin bloqueos',
+            evidencia_apta,
         )
     )
-    return requisitos
+    return _aplicar_correccion_vigente(
+        solicitud=solicitud,
+        requisitos=requisitos,
+        estudiante=estudiante,
+        tutor=tutor,
+        deudor=deudor,
+        evidencia=evidencia,
+    )
 
 
 def fase_documental_completa(solicitud):
@@ -165,7 +300,10 @@ def completar_fase_documental(*, solicitud, actor):
         raise ValidationError('La solicitud no esta disponible.')
     if solicitud.estado == EstadoSolicitudFinanciacion.PENDING_MANUAL_REVIEW:
         return solicitud
-    if solicitud.estado != EstadoSolicitudFinanciacion.PENDING_DOCUMENT:
+    if solicitud.estado not in {
+        EstadoSolicitudFinanciacion.PENDING_DOCUMENT,
+        EstadoSolicitudFinanciacion.CORRECTION_REQUIRED,
+    }:
         raise ValidationError('La solicitud no esta en fase documental.')
 
     pendientes = [

@@ -26,7 +26,7 @@ from financiacion_educativa.web.views import SESSION_INVITACION_ID
 
 
 DATOS_REGISTRO = {
-    'email': 'nuevo@example.com',
+    'email': 'ana@example.com',
     'first_name': 'Nuevo',
     'last_name': 'Usuario',
     'password1': 'ClaveEducativa-2026',
@@ -41,8 +41,8 @@ class FlujoWebContinuacionTests(TestCase):
         self.emitida = emitir_invitacion_continuacion(solicitud=self.solicitud)
         User = get_user_model()
         self.usuario = User.objects.create_user(
-            username='existente@example.com',
-            email='existente@example.com',
+            username='ana@example.com',
+            email='ana@example.com',
             password='ClaveExistente-2026',
         )
 
@@ -123,7 +123,7 @@ class FlujoWebContinuacionTests(TestCase):
         respuesta_login = self.client.post(
             reverse('financiacion_educativa_web:acceso'),
             {
-                'username': 'existente@example.com',
+                'username': 'ana@example.com',
                 'password': 'ClaveExistente-2026',
             },
         )
@@ -151,6 +151,7 @@ class FlujoWebContinuacionTests(TestCase):
         self.assertNotIn(SESSION_INVITACION_ID, self.client.session)
 
     def test_usuario_nuevo_se_registra_sin_crear_duplicados(self):
+        self.usuario.delete()
         self._abrir()
         respuesta = self.client.post(
             reverse('financiacion_educativa_web:registro'),
@@ -162,7 +163,7 @@ class FlujoWebContinuacionTests(TestCase):
             reverse('financiacion_educativa_web:confirmar'),
         )
         User = get_user_model()
-        usuario = User.objects.get(email='nuevo@example.com')
+        usuario = User.objects.get(email='ana@example.com')
         self.assertTrue(usuario.check_password('ClaveEducativa-2026'))
 
         otra_solicitud = crear_solicitud(
@@ -183,7 +184,7 @@ class FlujoWebContinuacionTests(TestCase):
             'No fue posible crear la cuenta',
         )
         self.assertEqual(
-            User.objects.filter(email__iexact='nuevo@example.com').count(),
+            User.objects.filter(email__iexact='ana@example.com').count(),
             1,
         )
 
@@ -212,7 +213,7 @@ class FlujoWebContinuacionTests(TestCase):
                 '?next=https://evil.example/'
             ),
             {
-                'username': 'existente@example.com',
+                'username': 'ana@example.com',
                 'password': 'ClaveExistente-2026',
                 'next': 'https://evil.example/',
             },

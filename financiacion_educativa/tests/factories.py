@@ -23,7 +23,12 @@ def crear_institucion(sufijo='1'):
     )
 
 
-def crear_solicitud(institucion=None, referencia='REF-001', usuario=None):
+def crear_solicitud(
+    institucion=None,
+    referencia='REF-001',
+    usuario=None,
+    correo=None,
+):
     institucion = institucion or crear_institucion()
     return crear_solicitud_financiacion(
         institucion=institucion,
@@ -33,7 +38,9 @@ def crear_solicitud(institucion=None, referencia='REF-001', usuario=None):
             nombres='ANA MARIA',
             apellidos='PEREZ LOPEZ',
             celular='3001234567',
-            correo='ana@example.com',
+            correo=correo or (
+                usuario.email if usuario is not None else 'ana@example.com'
+            ),
             direccion='Calle 10 # 20-30',
             valor_plan=Decimal('1000000.00'),
             plazo_meses=12,

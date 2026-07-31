@@ -18,6 +18,10 @@ from financiacion_educativa.models import EntregaInvitacionContinuacion
 from financiacion_educativa.services.invitaciones import (
     registrar_evento_invitacion,
 )
+from financiacion_educativa.services.correos import (
+    clasificar_error_entrega,
+    normalizar_destinatario,
+)
 
 
 CODIGO_ERROR_ENTREGA = 'DELIVERY_BACKEND_ERROR'
@@ -50,6 +54,7 @@ def calcular_hmac_destinatario(correo):
 
 class DjangoEmailInvitationDeliveryBackend:
     def deliver(self, *, recipient, continuation_url, expires_at):
+        recipient = normalizar_destinatario(recipient)
         timeout = int(
             getattr(
                 settings,
@@ -58,8 +63,9 @@ class DjangoEmailInvitationDeliveryBackend:
             )
         )
         connection = get_connection(timeout=max(1, timeout))
+        brand_name = getattr(settings, 'EDUCATION_BRAND_NAME', 'Aprobado')
         context = {
-            'brand_name': settings.BRAND_NAME,
+            'brand_name': brand_name,
             'continuation_url': continuation_url,
             'expires_at': expires_at,
         }
@@ -72,7 +78,7 @@ class DjangoEmailInvitationDeliveryBackend:
             context,
         )
         message = EmailMultiAlternatives(
-            subject=f'Continua tu solicitud educativa con {settings.BRAND_NAME}',
+            subject=f'Continua tu solicitud educativa con {brand_name}',
             body=text_body,
             from_email=settings.DEFAULT_FROM_EMAIL,
             to=[recipient],
@@ -160,7 +166,7 @@ def _marcar_entrega_enviada(entrega_id):
 
 
 @transaction.atomic
-def _marcar_entrega_fallida(entrega_id):
+def _marcar_entrega_fallida(entrega_id, *, codigo_error=''):
     entrega = EntregaInvitacionContinuacion.objects.select_for_update().get(
         pk=entrega_id
     )
@@ -171,7 +177,9 @@ def _marcar_entrega_fallida(entrega_id):
         return entrega
     entrega.estado = EstadoEntregaInvitacion.FAILED
     entrega.fallida_en = timezone.now()
-    entrega.codigo_ultimo_error = CODIGO_ERROR_ENTREGA
+    entrega.codigo_ultimo_error = (
+        codigo_error or CODIGO_ERROR_ENTREGA
+    )[:60]
     entrega.save(
         update_fields=[
             'estado',
@@ -185,7 +193,7 @@ def _marcar_entrega_fallida(entrega_id):
         TipoEventoInvitacion.DELIVERY_FAILED,
         metadata={
             'delivery_id': str(entrega.pk),
-            'error_code': CODIGO_ERROR_ENTREGA,
+            'error_code': entrega.codigo_ultimo_error,
         },
     )
     return entrega
@@ -203,8 +211,11 @@ def ejecutar_callback_entrega(*, entrega_id, continuation_url):
             expires_at=entrega.invitacion.vence_en,
         )
         _marcar_entrega_enviada(entrega_id)
-    except Exception:
+    except Exception as error:
         try:
-            _marcar_entrega_fallida(entrega_id)
+            _marcar_entrega_fallida(
+                entrega_id,
+                codigo_error=clasificar_error_entrega(error),
+            )
         except Exception:
             pass

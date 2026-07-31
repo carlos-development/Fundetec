@@ -48,7 +48,10 @@ def registrar_o_actualizar_evidencia_matricula(
     solicitud = SolicitudFinanciacionEducativa.objects.select_for_update().get(
         pk=solicitud.pk
     )
-    if solicitud.estado != EstadoSolicitudFinanciacion.PENDING_DOCUMENT:
+    if solicitud.estado not in {
+        EstadoSolicitudFinanciacion.PENDING_DOCUMENT,
+        EstadoSolicitudFinanciacion.CORRECTION_REQUIRED,
+    }:
         raise ValidationError('La solicitud no admite cambios documentales.')
 
     valores = {

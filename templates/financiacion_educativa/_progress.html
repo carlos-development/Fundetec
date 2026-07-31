@@ -1,0 +1,48 @@
+<section class="edu-progress" aria-label="Progreso de la solicitud">
+    <div class="edu-progress-head">
+        <strong>
+            {% if current_step == "data" %}Datos recibidos
+            {% elif current_step == "access" %}Acceso seguro
+            {% elif current_step == "terms" %}T&eacute;rminos
+            {% elif current_step == "documents" %}Expediente
+            {% else %}Revisi&oacute;n{% endif %}
+        </strong>
+        <span>
+            {% if current_step == "data" %}Paso 1 de 5
+            {% elif current_step == "access" %}Paso 2 de 5
+            {% elif current_step == "terms" %}Paso 3 de 5
+            {% elif current_step == "documents" %}Paso 4 de 5
+            {% else %}Paso 5 de 5{% endif %}
+        </span>
+    </div>
+    <div class="edu-progress-track" aria-hidden="true">
+        <span class="edu-progress-bar" style="width:
+            {% if current_step == 'data' %}20%
+            {% elif current_step == 'access' %}40%
+            {% elif current_step == 'terms' %}60%
+            {% elif current_step == 'documents' %}80%
+            {% else %}100%{% endif %};"></span>
+    </div>
+    <ol class="edu-progress-steps">
+        <li class="edu-progress-step {% if current_step == 'data' %}is-current{% else %}is-complete{% endif %}">
+            <i>{% if current_step == "data" %}1{% else %}<span aria-hidden="true">&check;</span>{% endif %}</i>
+            <span>Datos recibidos</span>
+        </li>
+        <li class="edu-progress-step {% if current_step == 'access' %}is-current{% elif current_step == 'terms' or current_step == 'documents' or current_step == 'review' %}is-complete{% endif %}">
+            <i>{% if current_step == "terms" or current_step == "documents" or current_step == "review" %}<span aria-hidden="true">&check;</span>{% else %}2{% endif %}</i>
+            <span>Acceso</span>
+        </li>
+        <li class="edu-progress-step {% if current_step == 'terms' %}is-current{% elif current_step == 'documents' or current_step == 'review' %}is-complete{% endif %}">
+            <i>{% if current_step == "documents" or current_step == "review" %}<span aria-hidden="true">&check;</span>{% else %}3{% endif %}</i>
+            <span>T&eacute;rminos</span>
+        </li>
+        <li class="edu-progress-step {% if current_step == 'documents' %}is-current{% elif current_step == 'review' %}is-complete{% endif %}">
+            <i>{% if current_step == "review" %}<span aria-hidden="true">&check;</span>{% else %}4{% endif %}</i>
+            <span>Expediente</span>
+        </li>
+        <li class="edu-progress-step {% if current_step == 'review' %}is-current{% endif %}">
+            <i>5</i>
+            <span>Revisi&oacute;n</span>
+        </li>
+    </ol>
+</section>

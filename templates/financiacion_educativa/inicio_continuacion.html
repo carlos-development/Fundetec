@@ -1,24 +1,21 @@
-{% extends "account/libranza/_base.html" %}
+{% extends "financiacion_educativa/_base.html" %}
+{% load static %}
 
-{% block title %}Continuar financiacion educativa{% endblock %}
+{% block title %}Contin&uacute;a tu financiaci&oacute;n | Aprobado{% endblock %}
+{% block body_class %}edu-auth-page{% endblock %}
 
 {% block content %}
-{% include "account/common/_auth_content_styles.html" %}
-<main class="section-main">
-  <section class="hero-section-account">
-    <div class="container-account">
-      <div class="div-card-agent-account">
-        <div class="mb-3"><span class="badge rounded-pill border">Financiacion educativa</span></div>
-        <h1>Continua tu proceso</h1>
-        <p class="auth-desc">
-          Inicia sesion o crea una cuenta para revisar la solicitud de forma segura.
-        </p>
-        <a class="btn-account d-block text-center" href="{{ login_url }}">Iniciar sesion</a>
-        <div class="auth-footer-links">
-          <a href="{{ register_url }}">Crear cuenta</a>
+<section class="edu-auth-main">
+    <div class="edu-auth-panel">
+        <img class="edu-auth-logo" src="{% static education_brand.logo_inverse|default:'images/logo.png' %}" alt="Aprobado">
+        <p class="edu-auth-kicker"><i class="bi bi-shield-lock" aria-hidden="true"></i> Acceso seguro</p>
+        <h1>Contin&uacute;a tu financiaci&oacute;n</h1>
+        <p class="edu-auth-description">Inicia sesi&oacute;n o crea una cuenta para revisar la solicitud vinculada a esta invitaci&oacute;n.</p>
+        <a class="edu-button edu-button-wide" href="{{ login_url }}">Acceder a mi solicitud</a>
+        <div class="edu-auth-links">
+            <a href="{{ register_url }}">Crear una cuenta</a>
+            <a href="{% url 'home' %}">Volver al inicio</a>
         </div>
-      </div>
     </div>
-  </section>
-</main>
+</section>
 {% endblock %}

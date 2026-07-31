@@ -1,27 +1,61 @@
-{% extends "account/libranza/_base.html" %}
+{% extends "financiacion_educativa/_base.html" %}
 
-{% block title %}Persona y roles{% endblock %}
+{% block title %}{% if tipo_persona == "estudiante" %}Datos del estudiante{% else %}Tutor o responsable{% endif %} | Aprobado{% endblock %}
 
 {% block content %}
-{% include "account/common/_auth_content_styles.html" %}
-<main class="section-main">
-  <section class="hero-section-account">
-    <div class="container-account">
-      <div class="div-card-agent-account text-start">
-        <h1>{% if participante %}Editar persona{% else %}Registrar persona{% endif %}</h1>
-        <p class="auth-desc">
-          Registra datos declarados. Esto no verifica identidad ni representacion legal.
-        </p>
-        <form method="post">
-          {% csrf_token %}
-          {{ form.as_p }}
-          <button class="btn-account" type="submit">Guardar</button>
-        </form>
-        <p class="mt-3 mb-0">
-          <a href="{% url 'financiacion_educativa_web:documentacion' solicitud.id %}">Volver</a>
-        </p>
-      </div>
+<section class="edu-flow-page">
+    <div class="edu-flow-container">
+        {% include "financiacion_educativa/_progress.html" with current_step="documents" %}
+        <div class="edu-flow-grid">
+            <article class="edu-surface">
+                <div class="edu-page-heading">
+                    <p class="edu-eyebrow">Expediente educativo</p>
+                    {% if tipo_persona == "estudiante" %}
+                        <h1>Identificaci&oacute;n del estudiante</h1>
+                        <p>Ya recibimos sus datos de contacto. Completa solamente la identificaci&oacute;n y fecha de nacimiento declaradas.</p>
+                    {% else %}
+                        <h1>Datos del tutor o responsable</h1>
+                        <p>Registra a la persona adulta relacionada con el estudiante. La informaci&oacute;n quedar&aacute; pendiente de verificaci&oacute;n.</p>
+                    {% endif %}
+                </div>
+                {% if tipo_persona == "estudiante" %}
+                    <div class="edu-received-data" aria-label="Informaci&oacute;n recibida del estudiante">
+                        <div>
+                            <span>Estudiante</span>
+                            <strong>{{ solicitud.nombres }} {{ solicitud.apellidos }}</strong>
+                        </div>
+                        <div>
+                            <span>Correo</span>
+                            <strong>{{ solicitud.correo }}</strong>
+                        </div>
+                        <div>
+                            <span>Celular</span>
+                            <strong>{{ solicitud.celular }}</strong>
+                        </div>
+                    </div>
+                {% endif %}
+                <form class="edu-form" method="post" novalidate>
+                    {% csrf_token %}
+                    <input type="hidden" name="tipo_persona" value="{{ tipo_persona }}">
+                    {% if form.non_field_errors %}<div class="edu-error-summary" role="alert">{{ form.non_field_errors }}</div>{% endif %}
+                    <div class="edu-form-grid">
+                        {% for field in form %}
+                            <div class="edu-field">
+                                <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                                {{ field }}
+                                {% if field.help_text %}<span class="edu-field-help">{{ field.help_text }}</span>{% endif %}
+                                {{ field.errors }}
+                            </div>
+                        {% endfor %}
+                    </div>
+                    <div class="edu-form-actions">
+                        <a class="edu-button-quiet" href="{% url 'financiacion_educativa_web:documentacion' solicitud.id %}">Atr&aacute;s</a>
+                        <button class="edu-button" type="submit">Guardar informaci&oacute;n</button>
+                    </div>
+                </form>
+            </article>
+            {% include "financiacion_educativa/_application_summary.html" %}
+        </div>
     </div>
-  </section>
-</main>
+</section>
 {% endblock %}

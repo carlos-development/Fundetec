@@ -1,0 +1,54 @@
+{% load static %}
+<header class="edu-navbar" data-education-navbar>
+    <div class="edu-navbar-inner">
+        <a class="edu-navbar-logo" href="{% url 'home' %}" aria-label="Aprobado, inicio">
+            <img src="{% static education_brand.logo_inverse|default:'images/logo.png' %}" alt="Aprobado">
+        </a>
+
+        <nav class="edu-navbar-links" aria-label="Navegaci&oacute;n principal">
+            <a href="{% url 'home' %}">Inicio</a>
+            <a href="{% url 'politica_privacidad' %}">Privacidad</a>
+            <span class="edu-navbar-security"><span aria-hidden="true">&#10003;</span> Sitio seguro</span>
+        </nav>
+
+        <div class="edu-navbar-actions">
+            {% if request.user.is_authenticated %}
+                <div class="edu-user-menu">
+                    <button class="edu-user-trigger" type="button" aria-expanded="false" data-user-menu-trigger>
+                        <span class="edu-user-avatar" aria-hidden="true">{{ request.user.first_name|default:request.user.email|first|upper }}</span>
+                        <span>{{ request.user.first_name|default:request.user.email }}</span>
+                        <span class="edu-user-caret" aria-hidden="true">&#9662;</span>
+                    </button>
+                    <div class="edu-user-dropdown" data-user-menu>
+                        <span class="edu-user-email">{{ request.user.email }}</span>
+                        <form method="post" action="{% url 'account_logout' %}">
+                            {% csrf_token %}
+                            <button type="submit">
+                                <i class="bi bi-box-arrow-right" aria-hidden="true"></i>
+                                Cerrar sesi&oacute;n
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            {% else %}
+                <a class="edu-navbar-cta" href="{% url 'account_login' %}">Iniciar sesi&oacute;n</a>
+            {% endif %}
+            <button class="edu-menu-toggle" type="button" aria-label="Abrir men&uacute;" aria-expanded="false" data-menu-toggle>
+                <span aria-hidden="true">&#9776;</span>
+            </button>
+        </div>
+    </div>
+
+    <div class="edu-mobile-menu" data-mobile-menu>
+        <a href="{% url 'home' %}">Inicio</a>
+        <a href="{% url 'politica_privacidad' %}">Privacidad</a>
+        {% if request.user.is_authenticated %}
+            <form method="post" action="{% url 'account_logout' %}">
+                {% csrf_token %}
+                <button type="submit"><i class="bi bi-box-arrow-right" aria-hidden="true"></i> Cerrar sesi&oacute;n</button>
+            </form>
+        {% else %}
+            <a class="edu-mobile-login" href="{% url 'account_login' %}">Iniciar sesi&oacute;n</a>
+        {% endif %}
+    </div>
+</header>

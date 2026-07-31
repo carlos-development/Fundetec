@@ -1,5 +1,11 @@
-from django.contrib import admin
+from django import forms
+from django.contrib import admin, messages
 from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied
+from django.shortcuts import get_object_or_404, redirect
+from django.template.response import TemplateResponse
+from django.urls import path, reverse
+from django.utils import timezone
 
 from .models import (
     ConfiguracionFinancieraEducativa,
@@ -7,9 +13,14 @@ from .models import (
     Consentimiento,
     CuotaAmortizacionEducativa,
     DocumentoFinanciacion,
+    DecisionRevisionEducativa,
+    EntregaCorreoEstadoSolicitud,
+    EnlaceCapturaMovil,
     EntregaInvitacionContinuacion,
     EvidenciaMatricula,
     EventoInvitacionContinuacion,
+    EventoEnlaceCapturaMovil,
+    EventoSeguridadFinanciacion,
     EventoParticipanteFinanciacion,
     HistorialEstadoSolicitud,
     InvitacionContinuacionSolicitud,
@@ -21,13 +32,20 @@ from .models import (
 )
 from .choices import (
     EstadoConfiguracionFinanciera,
+    EstadoSolicitudFinanciacion,
     EstadoVersionTerminos,
+    MotivoDecisionRevisionEducativa,
+    RequisitoCorreccionEducativa,
     MotivoRechazoDocumento,
     OrigenEntregaInvitacion,
+    TipoDecisionRevisionEducativa,
 )
 from .services.configuracion_financiera import (
+    ConfiguracionFinancieraAmbigua,
+    ConfiguracionFinancieraNoDisponible,
     activar_configuracion_financiera,
     retirar_configuracion_financiera,
+    seleccionar_configuracion_vigente,
 )
 from .services.documentos import revisar_documento
 from .services.matricula import revisar_evidencia_matricula
@@ -37,6 +55,36 @@ from .services.orquestacion import (
     reemitir_invitacion_orquestada,
     revocar_invitacion_orquestada,
 )
+from .services.revision import decidir_solicitud
+
+
+class DecisionRevisionAdminForm(forms.Form):
+    tipo = forms.ChoiceField(
+        label='Decision',
+        choices=TipoDecisionRevisionEducativa.choices,
+    )
+    motivo = forms.ChoiceField(
+        label='Motivo controlado',
+        choices=MotivoDecisionRevisionEducativa.choices,
+    )
+    mensaje_solicitante = forms.CharField(
+        label='Mensaje para el solicitante',
+        max_length=500,
+        required=False,
+        widget=forms.Textarea(attrs={'rows': 4}),
+    )
+    observacion_interna = forms.CharField(
+        label='Observacion interna',
+        max_length=1000,
+        required=False,
+        widget=forms.Textarea(attrs={'rows': 4}),
+    )
+    requisitos_pendientes = forms.MultipleChoiceField(
+        label='Requisitos por corregir',
+        choices=RequisitoCorreccionEducativa.choices,
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+    )
 
 
 class RolParticipanteInline(admin.TabularInline):
@@ -53,6 +101,10 @@ class RolParticipanteInline(admin.TabularInline):
 
 @admin.register(SolicitudFinanciacionEducativa)
 class SolicitudFinanciacionEducativaAdmin(admin.ModelAdmin):
+    change_form_template = (
+        'admin/financiacion_educativa/'
+        'solicitudfinanciacioneducativa/change_form.html'
+    )
     list_display = (
         'referencia_externa',
         'institucion',
@@ -94,6 +146,98 @@ class SolicitudFinanciacionEducativaAdmin(admin.ModelAdmin):
 
     def has_add_permission(self, request):
         return False
+
+    def get_urls(self):
+        urls = super().get_urls()
+        propios = [
+            path(
+                '<path:object_id>/revision/',
+                self.admin_site.admin_view(self.revision_view),
+                name='financiacion_educativa_solicitud_revision',
+            ),
+        ]
+        return propios + urls
+
+    def changeform_view(
+        self,
+        request,
+        object_id=None,
+        form_url='',
+        extra_context=None,
+    ):
+        extra_context = dict(extra_context or {})
+        extra_context['can_review_educational_application'] = bool(
+            object_id
+            and request.user.has_perm(
+                'financiacion_educativa.revisar_solicitud_financiacion'
+            )
+        )
+        return super().changeform_view(
+            request,
+            object_id,
+            form_url,
+            extra_context,
+        )
+
+    def revision_view(self, request, object_id):
+        if not request.user.has_perm(
+            'financiacion_educativa.revisar_solicitud_financiacion'
+        ):
+            raise PermissionDenied
+        solicitud = get_object_or_404(
+            SolicitudFinanciacionEducativa.objects.select_related(
+                'institucion',
+                'usuario',
+            ),
+            pk=object_id,
+        )
+        form = DecisionRevisionAdminForm(request.POST or None)
+        if request.method == 'POST' and form.is_valid():
+            try:
+                decidir_solicitud(
+                    solicitud=solicitud,
+                    actor=request.user,
+                    **form.cleaned_data,
+                )
+            except ValidationError as error:
+                form.add_error(None, '; '.join(error.messages))
+            else:
+                self.message_user(
+                    request,
+                    'La decision fue registrada y el correo quedo procesado.',
+                )
+                return redirect(
+                    reverse(
+                        'admin:financiacion_educativa_'
+                        'solicitudfinanciacioneducativa_change',
+                        args=[solicitud.pk],
+                    )
+                )
+        fotografia = solicitud.fotografias_financieras.filter(
+            activa=True,
+            es_legado=False,
+        ).first()
+        contexto = {
+            **self.admin_site.each_context(request),
+            'opts': self.model._meta,
+            'original': solicitud,
+            'title': 'Revision de solicitud educativa',
+            'form': form,
+            'documentos': solicitud.documentos.filter(
+                activo=True
+            ).select_related('participante'),
+            'fotografia': fotografia,
+            'estado_revisable': (
+                solicitud.estado
+                == EstadoSolicitudFinanciacion.PENDING_MANUAL_REVIEW
+            ),
+        }
+        return TemplateResponse(
+            request,
+            'admin/financiacion_educativa/'
+            'solicitudfinanciacioneducativa/revision.html',
+            contexto,
+        )
 
     @admin.action(description='Programar invitacion inicial')
     def programar_invitacion_inicial_seleccionadas(self, request, queryset):
@@ -239,6 +383,69 @@ class EntregaInvitacionContinuacionAdmin(admin.ModelAdmin):
         'creada_en',
         'actualizada_en',
     )
+    readonly_fields = fields
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(EnlaceCapturaMovil)
+class EnlaceCapturaMovilAdmin(admin.ModelAdmin):
+    list_display = (
+        'solicitud',
+        'persona',
+        'estado',
+        'estado_entrega',
+        'vence_en',
+        'enviada_en',
+        'consumida_en',
+        'creada_en',
+    )
+    list_filter = ('estado', 'estado_entrega', 'persona', 'creada_en')
+    search_fields = ('solicitud__referencia_externa',)
+    fields = (
+        'id',
+        'solicitud',
+        'persona',
+        'estado',
+        'estado_entrega',
+        'vence_en',
+        'intentos_entrega',
+        'codigo_ultimo_error',
+        'entrega_iniciada_en',
+        'enviada_en',
+        'fallida_en',
+        'revocada_en',
+        'consumida_en',
+        'creada_por',
+        'consumida_por',
+        'creada_en',
+        'actualizada_en',
+    )
+    readonly_fields = fields
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(EventoEnlaceCapturaMovil)
+class EventoEnlaceCapturaMovilAdmin(admin.ModelAdmin):
+    list_display = ('enlace', 'tipo', 'actor', 'creado_en')
+    list_filter = ('tipo', 'creado_en')
+    search_fields = ('enlace__solicitud__referencia_externa',)
+    fields = ('id', 'enlace', 'tipo', 'actor', 'metadata', 'creado_en')
     readonly_fields = fields
 
     def has_add_permission(self, request):
@@ -609,17 +816,51 @@ class ConfiguracionFinancieraEducativaAdmin(admin.ModelAdmin):
         'codigo',
         'version',
         'estado',
+        'aplicable_hoy',
         'vigente_desde',
         'vigente_hasta',
         'originacion_visible',
         'interes_visible',
-        'proveedor_fondo_garantias',
-        'proveedor_seguro_vida',
+        'fondo_garantia_visible',
+        'seguro_vida_deudores_visible',
     )
     list_filter = ('estado', 'moneda', 'metodo_calculo', 'vigente_desde')
     search_fields = ('codigo', 'proveedor_fondo_garantias', 'proveedor_seguro_vida')
     readonly_fields = ('id', 'creado_por', 'actualizado_por', 'creada_en', 'actualizada_en')
     actions = ('activar_seleccionadas', 'retirar_seleccionadas')
+
+    @admin.display(description='Aplicable hoy', boolean=True)
+    def aplicable_hoy(self, obj):
+        hoy = timezone.localdate()
+        return (
+            obj.estado == EstadoConfiguracionFinanciera.ACTIVE
+            and obj.vigente_desde <= hoy
+            and (obj.vigente_hasta is None or obj.vigente_hasta >= hoy)
+        )
+
+    def changelist_view(self, request, extra_context=None):
+        try:
+            seleccionar_configuracion_vigente(
+                fecha_aplicacion=timezone.localdate()
+            )
+        except ConfiguracionFinancieraNoDisponible:
+            messages.warning(
+                request,
+                (
+                    'No existe una politica EDU_STANDARD activa y vigente hoy. '
+                    'Crea una version en borrador y activala, o ejecuta el '
+                    'comando de configuracion inicial documentado.'
+                ),
+            )
+        except ConfiguracionFinancieraAmbigua:
+            messages.error(
+                request,
+                (
+                    'Hay mas de una politica EDU_STANDARD aplicable hoy. '
+                    'Retira la superposicion antes de calcular financiaciones.'
+                ),
+            )
+        return super().changelist_view(request, extra_context=extra_context)
 
     @admin.display(description='Originacion (%)')
     def originacion_visible(self, obj):
@@ -628,6 +869,26 @@ class ConfiguracionFinancieraEducativaAdmin(admin.ModelAdmin):
     @admin.display(description='Interes mensual (%)')
     def interes_visible(self, obj):
         return f'{obj.tasa_interes_mensual} %'
+
+    @admin.display(description='Fondo de garantia')
+    def fondo_garantia_visible(self, obj):
+        return f'{obj.porcentaje_fondo_garantias} %'
+
+    @admin.display(description='Seguro vida deudores')
+    def seguro_vida_deudores_visible(self, obj):
+        return f'{obj.porcentaje_seguro_vida} %'
+
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        if 'proveedor_fondo_garantias' in form.base_fields:
+            form.base_fields['proveedor_fondo_garantias'].label = (
+                'Proveedor tecnico del fondo de garantia'
+            )
+        if 'proveedor_seguro_vida' in form.base_fields:
+            form.base_fields['proveedor_seguro_vida'].label = (
+                'Proveedor tecnico del seguro vida deudores'
+            )
+        return form
 
     def get_readonly_fields(self, request, obj=None):
         base = self.readonly_fields
@@ -725,6 +986,76 @@ class HistorialEstadoSolicitudAdmin(admin.ModelAdmin):
         'actor__email',
     )
     readonly_fields = tuple(field.name for field in HistorialEstadoSolicitud._meta.fields)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(DecisionRevisionEducativa)
+class DecisionRevisionEducativaAdmin(admin.ModelAdmin):
+    list_display = (
+        'solicitud',
+        'tipo',
+        'motivo',
+        'responsable',
+        'creada_en',
+    )
+    list_filter = ('tipo', 'motivo', 'creada_en')
+    search_fields = ('solicitud__referencia_externa',)
+    readonly_fields = tuple(
+        field.name for field in DecisionRevisionEducativa._meta.fields
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(EntregaCorreoEstadoSolicitud)
+class EntregaCorreoEstadoSolicitudAdmin(admin.ModelAdmin):
+    list_display = (
+        'solicitud',
+        'decision',
+        'estado',
+        'intentos',
+        'enviada_en',
+        'fallida_en',
+    )
+    list_filter = ('estado', 'creada_en')
+    search_fields = ('solicitud__referencia_externa',)
+    readonly_fields = tuple(
+        field.name for field in EntregaCorreoEstadoSolicitud._meta.fields
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(EventoSeguridadFinanciacion)
+class EventoSeguridadFinanciacionAdmin(admin.ModelAdmin):
+    list_display = ('tipo', 'solicitud', 'actor', 'endpoint', 'creado_en')
+    list_filter = ('tipo', 'creado_en')
+    search_fields = ('solicitud__referencia_externa',)
+    readonly_fields = tuple(
+        field.name for field in EventoSeguridadFinanciacion._meta.fields
+    )
 
     def has_add_permission(self, request):
         return False

@@ -1,0 +1,15 @@
+[MUESTRA DE CORREO]
+
+{{ titulo }}
+
+{{ introduccion }}
+
+{{ detalle }}
+{% if nota %}
+{{ nota }}
+{% endif %}
+Botón de muestra: {{ boton }}
+Dirección inerte: {{ action_url }}
+
+Esta muestra usa datos ficticios y no ejecuta acciones.
+Comunicación del flujo de financiación educativa de {{ brand_name }}.

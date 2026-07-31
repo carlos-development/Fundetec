@@ -1,120 +1,153 @@
-{% extends "account/libranza/_base.html" %}
+{% extends "financiacion_educativa/_base.html" %}
 {% load financiacion_format %}
 
-{% block title %}Financiacion educativa{% endblock %}
+{% block title %}Tu financiaci&oacute;n | Aprobado{% endblock %}
 
 {% block content %}
-{% include "account/common/_auth_content_styles.html" %}
-<main class="section-main">
-  <section class="hero-section-account">
-    <div class="container-account" style="max-width: 1040px;">
-      <div class="div-card-agent-account text-start">
-        <h1>Financiacion educativa</h1>
-        <p class="auth-desc">
-          Valores informativos en COP. Estas proyecciones no registran pagos ni emiten comprobantes.
-        </p>
-        {% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
-
-        {% if fotografia %}
-          <h2 class="h5">Capital financiado</h2>
-          <div class="table-responsive mb-4">
-            <table class="table">
-              <tbody>
-                <tr><th>Monto solicitado</th><td>{{ fotografia.valor_financiado|cop }}</td></tr>
-                <tr><th>Originacion ({{ fotografia.tasa_comision }} %)</th><td>{{ fotografia.valor_comision|cop }}</td></tr>
-                <tr><th>IVA de originacion ({{ fotografia.tasa_iva_comision }} %)</th><td>{{ fotografia.valor_iva_comision|cop }}</td></tr>
-                <tr><th>{{ fotografia.proveedor_fondo_garantias }} ({{ fotografia.tasa_fondo_garantias }} %)</th><td>{{ fotografia.valor_fondo_garantias|cop }}</td></tr>
-                <tr><th>Seguro {{ fotografia.proveedor_seguro_vida }} ({{ fotografia.tasa_seguro_vida }} %)</th><td>{{ fotografia.valor_seguro_vida|cop }}</td></tr>
-                <tr><th>Capital total financiado</th><td><strong>{{ fotografia.capital_financiado|cop }}</strong></td></tr>
-                <tr><th>Cuota informativa</th><td>{{ fotografia.valor_cuota_estimada|cop }}</td></tr>
-                <tr><th>Intereses proyectados</th><td>{{ fotografia.interes_total_estimado|cop }}</td></tr>
-                <tr><th>Total proyectado</th><td>{{ fotografia.total_estimado|cop }}</td></tr>
-              </tbody>
-            </table>
-          </div>
-
-          <h2 class="h5">Plan de amortizacion</h2>
-          <div class="table-responsive mb-4">
-            <table class="table table-sm align-middle">
-              <thead>
-                <tr>
-                  <th>Cuota</th><th>Fecha</th><th>Saldo inicial</th>
-                  <th>Interes</th><th>Capital</th><th>Valor</th><th>Saldo final</th>
-                </tr>
-              </thead>
-              <tbody>
-                {% for cuota in fotografia.cuotas.all %}
-                  <tr>
-                    <td>{{ cuota.numero }}</td>
-                    <td>{{ cuota.fecha_vencimiento|date:"Y-m-d" }}</td>
-                    <td>{{ cuota.saldo_inicial|cop }}</td>
-                    <td>{{ cuota.interes|cop }}</td>
-                    <td>{{ cuota.capital|cop }}</td>
-                    <td>{{ cuota.valor_cuota|cop }}</td>
-                    <td>{{ cuota.saldo_final|cop }}</td>
-                  </tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          </div>
-
-          <div class="row g-4">
-            <div class="col-md-6">
-              <h2 class="h5">Proyectar abono a capital</h2>
-              <form method="post" action="{% url 'financiacion_educativa_web:proyectar-abono' solicitud.id %}">
-                {% csrf_token %}
-                {{ abono_form.as_p }}
-                <button class="btn-account" type="submit">Calcular proyeccion</button>
-              </form>
-              {% if proyeccion_abono %}
-                <div class="alert alert-info mt-3">
-                  <p>Saldo anterior: {{ proyeccion_abono.saldo_antes_pago|cop }}</p>
-                  <p>Intereses causados: {{ proyeccion_abono.intereses_causados|cop }}</p>
-                  <p>Aplicado a capital: {{ proyeccion_abono.aplicado_capital|cop }}</p>
-                  <p>Saldo posterior: {{ proyeccion_abono.saldo_posterior|cop }}</p>
-                  <p>Nuevas cuotas proyectadas: {{ proyeccion_abono.nueva_cantidad_cuotas }}</p>
-                  <p>Intereses futuros evitados: {{ proyeccion_abono.intereses_futuros_evitados|cop }}</p>
-                  {% if proyeccion_abono.excedente %}<p>Excedente: {{ proyeccion_abono.excedente|cop }}</p>{% endif %}
-                  <p class="mb-0">{{ proyeccion_abono.advertencia }}</p>
+<section class="edu-flow-page">
+    <div class="edu-flow-container">
+        {% include "financiacion_educativa/_progress.html" with current_step="review" %}
+        <div class="edu-flow-grid">
+            <article class="edu-surface">
+                <div class="edu-page-heading">
+                    <p class="edu-eyebrow">Informaci&oacute;n financiera</p>
+                    <h1>Tu financiaci&oacute;n educativa</h1>
+                    <p>Valores informativos en COP. Las proyecciones de esta pantalla no registran pagos ni emiten comprobantes.</p>
                 </div>
-              {% endif %}
-            </div>
-            <div class="col-md-6">
-              <h2 class="h5">Proyectar pago total</h2>
-              <form method="post" action="{% url 'financiacion_educativa_web:proyectar-pago-total' solicitud.id %}">
-                {% csrf_token %}
-                {{ pago_total_form.as_p }}
-                <button class="btn-account" type="submit">Calcular liquidacion</button>
-              </form>
-              {% if proyeccion_pago_total %}
-                <div class="alert alert-info mt-3">
-                  <p>Saldo de capital: {{ proyeccion_pago_total.saldo_capital|cop }}</p>
-                  <p>Intereses causados: {{ proyeccion_pago_total.intereses_causados|cop }}</p>
-                  <p>Total informativo: <strong>{{ proyeccion_pago_total.total_liquidacion|cop }}</strong></p>
-                  <p>Intereses futuros excluidos: {{ proyeccion_pago_total.intereses_futuros_excluidos|cop }}</p>
-                  <p>Vigencia: {{ proyeccion_pago_total.fecha_vigencia|date:"Y-m-d" }}</p>
-                  <p class="mb-0">{{ proyeccion_pago_total.advertencia }}</p>
-                </div>
-              {% endif %}
-            </div>
-          </div>
-        {% else %}
-          <h2 class="h5">Crear fotografia financiera</h2>
-          <p>
-            Se aplicara la configuracion educativa vigente al monto y plazo recibidos de la institucion.
-          </p>
-          <form method="post">
-            {% csrf_token %}
-            {{ crear_form.as_p }}
-            <button class="btn-account" type="submit">Generar plan informativo</button>
-          </form>
-        {% endif %}
+                {% if error %}<div class="edu-error-summary" role="alert">{{ error }}</div>{% endif %}
 
-        <p class="mt-4 mb-0">
-          <a href="{% url 'financiacion_educativa_web:documentacion' solicitud.id %}">Volver al proceso</a>
-        </p>
-      </div>
+                {% if fotografia %}
+                    <dl class="edu-finance-compact edu-finance-compact-primary">
+                        <div><dt>Monto solicitado</dt><dd>{{ fotografia.valor_financiado|cop }}</dd></div>
+                        <div class="is-emphasis"><dt>Cuota informativa</dt><dd>{{ fotografia.valor_cuota_estimada|cop }}</dd></div>
+                        <div><dt>Capital total financiado</dt><dd>{{ fotografia.capital_financiado|cop }}</dd></div>
+                    </dl>
+
+                    <section class="edu-section-block" aria-labelledby="capital-title">
+                        <div class="edu-section-title"><h2 id="capital-title">Composici&oacute;n del capital</h2></div>
+                        <div class="edu-table-wrap">
+                            <table class="edu-table">
+                                <tbody>
+                                    <tr><th>Monto solicitado</th><td>{{ fotografia.valor_financiado|cop }}</td></tr>
+                                    <tr><th>Originaci&oacute;n ({{ fotografia.tasa_comision|porcentaje }} %)</th><td>{{ fotografia.valor_comision|cop }}</td></tr>
+                                    <tr><th>IVA de originaci&oacute;n ({{ fotografia.tasa_iva_comision|porcentaje }} %)</th><td>{{ fotografia.valor_iva_comision|cop }}</td></tr>
+                                    <tr><th>Fondo de garant&iacute;a ({{ fotografia.tasa_fondo_garantias|porcentaje }} %)</th><td>{{ fotografia.valor_fondo_garantias|cop }}</td></tr>
+                                    <tr><th>Seguro vida deudores ({{ fotografia.tasa_seguro_vida|porcentaje }} %)</th><td>{{ fotografia.valor_seguro_vida|cop }}</td></tr>
+                                    <tr><th>Intereses proyectados</th><td>{{ fotografia.interes_total_estimado|cop }}</td></tr>
+                                    <tr><th>Total proyectado</th><td><strong>{{ fotografia.total_estimado|cop }}</strong></td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </section>
+
+                    <section class="edu-section-block" aria-labelledby="schedule-title">
+                        <div class="edu-section-title"><h2 id="schedule-title">Plan de amortizaci&oacute;n</h2></div>
+                        <div class="edu-table-wrap">
+                            <table class="edu-table">
+                                <thead>
+                                    <tr>
+                                        <th>Cuota</th><th>Fecha</th><th>Saldo inicial</th>
+                                        <th>Inter&eacute;s</th><th>Capital</th><th>Valor</th><th>Saldo final</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for cuota in fotografia.cuotas.all %}
+                                        <tr>
+                                            <td>{{ cuota.numero }}</td>
+                                            <td>{{ cuota.fecha_vencimiento|date:"Y-m-d" }}</td>
+                                            <td>{{ cuota.saldo_inicial|cop }}</td>
+                                            <td>{{ cuota.interes|cop }}</td>
+                                            <td>{{ cuota.capital|cop }}</td>
+                                            <td>{{ cuota.valor_cuota|cop }}</td>
+                                            <td>{{ cuota.saldo_final|cop }}</td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </section>
+
+                    <section id="proyecciones" class="edu-section-block" aria-labelledby="projections-title" {% if focus_projections %}data-scroll-on-load{% endif %}>
+                        <div class="edu-section-title"><h2 id="projections-title">Proyecciones informativas</h2></div>
+                        <div class="alert-warning">
+                            Estas herramientas simulan escenarios sobre el plan actual. No reciben dinero, no registran pagos y no modifican la obligaci&oacute;n.
+                        </div>
+                        <div class="edu-projection-stack">
+                            <div>
+                                <h3>Abono extraordinario con reducci&oacute;n de plazo</h3>
+                                <p class="edu-field-help">Primero se cubren los intereses causados a la fecha. El excedente reduce capital, conserva aproximadamente la cuota ordinaria y disminuye el n&uacute;mero de cuotas.</p>
+                                <form class="edu-form" method="post" action="{% url 'financiacion_educativa_web:proyectar-abono' solicitud.id %}">
+                                    {% csrf_token %}
+                                    {{ abono_form.as_p }}
+                                    <button class="edu-button" type="submit">Simular abono extraordinario</button>
+                                </form>
+                                {% if proyeccion_abono %}
+                                    <div class="edu-projection-result" role="status">
+                                        <div class="alert-warning"><strong>Esta es una simulaci&oacute;n y no constituye un pago.</strong></div>
+                                        <dl class="edu-finance-compact">
+                                            <div><dt>Saldo de capital antes</dt><dd>{{ proyeccion_abono.saldo_antes_pago|cop }}</dd></div>
+                                            <div><dt>Valor total ingresado</dt><dd>{{ proyeccion_abono.valor_recibido|cop }}</dd></div>
+                                            <div><dt>Intereses causados</dt><dd>{{ proyeccion_abono.intereses_causados|cop }}</dd></div>
+                                            <div><dt>Otros conceptos aplicables</dt><dd>{{ proyeccion_abono.otros_conceptos_exigibles|cop }}</dd></div>
+                                            <div><dt>Aplicado a intereses</dt><dd>{{ proyeccion_abono.aplicado_intereses|cop }}</dd></div>
+                                            <div class="is-emphasis"><dt>Aplicado directamente a capital</dt><dd>{{ proyeccion_abono.aplicado_capital|cop }}</dd></div>
+                                            <div><dt>Nuevo saldo de capital</dt><dd>{{ proyeccion_abono.saldo_posterior|cop }}</dd></div>
+                                            <div><dt>Cuota ordinaria conservada</dt><dd>{{ proyeccion_abono.cuota_programada|cop }}</dd></div>
+                                            <div><dt>Cuotas pendientes antes</dt><dd>{{ proyeccion_abono.cuotas_pendientes_antes }}</dd></div>
+                                            <div><dt>Cuotas pendientes despu&eacute;s</dt><dd>{{ proyeccion_abono.nueva_cantidad_cuotas }}</dd></div>
+                                            <div><dt>Fecha final anterior</dt><dd>{{ proyeccion_abono.fecha_final_antes|date:"Y-m-d" }}</dd></div>
+                                            <div><dt>Nueva fecha estimada de finalizaci&oacute;n</dt><dd>{{ proyeccion_abono.nueva_fecha_final|date:"Y-m-d" }}</dd></div>
+                                            <div><dt>&Uacute;ltima cuota estimada</dt><dd>{{ proyeccion_abono.ultima_cuota_estimada|cop }}</dd></div>
+                                            <div><dt>Intereses futuros antes</dt><dd>{{ proyeccion_abono.intereses_futuros_antes|cop }}</dd></div>
+                                            <div><dt>Intereses futuros despu&eacute;s</dt><dd>{{ proyeccion_abono.intereses_futuros_despues|cop }}</dd></div>
+                                            <div class="is-emphasis"><dt>Ahorro estimado de intereses</dt><dd>{{ proyeccion_abono.intereses_futuros_evitados|cop }}</dd></div>
+                                        </dl>
+                                        {% if proyeccion_abono.excedente %}<p class="edu-field-help">Excedente no aplicado: {{ proyeccion_abono.excedente|cop }}.</p>{% endif %}
+                                        <p class="edu-field-help">{{ proyeccion_abono.advertencia }}</p>
+                                    </div>
+                                {% endif %}
+                            </div>
+                            <div class="edu-projection-secondary">
+                                <h3>Pago total</h3>
+                                <form class="edu-form" method="post" action="{% url 'financiacion_educativa_web:proyectar-pago-total' solicitud.id %}">
+                                    {% csrf_token %}
+                                    {{ pago_total_form.as_p }}
+                                    <button class="edu-button edu-button-wide" type="submit">Calcular liquidaci&oacute;n</button>
+                                </form>
+                                {% if proyeccion_pago_total %}
+                                    <div class="alert-info">
+                                        <p>Saldo de capital: {{ proyeccion_pago_total.saldo_capital|cop }}</p>
+                                        <p>Intereses causados: {{ proyeccion_pago_total.intereses_causados|cop }}</p>
+                                        <p>Total informativo: <strong>{{ proyeccion_pago_total.total_liquidacion|cop }}</strong></p>
+                                        <p>Intereses futuros excluidos: {{ proyeccion_pago_total.intereses_futuros_excluidos|cop }}</p>
+                                        <p>Vigencia: {{ proyeccion_pago_total.fecha_vigencia|date:"Y-m-d" }}</p>
+                                        <p>{{ proyeccion_pago_total.advertencia }}</p>
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </section>
+                {% else %}
+                    <section class="edu-section-block">
+                        <div class="edu-section-title"><h2>Generar informaci&oacute;n financiera</h2></div>
+                        <p>Se aplicar&aacute; la configuraci&oacute;n educativa vigente al monto y plazo recibidos de la instituci&oacute;n.</p>
+                        <form class="edu-form" method="post">
+                            {% csrf_token %}
+                            {{ crear_form.as_p }}
+                            <button class="edu-button" type="submit" {% if not configuracion_disponible %}disabled{% endif %}>Consultar financiaci&oacute;n</button>
+                        </form>
+                        {% if not configuracion_disponible and request.user.is_staff %}
+                            <p class="edu-field-help">Configura y activa EDU_STANDARD desde Administraci&oacute;n &gt; Configuraciones financieras educativas.</p>
+                        {% endif %}
+                    </section>
+                {% endif %}
+
+                <div class="edu-form-actions">
+                    <a class="edu-button-quiet" href="{% url 'financiacion_educativa_web:documentacion' solicitud.id %}">Volver al expediente</a>
+                </div>
+            </article>
+            {% include "financiacion_educativa/_application_summary.html" %}
+        </div>
     </div>
-  </section>
-</main>
+</section>
 {% endblock %}

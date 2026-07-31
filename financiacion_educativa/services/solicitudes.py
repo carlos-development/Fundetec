@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from decimal import Decimal
+from datetime import date
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
@@ -23,6 +24,13 @@ class DatosSolicitudFinanciacion:
     plazo_meses: int
     nombre_curso: str
     tipo_curso: str = ''
+    tipo_documento_estudiante: str = ''
+    numero_documento_estudiante: str = ''
+    fecha_nacimiento_estudiante: date | None = None
+    codigo_matricula: str = ''
+    periodo_academico: str = ''
+    sede: str = ''
+    jornada: str = ''
     canal_origen: str = 'INSTITUTION_API'
     correlation_id: str = ''
     ip_origen: str | None = None
@@ -44,6 +52,13 @@ def crear_solicitud_financiacion(*, institucion, datos, usuario=None):
         celular=datos.celular,
         correo=datos.correo,
         direccion=datos.direccion,
+        tipo_documento_estudiante=datos.tipo_documento_estudiante,
+        numero_documento_estudiante=datos.numero_documento_estudiante,
+        fecha_nacimiento_estudiante=datos.fecha_nacimiento_estudiante,
+        codigo_matricula=datos.codigo_matricula,
+        periodo_academico=datos.periodo_academico,
+        sede=datos.sede,
+        jornada=datos.jornada,
         valor_plan=datos.valor_plan,
         plazo_meses=datos.plazo_meses,
         nombre_curso=datos.nombre_curso,

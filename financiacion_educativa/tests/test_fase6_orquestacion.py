@@ -81,7 +81,7 @@ PAYLOAD = {
     'course_type': 'Tecnologia en sistemas',
 }
 REGISTRO = {
-    'email': 'cuenta-distinta@example.com',
+    'email': 'solicitante@example.com',
     'first_name': 'Maria',
     'last_name': 'Rojas',
     'password1': 'ClaveEducativa-2026',
@@ -373,7 +373,7 @@ class OrquestacionInvitacionFase6Tests(APITestCase):
             EstadoSolicitudFinanciacion.PENDING_DOCUMENT,
         )
         self.assertEqual(solicitud.usuario.email, REGISTRO['email'])
-        self.assertNotEqual(solicitud.correo, solicitud.usuario.email)
+        self.assertEqual(solicitud.correo, solicitud.usuario.email)
         self.assertEqual(
             invitacion.estado,
             EstadoInvitacionContinuacion.CONSUMED,

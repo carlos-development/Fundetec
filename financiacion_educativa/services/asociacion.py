@@ -15,6 +15,9 @@ from financiacion_educativa.models import (
 )
 from financiacion_educativa.services.estados import transicionar_solicitud
 from financiacion_educativa.services.invitaciones import InvitacionNoValida
+from financiacion_educativa.services.autorizacion import (
+    usuario_coincide_con_correo,
+)
 
 
 @dataclass(frozen=True)
@@ -41,6 +44,7 @@ def asociar_usuario_mediante_invitacion(*, invitacion_id, usuario):
         invitacion.estado == EstadoInvitacionContinuacion.CONSUMED
         and invitacion.consumida_por_id == usuario.pk
         and solicitud.usuario_id == usuario.pk
+        and usuario_coincide_con_correo(usuario, solicitud.correo)
     ):
         return ResultadoAsociacion(solicitud=solicitud, repetida=True)
 
@@ -49,6 +53,8 @@ def asociar_usuario_mediante_invitacion(*, invitacion_id, usuario):
     if solicitud.estado != EstadoSolicitudFinanciacion.PENDING_USER_REGISTRATION:
         raise InvitacionNoValida()
     if solicitud.usuario_id and solicitud.usuario_id != usuario.pk:
+        raise InvitacionNoValida()
+    if not usuario_coincide_con_correo(usuario, solicitud.correo):
         raise InvitacionNoValida()
 
     solicitud.usuario = usuario

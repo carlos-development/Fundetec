@@ -5,6 +5,7 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
+from django.utils import timezone
 
 from financiacion_educativa.choices import (
     EstadoEscaneoDocumento,
@@ -16,8 +17,13 @@ from financiacion_educativa.choices import (
     RolParticipante,
     TipoDocumentoFinanciacion,
     TipoDocumentoIdentidad,
+    TipoConsentimiento,
 )
-from financiacion_educativa.models import HistorialEstadoSolicitud
+from financiacion_educativa.models import (
+    Consentimiento,
+    HistorialEstadoSolicitud,
+    VersionTerminosFinanciacion,
+)
 from financiacion_educativa.services.documentos import (
     registrar_documento,
     registrar_resultado_escaneo,
@@ -44,6 +50,14 @@ def pdf(marca):
         f'{marca}.pdf',
         b'%PDF-1.7\n' + marca.encode('ascii') + b'\n%%EOF',
         content_type='application/pdf',
+    )
+
+
+def jpeg(marca):
+    return SimpleUploadedFile(
+        f'{marca}.jpg',
+        b'\xff\xd8\xff' + marca.encode('ascii') + b'\xff\xd9',
+        content_type='image/jpeg',
     )
 
 
@@ -74,6 +88,23 @@ class RequisitosDocumentalesFase4Tests(TestCase):
         self.solicitud.estado = EstadoSolicitudFinanciacion.PENDING_DOCUMENT
         self.solicitud.save(update_fields=['usuario', 'estado'])
         self.institucion_original_id = self.solicitud.institucion_id
+        version = VersionTerminosFinanciacion.objects.create(
+            tipo=TipoConsentimiento.TERMS,
+            version='test-requisitos-v1',
+            titulo='Terminos de prueba',
+            contenido='Contenido de prueba.',
+            obligatorio=True,
+            estado='PUBLISHED',
+            publicada_en=timezone.now(),
+            vigente_desde=timezone.now(),
+        )
+        Consentimiento.objects.create(
+            solicitud=self.solicitud,
+            usuario=self.usuario,
+            tipo=version.tipo,
+            version_texto=version.version,
+            evidencia_hash='0' * 64,
+        )
 
     def _participante(self, nacimiento=date(1990, 1, 1), roles=None):
         return registrar_o_actualizar_participante(
@@ -94,11 +125,21 @@ class RequisitosDocumentalesFase4Tests(TestCase):
         )
 
     def _aceptar_documento(self, tipo, archivo, participante=None):
+        tipos_camara = {
+            TipoDocumentoFinanciacion.STUDENT_ID_FRONT,
+            TipoDocumentoFinanciacion.STUDENT_ID_BACK,
+            TipoDocumentoFinanciacion.GUARDIAN_ID_FRONT,
+            TipoDocumentoFinanciacion.GUARDIAN_ID_BACK,
+        }
         documento = registrar_documento(
             solicitud=self.solicitud,
             participante=participante,
             tipo=tipo,
-            origen_captura=OrigenCapturaDocumento.USER_UPLOAD,
+            origen_captura=(
+                OrigenCapturaDocumento.CAMERA
+                if tipo in tipos_camara
+                else OrigenCapturaDocumento.USER_UPLOAD
+            ),
             archivo=archivo,
             actor=self.usuario,
         )
@@ -111,6 +152,34 @@ class RequisitosDocumentalesFase4Tests(TestCase):
         revisar_documento(documento=documento, actor=self.revisor, aceptar=True)
         documento.refresh_from_db()
         return documento
+
+    def _documentos_adulto(self, estudiante, *, aceptar=False):
+        registrar = self._aceptar_documento if aceptar else registrar_documento
+        documentos = (
+            (TipoDocumentoFinanciacion.STUDENT_ID_FRONT, jpeg('frente')),
+            (TipoDocumentoFinanciacion.STUDENT_ID_BACK, jpeg('reverso')),
+            (TipoDocumentoFinanciacion.INCOME_CERTIFICATE, pdf('ingresos')),
+        )
+        for tipo, archivo in documentos:
+            if aceptar:
+                registrar(tipo, archivo, estudiante)
+            else:
+                registrar(
+                    solicitud=self.solicitud,
+                    participante=estudiante,
+                    tipo=tipo,
+                    origen_captura=(
+                        OrigenCapturaDocumento.CAMERA
+                        if tipo
+                        in {
+                            TipoDocumentoFinanciacion.STUDENT_ID_FRONT,
+                            TipoDocumentoFinanciacion.STUDENT_ID_BACK,
+                        }
+                        else OrigenCapturaDocumento.USER_UPLOAD
+                    ),
+                    archivo=archivo,
+                    actor=self.usuario,
+                )
 
     def _matricula_aceptada(self):
         evidencia = registrar_o_actualizar_evidencia_matricula(
@@ -190,32 +259,101 @@ class RequisitosDocumentalesFase4Tests(TestCase):
         )
         self.assertEqual(rechazada.estado, EstadoEvidenciaMatricula.REJECTED)
 
-    def test_requisitos_no_completan_con_documentos_pendientes(self):
+    def test_documentos_aportados_pasan_a_revision_sin_aprobacion_previa(self):
         estudiante = self._participante()
+        self._documentos_adulto(estudiante)
+        registrar_o_actualizar_evidencia_matricula(
+            solicitud=self.solicitud,
+            actor=self.usuario,
+            institucion_declarada='Institucion declarada',
+            programa_curso='Tecnologia',
+            periodo_academico='2026-2',
+            referencia_matricula='MAT-002',
+            archivo=pdf('matricula-pendiente-envio'),
+        )
+
+        self.assertTrue(fase_documental_completa(self.solicitud))
+        completar_fase_documental(
+            solicitud=self.solicitud,
+            actor=self.usuario,
+        )
+        self.solicitud.refresh_from_db()
+        self.assertEqual(
+            self.solicitud.estado,
+            EstadoSolicitudFinanciacion.PENDING_MANUAL_REVIEW,
+        )
+
+    def test_documento_bloqueado_impide_envio_a_revision(self):
+        estudiante = self._participante()
+        documento = registrar_documento(
+            solicitud=self.solicitud,
+            participante=estudiante,
+            tipo=TipoDocumentoFinanciacion.STUDENT_ID_FRONT,
+            origen_captura=OrigenCapturaDocumento.CAMERA,
+            archivo=jpeg('identidad-bloqueada'),
+            actor=self.usuario,
+        )
         registrar_documento(
             solicitud=self.solicitud,
             participante=estudiante,
-            tipo=TipoDocumentoFinanciacion.STUDENT_IDENTIFICATION,
-            origen_captura=OrigenCapturaDocumento.USER_UPLOAD,
-            archivo=pdf('identidad-pendiente'),
+            tipo=TipoDocumentoFinanciacion.STUDENT_ID_BACK,
+            origen_captura=OrigenCapturaDocumento.CAMERA,
+            archivo=jpeg('identidad-reverso'),
             actor=self.usuario,
+        )
+        registrar_documento(
+            solicitud=self.solicitud,
+            participante=estudiante,
+            tipo=TipoDocumentoFinanciacion.INCOME_CERTIFICATE,
+            origen_captura=OrigenCapturaDocumento.USER_UPLOAD,
+            archivo=pdf('ingresos'),
+            actor=self.usuario,
+        )
+        registrar_resultado_escaneo(
+            documento=documento,
+            actor=self.revisor,
+            estado=EstadoEscaneoDocumento.BLOCKED,
+            referencia_escaneo='scanner-bloqueado',
         )
         self._matricula_aceptada()
 
-        self.assertFalse(fase_documental_completa(self.solicitud))
+        requisitos = {
+            requisito.codigo: requisito
+            for requisito in calcular_requisitos_documentales(self.solicitud)
+        }
+        self.assertFalse(requisitos['STUDENT_ID_FRONT'].cumplido)
         with self.assertRaises(ValidationError):
             completar_fase_documental(
                 solicitud=self.solicitud,
                 actor=self.usuario,
             )
 
+    def test_no_completa_sin_terminos_aceptados(self):
+        Consentimiento.objects.filter(solicitud=self.solicitud).delete()
+
+        requisitos = {
+            requisito.codigo: requisito
+            for requisito in calcular_requisitos_documentales(self.solicitud)
+        }
+
+        self.assertFalse(requisitos['TERMS'].cumplido)
+        with self.assertRaises(ValidationError):
+            completar_fase_documental(
+                solicitud=self.solicitud,
+                actor=self.usuario,
+            )
+
+    def test_requisitos_de_adulto_no_incluyen_tutor(self):
+        requisitos = {
+            requisito.codigo: requisito
+            for requisito in calcular_requisitos_documentales(self.solicitud)
+        }
+
+        self.assertNotIn('GUARDIAN', requisitos)
+
     def test_completa_con_servicio_central_y_reintento_no_duplica_historial(self):
         estudiante = self._participante()
-        self._aceptar_documento(
-            TipoDocumentoFinanciacion.STUDENT_IDENTIFICATION,
-            pdf('identidad-aceptada'),
-            estudiante,
-        )
+        self._documentos_adulto(estudiante, aceptar=True)
         self._matricula_aceptada()
 
         requisitos = calcular_requisitos_documentales(self.solicitud)

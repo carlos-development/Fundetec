@@ -1,27 +1,74 @@
-{% extends "account/libranza/_base.html" %}
+{% extends "financiacion_educativa/_base.html" %}
 
-{% block title %}Evidencia de matricula{% endblock %}
+{% block title %}Evidencia acad&eacute;mica | Aprobado{% endblock %}
 
 {% block content %}
-{% include "account/common/_auth_content_styles.html" %}
-<main class="section-main">
-  <section class="hero-section-account">
-    <div class="container-account">
-      <div class="div-card-agent-account text-start">
-        <h1>Evidencia de matricula</h1>
-        <p class="auth-desc">
-          La carga no significa que la matricula haya sido verificada o aceptada.
-        </p>
-        <form method="post" enctype="multipart/form-data">
-          {% csrf_token %}
-          {{ form.as_p }}
-          <button class="btn-account" type="submit">Guardar evidencia</button>
-        </form>
-        <p class="mt-3 mb-0">
-          <a href="{% url 'financiacion_educativa_web:documentacion' solicitud.id %}">Volver</a>
-        </p>
-      </div>
+<section class="edu-flow-page">
+    <div class="edu-flow-container">
+        {% include "financiacion_educativa/_progress.html" with current_step="documents" %}
+        <div class="edu-flow-grid">
+            <article class="edu-surface">
+                <div class="edu-page-heading">
+                    <p class="edu-eyebrow">Evidencia acad&eacute;mica</p>
+                    <h1>Completa lo que falta</h1>
+                    <p>La instituci&oacute;n y el programa ya fueron recibidos. Aporta &uacute;nicamente los datos pendientes y el soporte.</p>
+                </div>
+                <div class="edu-received-data" aria-label="Informaci&oacute;n acad&eacute;mica recibida">
+                    <div>
+                        <span>Instituci&oacute;n</span>
+                        <strong>{{ solicitud.institucion.nombre_comercial }}</strong>
+                    </div>
+                    <div>
+                        <span>Programa o curso</span>
+                        <strong>{{ solicitud.nombre_curso }}</strong>
+                    </div>
+                    {% if solicitud.codigo_matricula %}
+                    <div>
+                        <span>C&oacute;digo de matr&iacute;cula</span>
+                        <strong>{{ solicitud.codigo_matricula }}</strong>
+                    </div>
+                    {% endif %}
+                    {% if solicitud.periodo_academico %}
+                    <div>
+                        <span>Periodo</span>
+                        <strong>{{ solicitud.periodo_academico }}</strong>
+                    </div>
+                    {% endif %}
+                </div>
+                <p class="edu-integration-note">
+                    La ficha oficial se prepara con la informaci&oacute;n disponible y no se genera hasta contar con una plantilla diligenciable y las reglas institucionales definitivas.
+                    <a href="{% url 'financiacion_educativa_web:ficha-matricula' solicitud.id %}">Ver informaci&oacute;n de la ficha</a>.
+                </p>
+                <form class="edu-form" method="post" enctype="multipart/form-data" novalidate>
+                    {% csrf_token %}
+                    {% if form.non_field_errors %}<div class="edu-error-summary" role="alert">{{ form.non_field_errors }}</div>{% endif %}
+                    <div class="edu-form-grid">
+                        {% for field in form %}
+                            <div class="edu-field">
+                                <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                                {% if field.name == "archivo" %}
+                                    <label class="edu-dropzone" for="{{ field.id_for_label }}">
+                                        <span class="edu-dropzone-icon" aria-hidden="true">&#8682;</span>
+                                        <strong data-file-name>Selecciona o arrastra tu archivo</strong>
+                                        <span>PDF, JPG o PNG</span>
+                                        {{ field }}
+                                    </label>
+                                {% else %}
+                                    {{ field }}
+                                {% endif %}
+                                {% if field.help_text %}<span class="edu-field-help">{{ field.help_text }}</span>{% endif %}
+                                {{ field.errors }}
+                            </div>
+                        {% endfor %}
+                    </div>
+                    <div class="edu-form-actions">
+                        <a class="edu-button-quiet" href="{% url 'financiacion_educativa_web:documentacion' solicitud.id %}">Atr&aacute;s</a>
+                        <button class="edu-button" type="submit">Guardar y continuar</button>
+                    </div>
+                </form>
+            </article>
+            {% include "financiacion_educativa/_application_summary.html" %}
+        </div>
     </div>
-  </section>
-</main>
+</section>
 {% endblock %}

@@ -1,23 +1,26 @@
-{% extends "account/libranza/_base.html" %}
+{% extends "financiacion_educativa/_base.html" %}
 
-{% block title %}Terminos aceptados{% endblock %}
+{% block title %}T&eacute;rminos aceptados | Aprobado{% endblock %}
 
 {% block content %}
-{% include "account/common/_auth_content_styles.html" %}
-<main class="section-main">
-  <section class="hero-section-account">
-    <div class="container-account">
-      <div class="div-card-agent-account">
-        <div class="mb-3"><span class="badge rounded-pill border">Proceso actualizado</span></div>
-        <h1>Terminos aceptados</h1>
-        <p class="auth-desc">
-          Tu solicitud esta lista para el siguiente paso documental.
-        </p>
-        <a class="btn-account" href="{% url 'financiacion_educativa_web:documentacion' solicitud.id %}">
-          Iniciar documentacion
-        </a>
-      </div>
+<section class="edu-flow-page">
+    <div class="edu-flow-container">
+        {% include "financiacion_educativa/_progress.html" with current_step="documents" %}
+        <div class="edu-flow-grid">
+            <article class="edu-surface">
+                <span class="edu-status-symbol"><i class="bi bi-check-lg" aria-hidden="true"></i></span>
+                <div class="edu-page-heading">
+                    <p class="edu-eyebrow">Proceso actualizado</p>
+                    <h1>T&eacute;rminos aceptados</h1>
+                    <p>Tu consentimiento fue registrado. Ahora puedes completar las personas, documentos y evidencia acad&eacute;mica requeridos.</p>
+                </div>
+                <a class="edu-button" href="{% url 'financiacion_educativa_web:documentacion' solicitud.id %}">
+                    Iniciar expediente
+                    <i class="bi bi-arrow-right" aria-hidden="true"></i>
+                </a>
+            </article>
+            {% include "financiacion_educativa/_application_summary.html" %}
+        </div>
     </div>
-  </section>
-</main>
+</section>
 {% endblock %}

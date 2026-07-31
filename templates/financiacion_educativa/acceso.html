@@ -1,39 +1,37 @@
-{% extends "account/libranza/_base.html" %}
+{% extends "financiacion_educativa/_base.html" %}
+{% load static %}
 
-{% block title %}Iniciar sesion{% endblock %}
+{% block title %}Accede a tu solicitud | Aprobado{% endblock %}
+{% block body_class %}edu-auth-page{% endblock %}
 
 {% block content %}
-{% include "account/common/_auth_content_styles.html" %}
-<main class="section-main">
-  <section class="hero-section-account">
-    <div class="container-account">
-      <div class="div-card-agent-account">
-        <div class="mb-3"><span class="badge rounded-pill border">Acceso seguro</span></div>
-        <h1>Inicia sesion</h1>
-        <p class="auth-desc">Usa la cuenta con la que continuaras este proceso.</p>
-        <form method="post">
-          {% csrf_token %}
-          {% if form.non_field_errors %}
-            <div class="alert alert-danger py-2">{{ form.non_field_errors }}</div>
-          {% endif %}
-          <div class="auth-field">
-            <label class="form-label">{{ form.username.label }}</label>
-            {{ form.username }}
-            {{ form.username.errors }}
-          </div>
-          <div class="auth-field">
-            <label class="form-label">{{ form.password.label }}</label>
-            {{ form.password }}
-            {{ form.password.errors }}
-          </div>
-          <button class="btn-account" type="submit">Continuar</button>
+<section class="edu-auth-main">
+    <div class="edu-auth-panel">
+        <img class="edu-auth-logo" src="{% static education_brand.logo_inverse|default:'images/logo.png' %}" alt="Aprobado">
+        <p class="edu-auth-kicker"><i class="bi bi-shield-lock" aria-hidden="true"></i> Invitaci&oacute;n protegida</p>
+        <h1>Contin&uacute;a tu financiaci&oacute;n</h1>
+        <p class="edu-auth-description">Usa la cuenta con la que completar&aacute;s este proceso educativo.</p>
+        <form class="edu-form" method="post" novalidate>
+            {% csrf_token %}
+            {% if form.non_field_errors %}
+                <div class="edu-error-summary" role="alert">{{ form.non_field_errors }}</div>
+            {% endif %}
+            <div class="edu-field">
+                <label for="{{ form.username.id_for_label }}">{{ form.username.label }}</label>
+                {{ form.username }}
+                {{ form.username.errors }}
+            </div>
+            <div class="edu-field">
+                <label for="{{ form.password.id_for_label }}">{{ form.password.label }}</label>
+                {{ form.password }}
+                {{ form.password.errors }}
+            </div>
+            <button class="edu-button edu-button-wide" type="submit">Acceder a mi solicitud</button>
         </form>
-        <div class="auth-footer-links">
-          <a href="{{ register_url }}">Crear cuenta</a>
-          <a href="/accounts/password/reset/">Recuperar acceso</a>
+        <div class="edu-auth-links">
+            <a href="{{ register_url }}">Crear una cuenta</a>
+            <a href="/accounts/password/reset/">Recuperar contrase&ntilde;a</a>
         </div>
-      </div>
     </div>
-  </section>
-</main>
+</section>
 {% endblock %}

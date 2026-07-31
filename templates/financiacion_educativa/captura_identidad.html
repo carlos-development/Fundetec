@@ -1,0 +1,124 @@
+{% extends "financiacion_educativa/_base.html" %}
+
+{% block title %}Captura de identificaci&oacute;n | Aprobado{% endblock %}
+
+{% block content %}
+<section class="edu-flow-page">
+    <div class="edu-flow-container">
+        {% include "financiacion_educativa/_progress.html" with current_step="documents" %}
+        <div class="edu-flow-grid">
+            <article class="edu-surface">
+                <div class="edu-page-heading">
+                    <p class="edu-eyebrow">Identificaci&oacute;n en tiempo real</p>
+                    <h1>Captura frente y reverso</h1>
+                    <p>
+                        Usa la c&aacute;mara para fotografiar el documento de
+                        {{ participante.nombre_completo }}. Esta captura no realiza OCR
+                        ni valida autom&aacute;ticamente la identidad.
+                    </p>
+                </div>
+
+                <div class="edu-camera-status-grid" aria-label="Estado de las capturas">
+                    <div class="edu-camera-side {% if documento_frente %}is-complete{% endif %}" data-side-status="frente">
+                        <i class="bi bi-person-bounding-box" aria-hidden="true"></i>
+                        <div>
+                            <strong>Parte frontal</strong>
+                            <span>{% if documento_frente %}Capturada; pendiente de revisi&oacute;n{% else %}Pendiente de captura{% endif %}</span>
+                            {% if captura_movil_autorizada and documento_frente %}
+                                <button class="edu-button-quiet" type="button" data-camera-replace="frente">
+                                    Volver a capturar
+                                </button>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="edu-camera-side {% if documento_reverso %}is-complete{% endif %}" data-side-status="reverso">
+                        <i class="bi bi-card-text" aria-hidden="true"></i>
+                        <div>
+                            <strong>Parte posterior</strong>
+                            <span>{% if documento_reverso %}Capturada; pendiente de revisi&oacute;n{% else %}Pendiente de captura{% endif %}</span>
+                            {% if captura_movil_autorizada and documento_reverso %}
+                                <button class="edu-button-quiet" type="button" data-camera-replace="reverso">
+                                    Volver a capturar
+                                </button>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                {% if captura_movil_autorizada %}
+                <div
+                    class="edu-camera"
+                    data-camera-capture
+                    data-upload-url="{% url 'financiacion_educativa_web:capturar-identidad' solicitud.id persona %}"
+                    data-initial-side="{% if not documento_frente %}frente{% elif not documento_reverso %}reverso{% else %}frente{% endif %}"
+                >
+                    <form data-camera-csrf hidden>{% csrf_token %}</form>
+                    <div class="edu-camera-instruction" role="status" aria-live="polite">
+                        <strong data-camera-side-title>Parte frontal</strong>
+                        <span data-camera-side-help>Ubica el frente completo dentro del encuadre, con buena luz y sin reflejos.</span>
+                    </div>
+                    <div class="edu-camera-stage">
+                        <video data-camera-video autoplay muted playsinline hidden></video>
+                        <img data-camera-preview alt="Vista previa de la captura" hidden>
+                        <div class="edu-camera-placeholder" data-camera-placeholder>
+                            <i class="bi bi-camera-video" aria-hidden="true"></i>
+                            <p>La c&aacute;mara solo se activa cuando otorgas permiso.</p>
+                        </div>
+                        <div class="edu-camera-frame" aria-hidden="true"></div>
+                    </div>
+                    <canvas data-camera-canvas hidden></canvas>
+                    <div class="edu-camera-message" data-camera-message role="alert" hidden></div>
+                    <div class="edu-camera-actions">
+                        <button class="edu-button" type="button" data-camera-start>
+                            <i class="bi bi-camera-video" aria-hidden="true"></i>
+                            Activar c&aacute;mara
+                        </button>
+                        <button class="edu-button" type="button" data-camera-shoot hidden>
+                            <i class="bi bi-camera" aria-hidden="true"></i>
+                            Capturar
+                        </button>
+                        <button class="edu-button-secondary" type="button" data-camera-repeat hidden>Repetir</button>
+                        <button class="edu-button" type="button" data-camera-confirm hidden>Confirmar captura</button>
+                    </div>
+                </div>
+
+                <div class="alert-info" role="note">
+                    La c&aacute;mara requiere HTTPS, el enlace temporal vigente y
+                    este mismo tel&eacute;fono. La captura queda sujeta a revisi&oacute;n.
+                </div>
+                {% else %}
+                <div class="alert-info" role="note">
+                    La captura de identificaci&oacute;n no est&aacute; disponible en este
+                    navegador. Solicita el enlace y &aacute;brelo desde tu celular.
+                </div>
+                {% endif %}
+                {% if not captura_movil_autorizada %}
+                <section class="edu-mobile-handoff" aria-labelledby="mobile-handoff-title">
+                    <div>
+                        <h2 id="mobile-handoff-title">Contin&uacute;a desde tu celular</h2>
+                        <p>
+                            Recibe en el correo registrado un enlace temporal para
+                            abrir directamente esta captura. Tendr&aacute;s que iniciar
+                            sesi&oacute;n con la cuenta asociada a la solicitud.
+                        </p>
+                    </div>
+                    <form method="post" action="{% url 'financiacion_educativa_web:captura-movil-enviar' solicitud.id persona %}">
+                        {% csrf_token %}
+                        <button class="edu-button-secondary" type="submit">
+                            <i class="bi bi-phone" aria-hidden="true"></i>
+                            Enviar enlace a mi correo
+                        </button>
+                    </form>
+                </section>
+                {% endif %}
+                <div class="edu-form-actions">
+                    <a class="edu-button-quiet" data-camera-cancel href="{% url 'financiacion_educativa_web:documentacion' solicitud.id %}">
+                        Volver al expediente
+                    </a>
+                </div>
+            </article>
+            {% include "financiacion_educativa/_application_summary.html" %}
+        </div>
+    </div>
+</section>
+{% endblock %}

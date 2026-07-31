@@ -24,8 +24,10 @@ ADVERTENCIA_PROYECCION = (
 class SaldoProyectado:
     saldo_capital: Decimal
     cuotas_cubiertas: int
+    cuotas_pendientes: int
     fecha_ultimo_corte: date
     fecha_proximo_vencimiento: date | None
+    fecha_final_programada: date | None
     intereses_futuros_programados: Decimal
 
 
@@ -33,14 +35,22 @@ class SaldoProyectado:
 class ProyeccionAbonoCapital:
     saldo_antes_pago: Decimal
     intereses_causados: Decimal
+    otros_conceptos_exigibles: Decimal
     valor_recibido: Decimal
     aplicado_intereses: Decimal
+    aplicado_otros_conceptos: Decimal
     interes_pendiente: Decimal
     aplicado_capital: Decimal
     excedente: Decimal
     saldo_posterior: Decimal
     cuota_programada: Decimal
+    cuotas_pendientes_antes: int
     nueva_cantidad_cuotas: int
+    fecha_final_antes: date | None
+    nueva_fecha_final: date | None
+    ultima_cuota_estimada: Decimal
+    intereses_futuros_antes: Decimal
+    intereses_futuros_despues: Decimal
     nuevo_plan: tuple
     intereses_futuros_evitados: Decimal
     fecha_efectiva: date
@@ -107,8 +117,12 @@ def calcular_saldo_proyectado(*, fotografia, cuotas_cubiertas=0):
     return SaldoProyectado(
         saldo_capital=saldo,
         cuotas_cubiertas=cubiertas,
+        cuotas_pendientes=len(cuotas[cubiertas:]),
         fecha_ultimo_corte=ultimo_corte,
         fecha_proximo_vencimiento=proxima,
+        fecha_final_programada=(
+            cuotas[-1].fecha_vencimiento if cubiertas < len(cuotas) else None
+        ),
         intereses_futuros_programados=futuros,
     )
 
@@ -157,14 +171,22 @@ def proyectar_abono_capital(
         return ProyeccionAbonoCapital(
             saldo_antes_pago=Decimal('0'),
             intereses_causados=Decimal('0'),
+            otros_conceptos_exigibles=Decimal('0'),
             valor_recibido=pago,
             aplicado_intereses=Decimal('0'),
+            aplicado_otros_conceptos=Decimal('0'),
             interes_pendiente=Decimal('0'),
             aplicado_capital=Decimal('0'),
             excedente=pago,
             saldo_posterior=Decimal('0'),
             cuota_programada=fotografia.valor_cuota_estimada,
+            cuotas_pendientes_antes=0,
             nueva_cantidad_cuotas=0,
+            fecha_final_antes=None,
+            nueva_fecha_final=None,
+            ultima_cuota_estimada=Decimal('0'),
+            intereses_futuros_antes=Decimal('0'),
+            intereses_futuros_despues=Decimal('0'),
             nuevo_plan=(),
             intereses_futuros_evitados=Decimal('0'),
             fecha_efectiva=fecha_efectiva,
@@ -178,9 +200,20 @@ def proyectar_abono_capital(
         saldo=saldo,
         fecha_efectiva=fecha_efectiva,
     )
-    aplicado_interes = min(pago, interes_causado)
-    interes_pendiente = interes_causado - aplicado_interes
+    otros_conceptos = Decimal('0')
+    total_exigible_previo = interes_causado + otros_conceptos
+    if pago <= total_exigible_previo:
+        raise ValidationError({
+            'valor_pago': (
+                'El valor debe ser superior a los intereses y conceptos '
+                'causados para producir un abono real a capital.'
+            ),
+        })
+    aplicado_interes = interes_causado
+    aplicado_otros = otros_conceptos
+    interes_pendiente = Decimal('0')
     disponible_capital = max(Decimal('0'), pago - aplicado_interes)
+    disponible_capital -= aplicado_otros
     aplicado_capital = min(disponible_capital, saldo.saldo_capital)
     excedente = max(
         Decimal('0'),
@@ -217,17 +250,29 @@ def proyectar_abono_capital(
         Decimal('0'),
         interes_futuro_original - intereses_proyectados,
     )
+    nueva_fecha_final = (
+        nuevo_plan[-1].fecha_vencimiento if nuevo_plan else fecha_efectiva
+    )
+    ultima_cuota = nuevo_plan[-1].valor_cuota if nuevo_plan else Decimal('0')
     return ProyeccionAbonoCapital(
         saldo_antes_pago=saldo.saldo_capital,
         intereses_causados=interes_causado,
+        otros_conceptos_exigibles=otros_conceptos,
         valor_recibido=pago,
         aplicado_intereses=aplicado_interes,
+        aplicado_otros_conceptos=aplicado_otros,
         interes_pendiente=interes_pendiente,
         aplicado_capital=aplicado_capital,
         excedente=excedente,
         saldo_posterior=saldo_posterior,
         cuota_programada=fotografia.valor_cuota_estimada,
+        cuotas_pendientes_antes=saldo.cuotas_pendientes,
         nueva_cantidad_cuotas=len(nuevo_plan),
+        fecha_final_antes=saldo.fecha_final_programada,
+        nueva_fecha_final=nueva_fecha_final,
+        ultima_cuota_estimada=ultima_cuota,
+        intereses_futuros_antes=interes_futuro_original,
+        intereses_futuros_despues=intereses_proyectados,
         nuevo_plan=nuevo_plan,
         intereses_futuros_evitados=evitados,
         fecha_efectiva=fecha_efectiva,

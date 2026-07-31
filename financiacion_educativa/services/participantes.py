@@ -64,6 +64,25 @@ def estudiante_requiere_tutor(estudiante, *, fecha_referencia=None):
     )
 
 
+def solicitud_requiere_tutor(solicitud, *, fecha_referencia=None):
+    asignacion = solicitud.roles_participantes.select_related(
+        'participante'
+    ).filter(rol=RolParticipante.STUDENT).first()
+    fecha_nacimiento = (
+        asignacion.participante.fecha_nacimiento
+        if asignacion
+        else solicitud.fecha_nacimiento_estudiante
+    )
+    edad = calcular_edad(
+        fecha_nacimiento,
+        fecha_referencia or fecha_referencia_solicitud(solicitud),
+    )
+    return (
+        edad is not None
+        and edad < settings.FINANCIACION_EDUCATIVA_MAYORIA_EDAD
+    )
+
+
 def _validar_fecha_confirmada(datos, etiqueta):
     if not datos.fecha_nacimiento_confirmada or not datos.fecha_nacimiento:
         raise ValidationError({
@@ -150,10 +169,29 @@ def registrar_o_actualizar_participante(
     solicitud = SolicitudFinanciacionEducativa.objects.select_for_update().get(
         pk=solicitud.pk
     )
-    if solicitud.estado != EstadoSolicitudFinanciacion.PENDING_DOCUMENT:
+    if solicitud.estado not in {
+        EstadoSolicitudFinanciacion.PENDING_DOCUMENT,
+        EstadoSolicitudFinanciacion.CORRECTION_REQUIRED,
+    }:
         raise ValidationError('La solicitud no admite cambios documentales.')
 
     roles = _validar_roles(roles)
+    if RolParticipante.GUARDIAN in roles:
+        if not solicitud_requiere_tutor(solicitud):
+            raise ValidationError({
+                'roles': 'Esta solicitud no requiere tutor.',
+            })
+        edad_tutor = calcular_edad(
+            datos.fecha_nacimiento,
+            fecha_referencia_solicitud(solicitud),
+        )
+        if (
+            edad_tutor is None
+            or edad_tutor < settings.FINANCIACION_EDUCATIVA_MAYORIA_EDAD
+        ):
+            raise ValidationError({
+                'fecha_nacimiento': 'El tutor debe ser una persona adulta.',
+            })
     candidato = ParticipanteFinanciacion(
         solicitud=solicitud,
         **_campos_datos(datos),
@@ -234,6 +272,37 @@ def registrar_o_actualizar_participante(
             campos_modificados=sorted(set(campos_modificados)),
         )
     return participante
+
+
+def sincronizar_estudiante_desde_solicitud(*, solicitud, actor):
+    if not solicitud.identidad_estudiante_completa:
+        return None
+    existente = solicitud.roles_participantes.select_related(
+        'participante'
+    ).filter(rol=RolParticipante.STUDENT).first()
+    if existente:
+        return existente.participante
+
+    roles = {RolParticipante.STUDENT}
+    if not solicitud_requiere_tutor(solicitud):
+        roles.add(RolParticipante.PRINCIPAL_DEBTOR)
+    return registrar_o_actualizar_participante(
+        solicitud=solicitud,
+        actor=actor,
+        datos=DatosParticipante(
+            nombres=solicitud.nombres,
+            apellidos=solicitud.apellidos,
+            tipo_documento=solicitud.tipo_documento_estudiante,
+            numero_documento=solicitud.numero_documento_estudiante,
+            fecha_nacimiento=solicitud.fecha_nacimiento_estudiante,
+            fecha_nacimiento_confirmada=False,
+            correo=solicitud.correo,
+            telefono=solicitud.celular,
+            relacion_estudiante=RelacionEstudiante.SELF,
+            pais_expedicion='CO',
+        ),
+        roles=roles,
+    )
 
 
 @transaction.atomic

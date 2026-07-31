@@ -20,6 +20,9 @@ from financiacion_educativa.services.orquestacion import (
     crear_solicitud_institucional_orquestada,
 )
 from financiacion_educativa.services.solicitudes import DatosSolicitudFinanciacion
+from financiacion_educativa.services.estado_publico import (
+    obtener_resultado_publico,
+)
 from instituciones.authentication import InstitutionApiKeyAuthentication
 
 from .errors import (
@@ -47,27 +50,76 @@ PARAMETRO_IDEMPOTENCIA = OpenApiParameter(
     ),
 )
 
+ENCABEZADO_REPLAY = OpenApiParameter(
+    name='Idempotent-Replayed',
+    type=bool,
+    location=OpenApiParameter.HEADER,
+    required=False,
+    response=[202],
+    description=(
+        'Se devuelve con valor true unicamente cuando la respuesta corresponde '
+        'a una repeticion idempotente.'
+    ),
+)
+
 EJEMPLO_CREACION = {
-    'external_reference': 'CURSO-2026-000123',
-    'first_names': 'JUAN DAVID',
-    'last_names': 'PEREZ GOMEZ',
+    'external_reference': 'MAT-2026-000123',
+    'first_names': 'CAMILA ANDREA',
+    'last_names': 'ROJAS DIAZ',
     'phone': '3001234567',
-    'email': 'juan@example.com',
+    'email': 'camila@example.com',
     'address': 'Calle 10 # 20-30',
+    'document_type': 'CC',
+    'document_number': '0012345678',
+    'birth_date': '2002-08-15',
+    'enrollment_code': 'A2D-2026-00123',
+    'academic_period': '2026-2',
+    'campus': 'Sede Centro',
+    'schedule': 'Nocturna',
+    'program_name': 'INGLES BASICO A2 DIAMANTE',
+    'enrollment_date': None,
     'plan_value': '2500000.00',
     'term': 6,
-    'course_type': 'Intensivo de programacion',
+}
+
+EJEMPLO_FINANCIERO_APROBADO = {
+    'currency': 'COP',
+    'requested_amount': '2500000.00',
+    'financed_amount': '2856778.00',
+    'term_months': 6,
+    'estimated_installment': '492932.00',
 }
 
 EJEMPLO_RESPUESTA = {
     'application_id': '9ed3b91b-d97f-4eaf-bff7-95a24dd51d41',
-    'external_reference': 'CURSO-2026-000123',
-    'status': 'PENDING_USER_REGISTRATION',
+    'external_reference': EJEMPLO_CREACION['external_reference'],
+    'status': 'RECEIVED',
+    'course_authorized': False,
+    'authorization_effective_at': None,
+    'decision_reason': '',
     'created_at': '2026-07-23T20:00:00-05:00',
     'status_url': (
         'https://example.com/api/v1/financiacion-educativa/'
         'solicitudes/9ed3b91b-d97f-4eaf-bff7-95a24dd51d41/'
     ),
+    'first_names': EJEMPLO_CREACION['first_names'],
+    'last_names': EJEMPLO_CREACION['last_names'],
+    'phone': EJEMPLO_CREACION['phone'],
+    'email': EJEMPLO_CREACION['email'],
+    'address': EJEMPLO_CREACION['address'],
+    'document_type': EJEMPLO_CREACION['document_type'],
+    'document_number': EJEMPLO_CREACION['document_number'],
+    'birth_date': EJEMPLO_CREACION['birth_date'],
+    'enrollment_code': EJEMPLO_CREACION['enrollment_code'],
+    'academic_period': EJEMPLO_CREACION['academic_period'],
+    'campus': EJEMPLO_CREACION['campus'],
+    'schedule': EJEMPLO_CREACION['schedule'],
+    'program_name': EJEMPLO_CREACION['program_name'],
+    'course_type': EJEMPLO_CREACION['program_name'],
+    'enrollment_date': None,
+    'plan_value': EJEMPLO_CREACION['plan_value'],
+    'term': EJEMPLO_CREACION['term'],
+    'financial_terms': None,
 }
 
 
@@ -82,12 +134,36 @@ def _url_estado(request, solicitud):
 
 
 def _respuesta_creacion(request, solicitud):
+    resultado_publico = obtener_resultado_publico(solicitud)
     return {
         'application_id': solicitud.pk,
         'external_reference': solicitud.referencia_externa,
-        'status': solicitud.estado,
+        'status': resultado_publico.estado,
+        'course_authorized': resultado_publico.curso_autorizado,
+        'authorization_effective_at': (
+            resultado_publico.autorizacion_efectiva_en
+        ),
+        'decision_reason': resultado_publico.motivo_decision,
         'created_at': solicitud.creada_en,
         'status_url': _url_estado(request, solicitud),
+        'first_names': solicitud.nombres,
+        'last_names': solicitud.apellidos,
+        'phone': solicitud.celular,
+        'email': solicitud.correo,
+        'address': solicitud.direccion,
+        'document_type': solicitud.tipo_documento_estudiante,
+        'document_number': solicitud.numero_documento_estudiante,
+        'birth_date': solicitud.fecha_nacimiento_estudiante,
+        'enrollment_code': solicitud.codigo_matricula,
+        'academic_period': solicitud.periodo_academico,
+        'campus': solicitud.sede,
+        'schedule': solicitud.jornada,
+        'program_name': solicitud.nombre_curso,
+        'course_type': solicitud.nombre_curso,
+        'enrollment_date': solicitud.fecha_matricula,
+        'plan_value': format(solicitud.valor_plan, '.2f'),
+        'term': solicitud.plazo_meses,
+        'financial_terms': resultado_publico.condiciones_financieras,
     }
 
 
@@ -106,13 +182,22 @@ class SolicitudListCreateAPIView(InstitutionalAPIView):
         operation_id='crear_solicitud_financiacion_educativa',
         summary='Crear una solicitud institucional',
         description=(
-            'Crea una solicitud en estado PENDING_USER_REGISTRATION. Repetir la '
-            'misma clave y payload devuelve la misma solicitud con 202 y el '
-            'encabezado Idempotent-Replayed: true. Para una solicitud nueva se '
+            'Una solicitud nueva se persiste con el estado publico RECEIVED. '
+            'program_name es el nombre canonico del programa; course_type es '
+            'su alias compatible. Debe enviarse al menos uno y, si se envian '
+            'ambos, deben coincidir. '
+            'Repetir la misma clave y payload devuelve la misma solicitud con '
+            'su estado publico actual, 202 y el encabezado '
+            'Idempotent-Replayed: true. Para una solicitud nueva se '
+            'interpreta la persona del payload siempre como estudiante. Si su '
+            'fecha de nacimiento indica minoria de edad, el flujo privado '
+            'exigira un tutor adulto como persona relacionada. '
+            'enrollment_date permanece nulo hasta una futura firma valida. Se '
             'programa de forma privada el envio de una invitacion al correo '
-            'registrado. El enlace nunca se incluye en la respuesta.'
+            'registrado. El enlace nunca se incluye en la respuesta. El 202 '
+            'confirma recepcion de la solicitud, no entrega final del correo.'
         ),
-        parameters=[PARAMETRO_IDEMPOTENCIA],
+        parameters=[PARAMETRO_IDEMPOTENCIA, ENCABEZADO_REPLAY],
         request=CrearSolicitudSerializer,
         responses={
             202: OpenApiResponse(
@@ -135,8 +220,60 @@ class SolicitudListCreateAPIView(InstitutionalAPIView):
                     ),
                 ],
             ),
-            400: ErrorResponseSerializer,
-            401: ErrorResponseSerializer,
+            400: OpenApiResponse(
+                response=ErrorResponseSerializer,
+                description='Payload o encabezado Idempotency-Key invalido.',
+                examples=[
+                    OpenApiExample(
+                        'Error de validacion',
+                        value={
+                            'error': {
+                                'code': 'VALIDATION_ERROR',
+                                'message': (
+                                    'La solicitud contiene datos invalidos.'
+                                ),
+                                'fields': {
+                                    'email': ['Este campo es requerido.'],
+                                },
+                            },
+                        },
+                        response_only=True,
+                    ),
+                ],
+            ),
+            401: OpenApiResponse(
+                response=ErrorResponseSerializer,
+                description=(
+                    'Credencial ausente, invalida, inactiva o asociada a una '
+                    'institucion inactiva.'
+                ),
+                examples=[
+                    OpenApiExample(
+                        'Credencial ausente',
+                        value={
+                            'error': {
+                                'code': 'AUTHENTICATION_REQUIRED',
+                                'message': (
+                                    'La credencial institucional es obligatoria.'
+                                ),
+                            },
+                        },
+                        response_only=True,
+                    ),
+                    OpenApiExample(
+                        'Credencial invalida',
+                        value={
+                            'error': {
+                                'code': 'INVALID_CREDENTIAL',
+                                'message': (
+                                    'La credencial institucional no es valida.'
+                                ),
+                            },
+                        },
+                        response_only=True,
+                    ),
+                ],
+            ),
             409: OpenApiResponse(
                 response=ErrorResponseSerializer,
                 description=(
@@ -154,6 +291,19 @@ class SolicitudListCreateAPIView(InstitutionalAPIView):
                                     'con otros datos.'
                                 ),
                             }
+                        },
+                        response_only=True,
+                    ),
+                    OpenApiExample(
+                        'Conflicto de referencia externa',
+                        value={
+                            'error': {
+                                'code': 'EXTERNAL_REFERENCE_CONFLICT',
+                                'message': (
+                                    'La referencia externa ya existe con '
+                                    'otros datos.'
+                                ),
+                            },
                         },
                         response_only=True,
                     ),
@@ -185,9 +335,16 @@ class SolicitudListCreateAPIView(InstitutionalAPIView):
             celular=datos_validados['phone'],
             correo=datos_validados['email'],
             direccion=datos_validados['address'],
+            tipo_documento_estudiante=datos_validados.get('document_type', ''),
+            numero_documento_estudiante=datos_validados.get('document_number', ''),
+            fecha_nacimiento_estudiante=datos_validados.get('birth_date'),
+            codigo_matricula=datos_validados.get('enrollment_code', ''),
+            periodo_academico=datos_validados.get('academic_period', ''),
+            sede=datos_validados.get('campus', ''),
+            jornada=datos_validados.get('schedule', ''),
             valor_plan=datos_validados['plan_value'],
             plazo_meses=datos_validados['term'],
-            nombre_curso=datos_validados['course_type'],
+            nombre_curso=datos_validados['program_name'],
             tipo_curso='',
             canal_origen='INSTITUTION_API',
             correlation_id='',
@@ -221,8 +378,13 @@ class SolicitudDetalleAPIView(InstitutionalAPIView):
         operation_id='consultar_solicitud_financiacion_educativa',
         summary='Consultar una solicitud propia',
         description=(
-            'Devuelve solo el estado y datos operativos mínimos. Solicitudes de '
-            'otra institucion se responden como recurso no encontrado.'
+            'Devuelve un estado publico estable y los datos recibidos. '
+            'APPROVED junto con course_authorized=true es el resultado que '
+            'autoriza a la institucion a activar el curso. '
+            'financial_terms solo contiene la fotografia contractual cuando '
+            'course_authorized es true; de lo contrario es null. '
+            'Solo la institucion propietaria puede consultarla; una credencial '
+            'de otra institucion recibe 404 para prevenir IDOR.'
         ),
         responses={
             200: OpenApiResponse(
@@ -232,17 +394,70 @@ class SolicitudDetalleAPIView(InstitutionalAPIView):
                         'Consulta',
                         value={
                             **EJEMPLO_RESPUESTA,
+                            'first_names': 'CAMILA ANDREA',
+                            'last_names': 'ROJAS DIAZ',
+                            'phone': '3001234567',
+                            'email': 'camila@example.com',
+                            'address': 'Calle 10 # 20-30',
+                            'document_type': 'CC',
+                            'document_number': '0012345678',
+                            'birth_date': '2002-08-15',
+                            'enrollment_code': 'A2D-2026-00123',
+                            'academic_period': '2026-2',
+                            'campus': 'Sede Centro',
+                            'schedule': 'Nocturna',
+                            'program_name': 'INGLES BASICO A2 DIAMANTE',
+                            'enrollment_date': None,
                             'plan_value': '2500000.00',
                             'term': 6,
-                            'course_type': 'Intensivo de programacion',
+                            'course_type': 'INGLES BASICO A2 DIAMANTE',
                             'updated_at': '2026-07-23T20:00:00-05:00',
+                        },
+                        response_only=True,
+                    ),
+                    OpenApiExample(
+                        'Solicitud aprobada y curso autorizado',
+                        value={
+                            **EJEMPLO_RESPUESTA,
+                            'status': 'APPROVED',
+                            'course_authorized': True,
+                            'authorization_effective_at': (
+                                '2026-07-30T15:45:00-05:00'
+                            ),
+                            'financial_terms': EJEMPLO_FINANCIERO_APROBADO,
+                            'updated_at': '2026-07-30T15:45:00-05:00',
                         },
                         response_only=True,
                     ),
                 ],
             ),
-            401: ErrorResponseSerializer,
-            404: ErrorResponseSerializer,
+            401: OpenApiResponse(
+                response=ErrorResponseSerializer,
+                description=(
+                    'Credencial ausente, invalida, inactiva o asociada a una '
+                    'institucion inactiva.'
+                ),
+            ),
+            404: OpenApiResponse(
+                response=ErrorResponseSerializer,
+                description=(
+                    'La solicitud no existe o pertenece a otra institucion.'
+                ),
+                examples=[
+                    OpenApiExample(
+                        'Recurso no visible',
+                        value={
+                            'error': {
+                                'code': 'NOT_FOUND',
+                                'message': (
+                                    'El recurso solicitado no existe.'
+                                ),
+                            },
+                        },
+                        response_only=True,
+                    ),
+                ],
+            ),
         },
     )
     def get(self, request, application_id):
@@ -255,6 +470,19 @@ class SolicitudDetalleAPIView(InstitutionalAPIView):
                 'valor_plan',
                 'plazo_meses',
                 'nombre_curso',
+                'nombres',
+                'apellidos',
+                'celular',
+                'correo',
+                'direccion',
+                'tipo_documento_estudiante',
+                'numero_documento_estudiante',
+                'fecha_nacimiento_estudiante',
+                'codigo_matricula',
+                'periodo_academico',
+                'sede',
+                'jornada',
+                'fecha_matricula',
                 'creada_en',
                 'actualizada_en',
             ),
@@ -263,8 +491,5 @@ class SolicitudDetalleAPIView(InstitutionalAPIView):
         )
         return Response({
             **_respuesta_creacion(request, solicitud),
-            'plan_value': format(solicitud.valor_plan, '.2f'),
-            'term': solicitud.plazo_meses,
-            'course_type': solicitud.nombre_curso,
             'updated_at': solicitud.actualizada_en,
         })

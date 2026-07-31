@@ -1,14 +1,15 @@
 from django import forms
 from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
+from django.utils import timezone
 
 from financiacion_educativa.choices import (
     RelacionEstudiante,
-    RolParticipante,
     TipoDocumentoFinanciacion,
     TipoDocumentoIdentidad,
 )
 from financiacion_educativa.models import ParticipanteFinanciacion
+from financiacion_educativa.services.participantes import solicitud_requiere_tutor
 
 
 class AccesoFinanciacionForm(AuthenticationForm):
@@ -101,12 +102,20 @@ class RegistroFinanciacionForm(UserCreationForm):
         model = get_user_model()
         fields = ('email', 'first_name', 'last_name')
 
+    def __init__(self, *args, expected_email=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.expected_email = (expected_email or '').strip().casefold()
+
     def clean_email(self):
         email = (self.cleaned_data.get('email') or '').strip().lower()
         User = get_user_model()
         if not email or User.objects.filter(email__iexact=email).exists():
             raise forms.ValidationError(
                 'No fue posible crear la cuenta. Inicia sesion o recupera tu acceso.'
+            )
+        if self.expected_email and email.casefold() != self.expected_email:
+            raise forms.ValidationError(
+                'Usa el mismo correo al que fue enviada la invitacion.'
             )
         return email
 
@@ -121,7 +130,32 @@ class RegistroFinanciacionForm(UserCreationForm):
         return usuario
 
 
-class ParticipanteFinanciacionForm(forms.Form):
+class EstudianteFinanciacionForm(forms.Form):
+    tipo_documento = forms.ChoiceField(
+        label='Tipo de identificacion',
+        choices=TipoDocumentoIdentidad.choices,
+    )
+    numero_documento = forms.CharField(
+        label='Numero de identificacion',
+        max_length=40,
+    )
+    pais_expedicion = forms.CharField(
+        label='Pais de expedicion (codigo de dos letras)',
+        max_length=2,
+        required=False,
+        initial='CO',
+    )
+    fecha_nacimiento = forms.DateField(
+        label='Fecha de nacimiento declarada',
+        input_formats=['%Y-%m-%d'],
+        widget=forms.DateInput(
+            format='%Y-%m-%d',
+            attrs={'type': 'date'},
+        ),
+    )
+
+
+class TutorFinanciacionForm(forms.Form):
     nombres = forms.CharField(label='Nombres', max_length=160)
     apellidos = forms.CharField(label='Apellidos', max_length=160)
     tipo_documento = forms.ChoiceField(
@@ -140,33 +174,22 @@ class ParticipanteFinanciacionForm(forms.Form):
     )
     fecha_nacimiento = forms.DateField(
         label='Fecha de nacimiento declarada',
-        widget=forms.DateInput(attrs={'type': 'date'}),
+        input_formats=['%Y-%m-%d'],
+        widget=forms.DateInput(
+            format='%Y-%m-%d',
+            attrs={'type': 'date'},
+        ),
     )
     correo = forms.EmailField(label='Correo', required=False)
     telefono = forms.CharField(label='Telefono', max_length=40, required=False)
     relacion_estudiante = forms.ChoiceField(
-        label='Relacion declarada con el estudiante',
+        label='Relacion con el estudiante',
         choices=[('', 'Selecciona una opcion'), *RelacionEstudiante.choices],
-        required=False,
     )
-    roles = forms.MultipleChoiceField(
-        label='Roles declarados',
-        choices=RolParticipante.choices,
-        widget=forms.CheckboxSelectMultiple,
-    )
-
-    def clean_roles(self):
-        roles = set(self.cleaned_data['roles'])
-        if {RolParticipante.STUDENT, RolParticipante.GUARDIAN}.issubset(roles):
-            raise forms.ValidationError(
-                'Una persona no puede ser estudiante y tutor a la vez.'
-            )
-        return roles
 
 
 TIPOS_DOCUMENTALES_USUARIO = (
-    TipoDocumentoFinanciacion.STUDENT_IDENTIFICATION,
-    TipoDocumentoFinanciacion.GUARDIAN_IDENTIFICATION,
+    TipoDocumentoFinanciacion.INCOME_CERTIFICATE,
     TipoDocumentoFinanciacion.DEBTOR_IDENTIFICATION,
     TipoDocumentoFinanciacion.OTHER_EDUCATIONAL,
 )
@@ -181,7 +204,7 @@ class DocumentoFinanciacionForm(forms.Form):
         ],
     )
     participante = forms.ModelChoiceField(
-        label='Persona relacionada',
+        label='Titular del documento',
         queryset=ParticipanteFinanciacion.objects.none(),
         required=False,
         empty_label='Documento general de la solicitud',
@@ -193,9 +216,25 @@ class DocumentoFinanciacionForm(forms.Form):
         ),
     )
 
-    def __init__(self, *args, solicitud, **kwargs):
+    def __init__(
+        self,
+        *args,
+        solicitud,
+        tipo_inicial='',
+        participante_inicial='',
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
         self.fields['participante'].queryset = solicitud.participantes.all()
+        tipos = list(TIPOS_DOCUMENTALES_USUARIO)
+        self.fields['tipo'].choices = [
+            (valor, TipoDocumentoFinanciacion(valor).label)
+            for valor in tipos
+        ]
+        if tipo_inicial in tipos:
+            self.fields['tipo'].initial = tipo_inicial
+        if participante_inicial:
+            self.fields['participante'].initial = participante_inicial
 
 
 class ReemplazoDocumentoForm(forms.Form):
@@ -208,11 +247,6 @@ class ReemplazoDocumentoForm(forms.Form):
 
 
 class EvidenciaMatriculaForm(forms.Form):
-    institucion_declarada = forms.CharField(
-        label='Institucion educativa declarada',
-        max_length=200,
-    )
-    programa_curso = forms.CharField(label='Programa o curso', max_length=200)
     periodo_academico = forms.CharField(label='Periodo academico', max_length=80)
     referencia_matricula = forms.CharField(
         label='Referencia de matricula',
@@ -227,14 +261,28 @@ class EvidenciaMatriculaForm(forms.Form):
         ),
     )
 
-    def __init__(self, *args, requiere_archivo=True, **kwargs):
+    def __init__(
+        self,
+        *args,
+        requiere_archivo=True,
+        periodo_institucional='',
+        codigo_institucional='',
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
         self.fields['archivo'].required = requiere_archivo
+        if periodo_institucional:
+            self.fields['periodo_academico'].initial = periodo_institucional
+            self.fields['periodo_academico'].disabled = True
+        if codigo_institucional:
+            self.fields['referencia_matricula'].initial = codigo_institucional
+            self.fields['referencia_matricula'].disabled = True
 
 
 class CrearFotografiaFinancieraForm(forms.Form):
     fecha_inicio_plan = forms.DateField(
         label='Fecha inicial del plan',
+        initial=timezone.localdate,
         widget=forms.DateInput(attrs={'type': 'date'}),
         help_text='La primera cuota vence un mes despues de esta fecha.',
     )
@@ -262,12 +310,20 @@ class BaseProyeccionFinancieraForm(forms.Form):
         self.fields['participante_pagante'].queryset = solicitud.participantes.all()
 
 
-class ProyeccionAbonoForm(BaseProyeccionFinancieraForm):
+class ProyeccionAbonoForm(forms.Form):
+    fecha_efectiva = forms.DateField(
+        label='Fecha estimada del abono',
+        widget=forms.DateInput(attrs={'type': 'date'}),
+        help_text='Se calcularan intereses con la politica diaria base 30.',
+    )
     valor_pago = forms.DecimalField(
-        label='Valor hipotetico del abono',
+        label='Valor que deseas pagar',
         max_digits=14,
         decimal_places=0,
         min_value=1,
+        help_text=(
+            'Debe superar los intereses causados para reducir el capital.'
+        ),
     )
 
 

@@ -42,10 +42,9 @@ class FlujoWebDocumentalFase4Tests(TestCase):
             email='web-f4-otro@example.com',
             password='Clave-2026',
         )
-        self.solicitud = crear_solicitud()
-        self.solicitud.usuario = self.usuario
+        self.solicitud = crear_solicitud(usuario=self.usuario)
         self.solicitud.estado = EstadoSolicitudFinanciacion.PENDING_DOCUMENT
-        self.solicitud.save(update_fields=['usuario', 'estado'])
+        self.solicitud.save(update_fields=['estado'])
 
     def _url(self, nombre, **kwargs):
         return reverse(
@@ -81,6 +80,7 @@ class FlujoWebDocumentalFase4Tests(TestCase):
         self.client.force_login(self.otro)
         self.assertEqual(self.client.get(self._url('documentacion')).status_code, 404)
         self.assertEqual(self.client.get(self._url('participante-nuevo')).status_code, 404)
+        self.assertEqual(self.client.get(self._url('ficha-matricula')).status_code, 404)
 
     def test_formulario_participante_crea_roles_y_resumen_enmascara_documento(self):
         self.client.force_login(self.usuario)
@@ -108,7 +108,104 @@ class FlujoWebDocumentalFase4Tests(TestCase):
         self.assertNotContains(resumen, '1000999988')
         self.assertContains(resumen, '******9988')
         participante = self.solicitud.participantes.get()
+        self.assertEqual(participante.nombres, self.solicitud.nombres)
+        self.assertEqual(participante.apellidos, self.solicitud.apellidos)
+        self.assertEqual(participante.correo, self.solicitud.correo)
+        self.assertEqual(participante.telefono, self.solicitud.celular)
+        self.assertEqual(
+            set(participante.roles.values_list('rol', flat=True)),
+            {RolParticipante.STUDENT, RolParticipante.PRINCIPAL_DEBTOR},
+        )
         self.assertIsNone(participante.usuario)
+
+    def test_formulario_estudiante_no_repite_datos_recibidos(self):
+        self.client.force_login(self.usuario)
+
+        respuesta = self.client.get(
+            f'{self._url("participante-nuevo")}?tipo=estudiante'
+        )
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertContains(respuesta, self.solicitud.nombres)
+        self.assertContains(respuesta, self.solicitud.apellidos)
+        self.assertNotContains(respuesta, 'name="nombres"')
+        self.assertNotContains(respuesta, 'name="apellidos"')
+        self.assertNotContains(respuesta, 'name="correo"')
+        self.assertNotContains(respuesta, 'name="telefono"')
+
+    def test_tutor_es_adicional_y_no_reemplaza_datos_del_estudiante(self):
+        registrar_o_actualizar_participante(
+            solicitud=self.solicitud,
+            actor=self.usuario,
+            datos=DatosParticipante(
+                nombres='Persona',
+                apellidos='Menor',
+                tipo_documento=TipoDocumentoIdentidad.TI,
+                numero_documento='1000999988',
+                fecha_nacimiento=date(2012, 1, 1),
+                relacion_estudiante=RelacionEstudiante.SELF,
+            ),
+            roles={RolParticipante.STUDENT},
+        )
+        self.client.force_login(self.usuario)
+
+        respuesta = self.client.post(
+            f'{self._url("participante-nuevo")}?tipo=tutor',
+            {
+                'tipo_persona': 'tutor',
+                'nombres': 'Tutor',
+                'apellidos': 'Responsable',
+                'tipo_documento': TipoDocumentoIdentidad.CC,
+                'numero_documento': '9000999988',
+                'pais_expedicion': 'CO',
+                'fecha_nacimiento': '1980-01-01',
+                'correo': 'tutor@example.com',
+                'telefono': '3011234567',
+                'relacion_estudiante': RelacionEstudiante.LEGAL_GUARDIAN,
+            },
+        )
+
+        self.assertRedirects(respuesta, self._url('documentacion'))
+        estudiante = self.solicitud.roles_participantes.get(
+            rol=RolParticipante.STUDENT
+        ).participante
+        tutor = self.solicitud.roles_participantes.get(
+            rol=RolParticipante.GUARDIAN
+        ).participante
+        self.assertEqual(estudiante.nombres, 'Persona')
+        self.assertEqual(tutor.nombres, 'Tutor')
+        self.assertNotEqual(estudiante.pk, tutor.pk)
+
+    def test_ficha_matricula_es_privada_y_no_infiere_datos_faltantes(self):
+        self._crear_estudiante()
+        self.client.force_login(self.usuario)
+
+        respuesta = self.client.get(self._url('ficha-matricula'))
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta['Referrer-Policy'], 'no-referrer')
+        self.assertIn('no-store', respuesta['Cache-Control'])
+        self.assertContains(respuesta, self.solicitud.nombre_curso)
+        self.assertContains(respuesta, self.solicitud.nombres)
+        self.assertContains(respuesta, 'Fecha oficial de matricula')
+        self.assertContains(
+            respuesta,
+            'La fecha de creaci&oacute;n de la solicitud tampoco se interpreta',
+        )
+
+    def test_evidencia_no_solicita_datos_academicos_ya_recibidos(self):
+        self.client.force_login(self.usuario)
+
+        respuesta = self.client.get(self._url('matricula'))
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertContains(respuesta, self.solicitud.nombre_curso)
+        self.assertContains(
+            respuesta,
+            self.solicitud.institucion.nombre_comercial,
+        )
+        self.assertNotContains(respuesta, 'name="institucion_declarada"')
+        self.assertNotContains(respuesta, 'name="programa_curso"')
 
     def test_carga_multipart_es_privada_y_no_acepta_aprobacion_del_usuario(self):
         participante = self._crear_estudiante()
@@ -116,10 +213,10 @@ class FlujoWebDocumentalFase4Tests(TestCase):
         respuesta = self.client.post(
             self._url('documento-cargar'),
             {
-                'tipo': TipoDocumentoFinanciacion.STUDENT_IDENTIFICATION,
+                'tipo': TipoDocumentoFinanciacion.INCOME_CERTIFICATE,
                 'participante': str(participante.pk),
                 'archivo': SimpleUploadedFile(
-                    'identidad.pdf',
+                    'ingresos.pdf',
                     b'%PDF-1.7\nweb\n%%EOF',
                     content_type='application/octet-stream',
                 ),
@@ -132,6 +229,13 @@ class FlujoWebDocumentalFase4Tests(TestCase):
         self.assertEqual(documento.estado_validacion, 'PENDING')
         with self.assertRaises(ValueError):
             documento.archivo.url
+        resumen = self.client.get(self._url('documentacion'))
+        self.assertContains(resumen, 'Previsualizar')
+        self.assertContains(resumen, 'data-document-preview')
+        self.assertNotContains(
+            resumen,
+            'Informaci&oacute;n recibida de la instituci&oacute;n',
+        )
 
     def test_post_documental_exige_csrf(self):
         cliente = Client(enforce_csrf_checks=True)

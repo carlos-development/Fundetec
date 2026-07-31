@@ -41,6 +41,24 @@ def obtener_versiones_terminos_vigentes(*, obligatorios=True, ahora=None):
     return list(seleccionadas.values())
 
 
+def terminos_obligatorios_aceptados(*, solicitud):
+    if not solicitud.usuario_id:
+        return False
+    vigentes = obtener_versiones_terminos_vigentes(obligatorios=True)
+    if not vigentes:
+        return False
+    aceptados = set(
+        Consentimiento.objects.filter(
+            solicitud=solicitud,
+            usuario_id=solicitud.usuario_id,
+        ).values_list('tipo', 'version_texto')
+    )
+    return all(
+        (version.tipo, version.version) in aceptados
+        for version in vigentes
+    )
+
+
 @transaction.atomic
 def publicar_version_terminos(*, version, vigente_desde=None):
     version = VersionTerminosFinanciacion.objects.select_for_update().get(

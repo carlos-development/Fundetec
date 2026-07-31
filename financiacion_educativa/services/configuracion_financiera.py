@@ -1,4 +1,5 @@
 from datetime import date
+import logging
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
@@ -9,6 +10,15 @@ from financiacion_educativa.models import ConfiguracionFinancieraEducativa
 
 
 CODIGO_POLITICA_ESTANDAR = 'EDU_STANDARD'
+logger = logging.getLogger(__name__)
+
+
+class ConfiguracionFinancieraNoDisponible(ValidationError):
+    pass
+
+
+class ConfiguracionFinancieraAmbigua(ValidationError):
+    pass
 
 
 def seleccionar_configuracion_vigente(
@@ -29,9 +39,23 @@ def seleccionar_configuracion_vigente(
         ).order_by('-version')[:2]
     )
     if not candidatas:
-        raise ValidationError('No existe una configuracion financiera vigente.')
+        logger.warning(
+            'Configuracion financiera no disponible: codigo=%s fecha=%s.',
+            codigo,
+            fecha_aplicacion.isoformat(),
+        )
+        raise ConfiguracionFinancieraNoDisponible(
+            'No existe una configuracion financiera vigente.'
+        )
     if len(candidatas) > 1:
-        raise ValidationError('Existen configuraciones financieras vigentes ambiguas.')
+        logger.error(
+            'Configuracion financiera ambigua: codigo=%s fecha=%s.',
+            codigo,
+            fecha_aplicacion.isoformat(),
+        )
+        raise ConfiguracionFinancieraAmbigua(
+            'Existen configuraciones financieras vigentes ambiguas.'
+        )
     return candidatas[0]
 
 

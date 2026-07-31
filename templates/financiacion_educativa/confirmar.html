@@ -1,25 +1,31 @@
-{% extends "account/libranza/_base.html" %}
+{% extends "financiacion_educativa/_base.html" %}
 
-{% block title %}Confirmar solicitud{% endblock %}
+{% block title %}Confirma tu solicitud | Aprobado{% endblock %}
 
 {% block content %}
-{% include "account/common/_auth_content_styles.html" %}
-<main class="section-main">
-  <section class="hero-section-account">
-    <div class="container-account">
-      <div class="div-card-agent-account">
-        <div class="mb-3"><span class="badge rounded-pill border">Confirmacion</span></div>
-        <h1>Confirma que deseas continuar</h1>
-        <p class="auth-desc">
-          La solicitud corresponde al programa <strong>{{ solicitud.nombre_curso }}</strong>
-          originado por <strong>{{ solicitud.institucion.nombre_comercial }}</strong>.
-        </p>
-        <form method="post">
-          {% csrf_token %}
-          <button class="btn-account" type="submit">Asociar mi cuenta y continuar</button>
-        </form>
-      </div>
+<section class="edu-flow-page">
+    <div class="edu-flow-container">
+        {% include "financiacion_educativa/_progress.html" with current_step="data" %}
+        <div class="edu-surface">
+            <div class="edu-page-heading">
+                <p class="edu-eyebrow">Datos recibidos</p>
+                <h1>Confirma que deseas continuar</h1>
+                <p>Esta invitaci&oacute;n corresponde a una solicitud de financiaci&oacute;n educativa iniciada por la instituci&oacute;n.</p>
+            </div>
+            <div class="edu-invitation-callout">
+                <div>
+                    <h2>{{ solicitud.nombre_curso }}</h2>
+                    <p>Instituci&oacute;n: {{ solicitud.institucion.nombre_comercial }}</p>
+                </div>
+                <span class="edu-secure-label"><i class="bi bi-shield-check" aria-hidden="true"></i> Acceso verificado</span>
+            </div>
+            <form method="post">
+                {% csrf_token %}
+                <div class="edu-form-actions edu-form-actions-end">
+                    <button class="edu-button" type="submit">Asociar mi cuenta y continuar</button>
+                </div>
+            </form>
+        </div>
     </div>
-  </section>
-</main>
+</section>
 {% endblock %}

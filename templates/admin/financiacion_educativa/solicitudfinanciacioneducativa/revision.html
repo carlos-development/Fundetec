@@ -1,0 +1,78 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+<div id="content-main">
+    <p>
+        <strong>Referencia:</strong> {{ original.referencia_externa }} |
+        <strong>Instituci&oacute;n:</strong> {{ original.institucion }} |
+        <strong>Estado:</strong> {{ original.get_estado_display }}
+    </p>
+
+    <fieldset class="module aligned">
+        <h2>Expediente</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Documento</th>
+                    <th>Titular</th>
+                    <th>Escaneo</th>
+                    <th>Revisi&oacute;n</th>
+                    <th>Archivo</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for documento in documentos %}
+                <tr>
+                    <td>{{ documento.get_tipo_display }}</td>
+                    <td>{{ documento.participante|default:"Solicitud" }}</td>
+                    <td>{{ documento.get_estado_escaneo_display }}</td>
+                    <td>{{ documento.get_estado_validacion_display }}</td>
+                    <td>
+                        <a target="_blank" rel="noopener" href="{% url 'financiacion_educativa_web:documento-previsualizar' original.pk documento.pk %}">
+                            Previsualizar
+                        </a>
+                    </td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="5">No hay documentos activos.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </fieldset>
+
+    <fieldset class="module aligned">
+        <h2>Condiciones financieras</h2>
+        {% if fotografia %}
+            <p>
+                Versi&oacute;n {{ fotografia.numero_version }},
+                {{ fotografia.moneda }} {{ fotografia.capital_financiado }},
+                cuota estimada {{ fotografia.valor_cuota_estimada }}.
+            </p>
+        {% else %}
+            <p>No existe una fotograf&iacute;a financiera activa.</p>
+        {% endif %}
+    </fieldset>
+
+    {% if estado_revisable %}
+    <form method="post" novalidate>
+        {% csrf_token %}
+        {{ form.non_field_errors }}
+        <fieldset class="module aligned">
+            {% for field in form %}
+                <div class="form-row">
+                    {{ field.errors }}
+                    {{ field.label_tag }}
+                    {{ field }}
+                    {% if field.help_text %}<div class="help">{{ field.help_text }}</div>{% endif %}
+                </div>
+            {% endfor %}
+        </fieldset>
+        <div class="submit-row">
+            <input type="submit" class="default" value="Registrar decisi&oacute;n">
+        </div>
+    </form>
+    {% else %}
+        <p>Esta solicitud ya no admite una nueva decisi&oacute;n en su estado actual.</p>
+    {% endif %}
+</div>
+{% endblock %}

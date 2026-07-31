@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ title }}</title>
+</head>
+<body style="margin:0;background:#f4f7fb;color:#10233f;font-family:Arial,sans-serif;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f4f7fb;padding:24px;">
+        <tr>
+            <td align="center">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:620px;background:#ffffff;border:1px solid #dce4ee;">
+                    <tr>
+                        <td style="padding:32px;">
+                            <p style="margin:0 0 10px;color:#087ea4;font-size:13px;font-weight:bold;">{{ brand_name }}</p>
+                            <h1 style="margin:0 0 18px;font-size:26px;">{{ title }}</h1>
+                            <p style="margin:0 0 18px;line-height:1.6;">{{ message }}</p>
+                            {% if course_authorized %}
+                            <p style="margin:0;padding:16px;background:#eef8f2;border-left:4px solid #238636;line-height:1.5;">
+                                La instituci&oacute;n aliada puede activar el curso.
+                                Esta autorizaci&oacute;n no representa un desembolso de dinero.
+                            </p>
+                            {% else %}
+                            <p style="margin:0;line-height:1.6;">
+                                Ingresa a la plataforma con tu cuenta para consultar el estado vigente.
+                            </p>
+                            {% endif %}
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>

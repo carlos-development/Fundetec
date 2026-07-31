@@ -4,6 +4,7 @@ from io import StringIO
 
 from django.core.exceptions import ValidationError
 from django.core.management import call_command
+from django.db import connection
 from django.test import TestCase
 from django.utils import timezone
 
@@ -13,6 +14,8 @@ from financiacion_educativa.models import (
     ConfiguracionFinancieraEducativa,
 )
 from financiacion_educativa.services.configuracion_financiera import (
+    ConfiguracionFinancieraAmbigua,
+    ConfiguracionFinancieraNoDisponible,
     activar_configuracion_financiera,
     seleccionar_configuracion_vigente,
 )
@@ -155,6 +158,72 @@ class ConfiguracionYFotografiaFinancieraTests(TestCase):
         with self.assertRaises(ValidationError):
             activar_configuracion_financiera(configuracion=borrador)
 
+    def test_limites_de_vigencia_son_inclusivos(self):
+        ConfiguracionFinancieraEducativa.objects.filter(
+            pk=self.configuracion.pk
+        ).update(vigente_hasta=date(2026, 7, 25))
+
+        self.assertEqual(
+            seleccionar_configuracion_vigente(
+                fecha_aplicacion=date(2026, 1, 1)
+            ),
+            self.configuracion,
+        )
+        self.assertEqual(
+            seleccionar_configuracion_vigente(
+                fecha_aplicacion=date(2026, 7, 25)
+            ),
+            self.configuracion,
+        )
+
+    def test_no_usa_configuracion_vencida_futura_o_inactiva(self):
+        casos = (
+            {
+                'vigente_desde': date(2025, 1, 1),
+                'vigente_hasta': date(2025, 12, 31),
+                'estado': EstadoConfiguracionFinanciera.ACTIVE,
+            },
+            {
+                'vigente_desde': date(2027, 1, 1),
+                'vigente_hasta': None,
+                'estado': EstadoConfiguracionFinanciera.ACTIVE,
+            },
+            {
+                'vigente_desde': date(2026, 1, 1),
+                'vigente_hasta': None,
+                'estado': EstadoConfiguracionFinanciera.DRAFT,
+            },
+        )
+        for indice, valores in enumerate(casos, start=2):
+            with self.subTest(valores=valores):
+                ConfiguracionFinancieraEducativa.objects.all().delete()
+                crear_configuracion_financiera(
+                    version=indice,
+                    **valores,
+                )
+                with self.assertRaises(ConfiguracionFinancieraNoDisponible):
+                    seleccionar_configuracion_vigente(
+                        fecha_aplicacion=date(2026, 7, 25)
+                    )
+
+    def test_ausencia_y_ambiguedad_fallan_de_forma_cerrada(self):
+        ConfiguracionFinancieraEducativa.objects.all().delete()
+        with self.assertRaises(ConfiguracionFinancieraNoDisponible):
+            seleccionar_configuracion_vigente(
+                fecha_aplicacion=date(2026, 7, 25)
+            )
+
+        primera = crear_configuracion_financiera(version=10)
+        segunda = crear_configuracion_financiera(
+            version=11,
+            vigente_desde=date(2026, 2, 1),
+        )
+        self.assertNotEqual(primera.pk, segunda.pk)
+        with self.assertRaises(ConfiguracionFinancieraAmbigua):
+            seleccionar_configuracion_vigente(
+                fecha_aplicacion=date(2026, 7, 25)
+            )
+
     def test_configuracion_aplicada_no_puede_modificarse(self):
         self._crear_fotografia()
         self.configuracion.tasa_interes_mensual = Decimal('2')
@@ -181,3 +250,21 @@ class ConfiguracionYFotografiaFinancieraTests(TestCase):
         config = ConfiguracionFinancieraEducativa.objects.get()
         self.assertEqual(config.estado, EstadoConfiguracionFinanciera.ACTIVE)
         self.assertEqual(config.porcentaje_seguro_vida, Decimal('0.371100'))
+
+    def test_diagnostico_usa_la_conexion_actual_y_el_mismo_selector(self):
+        salida = StringIO()
+
+        call_command(
+            'diagnosticar_politica_financiera_educativa',
+            stdout=salida,
+        )
+
+        contenido = salida.getvalue()
+        self.assertIn(f'DATABASE_VENDOR={connection.vendor}', contenido)
+        self.assertIn(
+            f'DATABASE_ENGINE={connection.settings_dict["ENGINE"]}',
+            contenido,
+        )
+        self.assertIn('TIME_ZONE=America/Bogota', contenido)
+        self.assertIn('POLICY codigo=EDU_STANDARD version=1 estado=ACTIVE', contenido)
+        self.assertIn('SELECTOR=EDU_STANDARD v1', contenido)

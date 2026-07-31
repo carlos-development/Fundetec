@@ -18,10 +18,17 @@ TRANSICIONES_PERMITIDAS = {
     },
     Estado.PENDING_GUARDIAN: {Estado.PENDING_DOCUMENT, Estado.CANCELLED},
     Estado.PENDING_MANUAL_REVIEW: {
-        Estado.PENDING_DOCUMENT,
-        Estado.PENDING_PROMISSORY_NOTE,
+        Estado.CORRECTION_REQUIRED,
+        Estado.APPROVED,
+        Estado.REJECTED,
         Estado.CANCELLED,
     },
+    Estado.CORRECTION_REQUIRED: {
+        Estado.PENDING_MANUAL_REVIEW,
+        Estado.CANCELLED,
+    },
+    Estado.APPROVED: set(),
+    Estado.REJECTED: set(),
     Estado.PENDING_PROMISSORY_NOTE: {Estado.PENDING_SIGNATURE, Estado.CANCELLED},
     Estado.PENDING_SIGNATURE: {
         Estado.PENDING_PROMISSORY_NOTE,

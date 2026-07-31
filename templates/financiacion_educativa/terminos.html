@@ -1,50 +1,50 @@
-{% extends "account/libranza/_base.html" %}
+{% extends "financiacion_educativa/_base.html" %}
 
-{% block title %}Terminos de financiacion{% endblock %}
+{% block title %}T&eacute;rminos de financiaci&oacute;n | Aprobado{% endblock %}
 
 {% block content %}
-{% include "account/common/_auth_content_styles.html" %}
-<main class="section-main">
-  <section class="hero-section-account">
-    <div class="container-account">
-      <div class="div-card-agent-account">
-        <div class="mb-3"><span class="badge rounded-pill border">Terminos</span></div>
-        <h1>Revisa y acepta</h1>
-        <p class="auth-desc">Programa: {{ solicitud.nombre_curso }}</p>
-        {% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
-        {% if versiones %}
-          <form method="post">
-            {% csrf_token %}
-            {% for version in versiones %}
-              <section class="mb-4 text-start">
-                <h2 class="h5">{{ version.titulo }}</h2>
-                <p class="small text-muted">Version {{ version.version }}</p>
-                <div class="border rounded p-3 mb-3" style="max-height: 18rem; overflow-y: auto;">
-                  {{ version.contenido|linebreaksbr }}
+<section class="edu-flow-page">
+    <div class="edu-flow-container">
+        {% include "financiacion_educativa/_progress.html" with current_step="terms" %}
+        <div class="edu-flow-grid">
+            <article class="edu-surface">
+                <div class="edu-page-heading">
+                    <p class="edu-eyebrow">Consentimientos</p>
+                    <h1>Revisa y acepta los t&eacute;rminos</h1>
+                    <p>Lee cada versi&oacute;n vigente. Tu aceptaci&oacute;n quedar&aacute; vinculada a esta solicitud mediante la l&oacute;gica de consentimiento existente.</p>
                 </div>
-                <div class="form-check">
-                  <input
-                    class="form-check-input"
-                    type="checkbox"
-                    name="accepted_versions"
-                    value="{{ version.id }}"
-                    id="term-{{ version.id }}"
-                  >
-                  <label class="form-check-label" for="term-{{ version.id }}">
-                    He leido y acepto esta version.
-                  </label>
-                </div>
-              </section>
-            {% endfor %}
-            <button class="btn-account" type="submit">Aceptar y continuar</button>
-          </form>
-        {% else %}
-          <div class="alert alert-warning">
-            No hay terminos vigentes disponibles. Intenta nuevamente mas tarde.
-          </div>
-        {% endif %}
-      </div>
+                {% if error %}<div class="edu-error-summary" role="alert">{{ error }}</div>{% endif %}
+                {% if versiones %}
+                    <form class="edu-form" method="post">
+                        {% csrf_token %}
+                        {% for version in versiones %}
+                            <section class="edu-term" aria-labelledby="term-title-{{ version.id }}">
+                                <div class="edu-term-head">
+                                    <h2 id="term-title-{{ version.id }}">{{ version.titulo }}</h2>
+                                    <span class="edu-term-version">Versi&oacute;n {{ version.version }}{% if version.vigente_desde %} &middot; Vigente desde {{ version.vigente_desde|date:"d/m/Y" }}{% endif %}</span>
+                                </div>
+                                <div class="edu-term-content" tabindex="0">{{ version.contenido|linebreaksbr }}</div>
+                                <label class="edu-check" for="term-{{ version.id }}">
+                                    <input
+                                        type="checkbox"
+                                        name="accepted_versions"
+                                        value="{{ version.id }}"
+                                        id="term-{{ version.id }}"
+                                    >
+                                    <span>He le&iacute;do y acepto esta versi&oacute;n.</span>
+                                </label>
+                            </section>
+                        {% endfor %}
+                        <div class="edu-form-actions edu-form-actions-end">
+                            <button class="edu-button" type="submit">Aceptar y continuar</button>
+                        </div>
+                    </form>
+                {% else %}
+                    <div class="alert-warning" role="status">No hay t&eacute;rminos vigentes disponibles. Intenta nuevamente m&aacute;s tarde.</div>
+                {% endif %}
+            </article>
+            {% include "financiacion_educativa/_application_summary.html" %}
+        </div>
     </div>
-  </section>
-</main>
+</section>
 {% endblock %}

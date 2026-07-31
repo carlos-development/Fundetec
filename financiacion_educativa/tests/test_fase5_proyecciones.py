@@ -63,7 +63,14 @@ class ProyeccionesFinancierasTests(TestCase):
         self.assertEqual(resultado.aplicado_capital, Decimal('494286'))
         self.assertEqual(resultado.saldo_posterior, Decimal('648425'))
         self.assertEqual(resultado.cuota_programada, Decimal('388547'))
+        self.assertEqual(resultado.otros_conceptos_exigibles, Decimal('0'))
+        self.assertEqual(resultado.cuotas_pendientes_antes, 3)
         self.assertLess(resultado.nueva_cantidad_cuotas, 3)
+        self.assertLess(resultado.nueva_fecha_final, resultado.fecha_final_antes)
+        self.assertLess(
+            resultado.intereses_futuros_despues,
+            resultado.intereses_futuros_antes,
+        )
         self.assertGreater(resultado.intereses_futuros_evitados, 0)
 
     def test_abono_en_vencimiento_usa_interes_mensual_completo(self):
@@ -78,15 +85,31 @@ class ProyeccionesFinancierasTests(TestCase):
         self.assertEqual(resultado.aplicado_capital, Decimal('377120'))
         self.assertEqual(resultado.saldo_posterior, Decimal('765591'))
 
-    def test_pago_menor_al_interes_no_reduce_capital(self):
+    def test_pago_que_no_supera_interes_es_rechazado(self):
+        with self.assertRaisesMessage(
+            ValidationError,
+            'debe ser superior a los intereses y conceptos causados',
+        ):
+            proyectar_abono_capital(
+                fotografia=self.fotografia,
+                valor_pago=Decimal('1000'),
+                fecha_efectiva=date(2026, 8, 15),
+            )
+
+    def test_ejemplo_de_doscientos_mil_se_deriva_del_motor(self):
         resultado = proyectar_abono_capital(
             fotografia=self.fotografia,
-            valor_pago=Decimal('1000'),
+            valor_pago=Decimal('200000'),
             fecha_efectiva=date(2026, 8, 15),
         )
-        self.assertEqual(resultado.aplicado_capital, Decimal('0'))
-        self.assertEqual(resultado.saldo_posterior, Decimal('1142711'))
-        self.assertEqual(resultado.interes_pendiente, Decimal('4714'))
+
+        self.assertEqual(resultado.intereses_causados, Decimal('5714'))
+        self.assertEqual(resultado.aplicado_capital, Decimal('194286'))
+        self.assertEqual(resultado.saldo_posterior, Decimal('948425'))
+        self.assertEqual(
+            resultado.aplicado_intereses + resultado.aplicado_capital,
+            Decimal('200000'),
+        )
 
     def test_pago_superior_genera_excedente_sin_saldo_negativo(self):
         resultado = proyectar_abono_capital(

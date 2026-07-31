@@ -16,6 +16,7 @@ from financiacion_educativa.choices import (
     OrigenCapturaDocumento,
     RolParticipante,
     TipoDocumentoFinanciacion,
+    TIPOS_DOCUMENTO_IDENTIDAD_CAMARA,
 )
 from financiacion_educativa.models import (
     DocumentoFinanciacion,
@@ -33,10 +34,15 @@ EXTENSIONES_POR_MIME = {
 ROL_POR_TIPO_DOCUMENTO = {
     TipoDocumentoFinanciacion.STUDENT_IDENTIFICATION: RolParticipante.STUDENT,
     TipoDocumentoFinanciacion.STUDENT_ID_FRONT: RolParticipante.STUDENT,
+    TipoDocumentoFinanciacion.STUDENT_ID_BACK: RolParticipante.STUDENT,
     TipoDocumentoFinanciacion.GUARDIAN_IDENTIFICATION: RolParticipante.GUARDIAN,
     TipoDocumentoFinanciacion.GUARDIAN_ID_FRONT: RolParticipante.GUARDIAN,
+    TipoDocumentoFinanciacion.GUARDIAN_ID_BACK: RolParticipante.GUARDIAN,
     TipoDocumentoFinanciacion.DEBTOR_IDENTIFICATION: RolParticipante.PRINCIPAL_DEBTOR,
+    TipoDocumentoFinanciacion.INCOME_CERTIFICATE: RolParticipante.PRINCIPAL_DEBTOR,
 }
+
+TIPOS_CAPTURA_CAMARA = TIPOS_DOCUMENTO_IDENTIDAD_CAMARA
 
 
 def _leer_archivo(archivo):
@@ -144,12 +150,28 @@ def registrar_documento(
     solicitud = SolicitudFinanciacionEducativa.objects.select_for_update().get(
         pk=solicitud.pk
     )
-    if actor is not None and solicitud.estado != EstadoSolicitudFinanciacion.PENDING_DOCUMENT:
+    if actor is not None and solicitud.estado not in {
+        EstadoSolicitudFinanciacion.PENDING_DOCUMENT,
+        EstadoSolicitudFinanciacion.CORRECTION_REQUIRED,
+    }:
         raise ValidationError('La solicitud no admite cargas documentales.')
     _validar_tipo_y_participante(solicitud, tipo, participante)
 
     if archivo:
         datos_archivo = _validar_archivo(archivo)
+        if tipo in TIPOS_CAPTURA_CAMARA:
+            if origen_captura != OrigenCapturaDocumento.CAMERA:
+                raise ValidationError({
+                    'archivo': 'La identificacion debe capturarse desde la camara.',
+                })
+            if datos_archivo['mime'] not in {'image/jpeg', 'image/png'}:
+                raise ValidationError({
+                    'archivo': 'La captura de identificacion debe ser una imagen.',
+                })
+        elif origen_captura == OrigenCapturaDocumento.CAMERA:
+            raise ValidationError({
+                'tipo': 'El origen camara solo admite capturas de identificacion.',
+            })
         existente_hash = solicitud.documentos.filter(
             sha256=datos_archivo['sha256']
         ).first()
@@ -209,7 +231,13 @@ def registrar_documento(
 
 
 @transaction.atomic
-def reemplazar_documento(*, documento, archivo, actor):
+def reemplazar_documento(
+    *,
+    documento,
+    archivo,
+    actor,
+    origen_captura=OrigenCapturaDocumento.USER_UPLOAD,
+):
     anterior = DocumentoFinanciacion.objects.select_for_update().select_related(
         'solicitud',
         'participante',
@@ -217,6 +245,13 @@ def reemplazar_documento(*, documento, archivo, actor):
     _validar_propiedad(anterior.solicitud, actor)
     if not anterior.activo:
         raise ValidationError('El documento ya fue reemplazado.')
+    if (
+        anterior.tipo in TIPOS_CAPTURA_CAMARA
+        and origen_captura != OrigenCapturaDocumento.CAMERA
+    ):
+        raise ValidationError(
+            'La identificacion solo puede reemplazarse desde la camara.'
+        )
     datos_archivo = _validar_archivo(archivo)
     if datos_archivo['sha256'] == anterior.sha256:
         return anterior
@@ -227,7 +262,7 @@ def reemplazar_documento(*, documento, archivo, actor):
         solicitud=anterior.solicitud,
         participante=anterior.participante,
         tipo=anterior.tipo,
-        origen_captura=OrigenCapturaDocumento.USER_UPLOAD,
+        origen_captura=origen_captura,
         archivo=archivo,
         actor=actor,
         reemplaza_a=anterior,

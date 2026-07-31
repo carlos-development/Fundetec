@@ -7,6 +7,9 @@ class EstadoSolicitudFinanciacion(models.TextChoices):
     PENDING_DOCUMENT = 'PENDING_DOCUMENT', 'Pendiente de documento'
     PENDING_GUARDIAN = 'PENDING_GUARDIAN', 'Pendiente de tutor'
     PENDING_MANUAL_REVIEW = 'PENDING_MANUAL_REVIEW', 'Pendiente de revision manual'
+    CORRECTION_REQUIRED = 'CORRECTION_REQUIRED', 'Correccion requerida'
+    APPROVED = 'APPROVED', 'Aprobada; curso autorizado'
+    REJECTED = 'REJECTED', 'Rechazada'
     PENDING_PROMISSORY_NOTE = 'PENDING_PROMISSORY_NOTE', 'Pendiente de pagare'
     PENDING_SIGNATURE = 'PENDING_SIGNATURE', 'Pendiente de firma'
     ACTIVE = 'ACTIVE', 'Activa'
@@ -50,11 +53,22 @@ class TipoDocumentoFinanciacion(models.TextChoices):
     STUDENT_IDENTIFICATION = 'STUDENT_IDENTIFICATION', 'Identificacion del estudiante'
     GUARDIAN_IDENTIFICATION = 'GUARDIAN_IDENTIFICATION', 'Identificacion del tutor'
     DEBTOR_IDENTIFICATION = 'DEBTOR_IDENTIFICATION', 'Identificacion del posible deudor'
+    INCOME_CERTIFICATE = 'INCOME_CERTIFICATE', 'Certificado de ingresos'
     ENROLLMENT_EVIDENCE = 'ENROLLMENT_EVIDENCE', 'Evidencia de matricula'
     OTHER_EDUCATIONAL = 'OTHER_EDUCATIONAL', 'Otro documento educativo'
-    STUDENT_ID_FRONT = 'STUDENT_ID_FRONT', 'Identificacion del estudiante (anterior)'
-    GUARDIAN_ID_FRONT = 'GUARDIAN_ID_FRONT', 'Identificacion del tutor (anterior)'
+    STUDENT_ID_FRONT = 'STUDENT_ID_FRONT', 'Identificacion del estudiante - frente'
+    STUDENT_ID_BACK = 'STUDENT_ID_BACK', 'Identificacion del estudiante - reverso'
+    GUARDIAN_ID_FRONT = 'GUARDIAN_ID_FRONT', 'Identificacion del tutor - frente'
+    GUARDIAN_ID_BACK = 'GUARDIAN_ID_BACK', 'Identificacion del tutor - reverso'
     OTHER = 'OTHER', 'Otro documento (anterior)'
+
+
+TIPOS_DOCUMENTO_IDENTIDAD_CAMARA = (
+    TipoDocumentoFinanciacion.STUDENT_ID_FRONT,
+    TipoDocumentoFinanciacion.STUDENT_ID_BACK,
+    TipoDocumentoFinanciacion.GUARDIAN_ID_FRONT,
+    TipoDocumentoFinanciacion.GUARDIAN_ID_BACK,
+)
 
 
 class EstadoValidacionDocumento(models.TextChoices):
@@ -151,6 +165,111 @@ class OrigenEntregaInvitacion(models.TextChoices):
     INITIAL = 'INITIAL', 'Inicial'
     AUTOMATIC_RETRY = 'AUTOMATIC_RETRY', 'Reintento automatico'
     MANUAL_REISSUE = 'MANUAL_REISSUE', 'Reemision manual'
+
+
+class EstadoEnlaceCapturaMovil(models.TextChoices):
+    ACTIVE = 'ACTIVE', 'Activo'
+    CONSUMED = 'CONSUMED', 'Consumido'
+    REVOKED = 'REVOKED', 'Revocado'
+
+
+class EstadoEntregaCapturaMovil(models.TextChoices):
+    PENDING = 'PENDING', 'Pendiente'
+    SENDING = 'SENDING', 'En envio'
+    SENT = 'SENT', 'Enviada'
+    FAILED = 'FAILED', 'Fallida'
+
+
+class TipoEventoEnlaceCapturaMovil(models.TextChoices):
+    ISSUED = 'ISSUED', 'Emitido'
+    REVOKED = 'REVOKED', 'Revocado'
+    DELIVERY_STARTED = 'DELIVERY_STARTED', 'Entrega iniciada'
+    DELIVERY_SENT = 'DELIVERY_SENT', 'Entrega enviada'
+    DELIVERY_FAILED = 'DELIVERY_FAILED', 'Entrega fallida'
+    CONSUMED = 'CONSUMED', 'Consumido'
+
+
+class TipoEventoSeguridadFinanciacion(models.TextChoices):
+    UNAUTHORIZED_APPLICATION_ACCESS = (
+        'UNAUTHORIZED_APPLICATION_ACCESS',
+        'Acceso no autorizado a solicitud',
+    )
+    INVITATION_ACCOUNT_MISMATCH = (
+        'INVITATION_ACCOUNT_MISMATCH',
+        'Cuenta no coincide con invitacion',
+    )
+    REASSOCIATION_ATTEMPT = (
+        'REASSOCIATION_ATTEMPT',
+        'Intento de reasociacion',
+    )
+    MOBILE_CAPTURE_CONTEXT_MISMATCH = (
+        'MOBILE_CAPTURE_CONTEXT_MISMATCH',
+        'Contexto movil no autorizado',
+    )
+
+
+class TipoDecisionRevisionEducativa(models.TextChoices):
+    APPROVED = 'APPROVED', 'Aprobar y autorizar curso'
+    REJECTED = 'REJECTED', 'Rechazar'
+    CORRECTION_REQUESTED = (
+        'CORRECTION_REQUESTED',
+        'Solicitar correcciones',
+    )
+
+
+class MotivoDecisionRevisionEducativa(models.TextChoices):
+    REQUIREMENTS_VERIFIED = (
+        'REQUIREMENTS_VERIFIED',
+        'Requisitos verificados',
+    )
+    INCOMPLETE_INFORMATION = (
+        'INCOMPLETE_INFORMATION',
+        'Informacion incompleta',
+    )
+    UNREADABLE_DOCUMENT = (
+        'UNREADABLE_DOCUMENT',
+        'Documento ilegible',
+    )
+    IDENTITY_MISMATCH = (
+        'IDENTITY_MISMATCH',
+        'Inconsistencia de identidad',
+    )
+    GUARDIANSHIP_NOT_VERIFIED = (
+        'GUARDIANSHIP_NOT_VERIFIED',
+        'Representacion no verificada',
+    )
+    ENROLLMENT_NOT_VERIFIED = (
+        'ENROLLMENT_NOT_VERIFIED',
+        'Matricula no verificada',
+    )
+    OTHER = 'OTHER', 'Otro motivo controlado'
+
+
+class RequisitoCorreccionEducativa(models.TextChoices):
+    STUDENT = 'STUDENT', 'Datos del estudiante'
+    GUARDIAN = 'GUARDIAN', 'Datos del tutor'
+    STUDENT_ID_FRONT = 'STUDENT_ID_FRONT', 'Identificacion estudiante - frente'
+    STUDENT_ID_BACK = 'STUDENT_ID_BACK', 'Identificacion estudiante - reverso'
+    GUARDIAN_ID_FRONT = 'GUARDIAN_ID_FRONT', 'Identificacion tutor - frente'
+    GUARDIAN_ID_BACK = 'GUARDIAN_ID_BACK', 'Identificacion tutor - reverso'
+    INCOME_CERTIFICATE = 'INCOME_CERTIFICATE', 'Certificado de ingresos'
+    ENROLLMENT_EVIDENCE = 'ENROLLMENT_EVIDENCE', 'Evidencia de matricula'
+
+
+class EstadoEntregaCorreoSolicitud(models.TextChoices):
+    PENDING = 'PENDING', 'Pendiente'
+    SENDING = 'SENDING', 'En envio'
+    SENT = 'SENT', 'Enviado'
+    FAILED = 'FAILED', 'Fallido'
+
+
+class EstadoPublicoSolicitud(models.TextChoices):
+    RECEIVED = 'RECEIVED', 'Recibida'
+    ACTION_REQUIRED = 'ACTION_REQUIRED', 'Requiere accion del solicitante'
+    UNDER_REVIEW = 'UNDER_REVIEW', 'En revision'
+    APPROVED = 'APPROVED', 'Aprobada; curso autorizado'
+    REJECTED = 'REJECTED', 'Rechazada'
+    CANCELLED = 'CANCELLED', 'Cancelada'
 
 
 class EstadoVersionTerminos(models.TextChoices):

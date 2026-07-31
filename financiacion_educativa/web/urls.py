@@ -7,6 +7,16 @@ app_name = 'financiacion_educativa_web'
 
 urlpatterns = [
     path(
+        'captura-movil/continuar/',
+        views.captura_movil_continuar_view,
+        name='captura-movil-continuar',
+    ),
+    path(
+        'captura-movil/token/',
+        views.captura_movil_token_view,
+        name='captura-movil-token',
+    ),
+    path(
         'continuar/<str:token>/',
         views.continuar_invitacion_view,
         name='continuar-invitacion',
@@ -48,10 +58,34 @@ urlpatterns = [
     path(
         (
             'solicitudes/<uuid:solicitud_id>/documentos/'
+            'capturar-identidad/<str:persona>/'
+        ),
+        views.capturar_identidad_view,
+        name='capturar-identidad',
+    ),
+    path(
+        (
+            'solicitudes/<uuid:solicitud_id>/documentos/'
+            'capturar-identidad/<str:persona>/enviar-enlace-movil/'
+        ),
+        views.enviar_enlace_captura_movil_view,
+        name='captura-movil-enviar',
+    ),
+    path(
+        (
+            'solicitudes/<uuid:solicitud_id>/documentos/'
             '<uuid:documento_id>/reemplazar/'
         ),
         views.reemplazar_documento_view,
         name='documento-reemplazar',
+    ),
+    path(
+        (
+            'solicitudes/<uuid:solicitud_id>/documentos/'
+            '<uuid:documento_id>/previsualizar/'
+        ),
+        views.previsualizar_documento_view,
+        name='documento-previsualizar',
     ),
     path(
         (
@@ -65,6 +99,11 @@ urlpatterns = [
         'solicitudes/<uuid:solicitud_id>/matricula/',
         views.matricula_view,
         name='matricula',
+    ),
+    path(
+        'solicitudes/<uuid:solicitud_id>/ficha-matricula/',
+        views.ficha_matricula_view,
+        name='ficha-matricula',
     ),
     path(
         'solicitudes/<uuid:solicitud_id>/documentacion/completar/',

@@ -1,0 +1,12 @@
+{% extends "admin/change_form.html" %}
+
+{% block object-tools-items %}
+    {% if can_review_educational_application and original %}
+        <li>
+            <a href="{% url 'admin:financiacion_educativa_solicitud_revision' original.pk %}">
+                Revisar expediente
+            </a>
+        </li>
+    {% endif %}
+    {{ block.super }}
+{% endblock %}

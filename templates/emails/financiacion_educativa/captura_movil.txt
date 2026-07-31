@@ -1,0 +1,13 @@
+{% if es_prueba %}[MUESTRA DE CORREO]
+
+{% endif %}Continúa la captura desde tu celular
+
+Solicitaste continuar la verificación de identidad desde otro dispositivo.
+El enlace abre la captura del frente y el reverso de tu documento:
+
+{{ continuation_url }}
+
+El enlace vence en 30 minutos, solo puede utilizarse una vez y no debe compartirse.
+
+Si no solicitaste este mensaje, puedes ignorarlo.
+Aprobado nunca te pedirá tu contraseña por correo.

@@ -1,0 +1,60 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="referrer" content="same-origin">
+    <title>{% block title %}Financiaci&oacute;n educativa | {{ education_brand.name|default:"Aprobado" }}{% endblock %}</title>
+    <link rel="icon" type="image/png" href="{% static education_brand.favicon|default:'images/favicon.png' %}">
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'css/styles.css' %}">
+    <link rel="stylesheet" href="{% static 'css/financiacion_educativa.css' %}">
+    {% block extra_head %}{% endblock %}
+</head>
+<body class="education-flow-shell {% block body_class %}{% endblock %}">
+{% include 'base/loader_global.html' %}
+<a class="edu-skip-link" href="#contenido-principal">Ir al contenido principal</a>
+
+{% include "financiacion_educativa/_navbar.html" %}
+
+<main id="contenido-principal">
+    {% if messages %}
+        <div class="edu-toast-region" aria-live="polite" aria-label="Notificaciones">
+            {% for message in messages %}
+                <div class="edu-toast edu-toast-{{ message.tags|default:'info' }}" role="{% if message.tags == 'error' %}alert{% else %}status{% endif %}" data-toast>
+                    <i class="bi {% if message.tags == 'error' %}bi-exclamation-circle{% elif message.tags == 'success' %}bi-check-circle{% else %}bi-info-circle{% endif %}" aria-hidden="true"></i>
+                    <span>{{ message }}</span>
+                    <button class="edu-icon-button" type="button" data-toast-close aria-label="Cerrar notificaci&oacute;n">
+                        <i class="bi bi-x-lg" aria-hidden="true"></i>
+                    </button>
+                </div>
+            {% endfor %}
+        </div>
+    {% endif %}
+    {% block content %}{% endblock %}
+</main>
+
+<footer class="edu-site-footer">
+    <div class="edu-footer-inner">
+        <div class="edu-footer-brand">
+            <img src="{% static education_brand.logo_inverse|default:'images/logo.png' %}" alt="Aprobado">
+            <p class="edu-footer-copy">&copy; {% now "Y" %} Aprobado. Financiaci&oacute;n educativa.</p>
+        </div>
+        <nav class="edu-footer-links" aria-label="Informaci&oacute;n legal">
+            <a href="{% url 'politica_privacidad' %}">Pol&iacute;tica de privacidad</a>
+            <a href="{% url 'terminos_condiciones' %}">T&eacute;rminos y condiciones</a>
+        </nav>
+    </div>
+</footer>
+
+{% block extra_scripts %}{% endblock %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/lottie-web/5.12.2/lottie.min.js"></script>
+<script src="{% static 'js/global_loader.js' %}"></script>
+<script src="{% static 'js/financiacion_educativa.js' %}"></script>
+</body>
+</html>

@@ -1,0 +1,35 @@
+{% extends "financiacion_educativa/_base.html" %}
+{% load static %}
+
+{% block title %}Financiaci&oacute;n educativa | Aprobado{% endblock %}
+{% block body_class %}edu-landing-page{% endblock %}
+
+{% block content %}
+<section class="edu-hero" aria-labelledby="hero-title">
+    <div class="edu-hero-media">
+        <picture>
+            <source media="(max-width: 720px)" srcset="{% static 'images/aprobado-estudiantes-campus-mobile.webp' %}">
+            <img
+                src="{% static 'images/aprobado-estudiantes-campus.webp' %}"
+                alt="Estudiantes universitarios compartiendo en un campus"
+                width="1672"
+                height="941"
+                fetchpriority="high"
+            >
+        </picture>
+    </div>
+    <div class="edu-hero-content">
+        <div class="edu-hero-copy">
+            <p class="edu-eyebrow">Financiaci&oacute;n educativa</p>
+            <h1 id="hero-title">Impulsamos tus sue&ntilde;os.<span>Apoyamos tu futuro.</span></h1>
+            <p class="edu-hero-lead">
+                Revisa la informaci&oacute;n enviada por tu instituci&oacute;n y contin&uacute;a tu solicitud en l&iacute;nea.
+            </p>
+            <a class="edu-button" href="{% url 'account_login' %}">
+                Continuar mi solicitud
+                <i class="bi bi-arrow-right" aria-hidden="true"></i>
+            </a>
+        </div>
+    </div>
+</section>
+{% endblock %}

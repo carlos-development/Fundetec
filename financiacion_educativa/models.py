@@ -21,6 +21,9 @@ from .choices import (
     EstadoSolicitudFinanciacion,
     EstadoEscaneoDocumento,
     EstadoEntregaInvitacion,
+    EstadoEntregaCapturaMovil,
+    EstadoEntregaCorreoSolicitud,
+    EstadoEnlaceCapturaMovil,
     EstadoEvidenciaMatricula,
     EstadoValidacionDocumento,
     EstadoConfiguracionFinanciera,
@@ -37,9 +40,15 @@ from .choices import (
     RolParticipante,
     TipoEventoParticipante,
     TipoEventoInvitacion,
+    TipoEventoEnlaceCapturaMovil,
+    TipoEventoSeguridadFinanciacion,
+    TipoDecisionRevisionEducativa,
+    MotivoDecisionRevisionEducativa,
+    RequisitoCorreccionEducativa,
     TipoConsentimiento,
     TipoDocumentoFinanciacion,
     TipoDocumentoIdentidad,
+    TIPOS_DOCUMENTO_IDENTIDAD_CAMARA,
 )
 from .storage import private_document_storage
 
@@ -82,6 +91,18 @@ class SolicitudFinanciacionEducativa(models.Model):
     celular = models.CharField(max_length=40)
     correo = models.EmailField()
     direccion = models.CharField(max_length=255)
+    tipo_documento_estudiante = models.CharField(
+        max_length=20,
+        choices=TipoDocumentoIdentidad.choices,
+        blank=True,
+    )
+    numero_documento_estudiante = models.CharField(max_length=40, blank=True)
+    fecha_nacimiento_estudiante = models.DateField(null=True, blank=True)
+    codigo_matricula = models.CharField(max_length=120, blank=True)
+    periodo_academico = models.CharField(max_length=80, blank=True)
+    sede = models.CharField(max_length=160, blank=True)
+    jornada = models.CharField(max_length=80, blank=True)
+    fecha_matricula = models.DateField(null=True, blank=True, editable=False)
     valor_plan = models.DecimalField(
         max_digits=14,
         decimal_places=2,
@@ -113,6 +134,12 @@ class SolicitudFinanciacionEducativa(models.Model):
         ordering = ['-creada_en']
         verbose_name = 'Solicitud de financiacion educativa'
         verbose_name_plural = 'Solicitudes de financiacion educativa'
+        permissions = [
+            (
+                'revisar_solicitud_financiacion',
+                'Puede revisar y decidir solicitudes educativas',
+            ),
+        ]
         constraints = [
             models.UniqueConstraint(
                 fields=['institucion', 'referencia_externa'],
@@ -122,6 +149,10 @@ class SolicitudFinanciacionEducativa(models.Model):
         indexes = [
             models.Index(fields=['institucion', 'estado'], name='sol_edu_inst_estado_idx'),
             models.Index(fields=['correo'], name='sol_edu_correo_idx'),
+            models.Index(
+                fields=['tipo_documento_estudiante', 'numero_documento_estudiante'],
+                name='sol_edu_doc_est_idx',
+            ),
             models.Index(fields=['creada_en'], name='sol_edu_creada_idx'),
         ]
 
@@ -129,10 +160,57 @@ class SolicitudFinanciacionEducativa(models.Model):
         super().clean()
         self.referencia_externa = (self.referencia_externa or '').strip()
         self.correlation_id = (self.correlation_id or '').strip()
+        self.tipo_documento_estudiante = (
+            self.tipo_documento_estudiante or ''
+        ).strip().upper()
+        self.numero_documento_estudiante = re.sub(
+            r'[^A-Z0-9]',
+            '',
+            (self.numero_documento_estudiante or '').strip().upper(),
+        )
+        self.codigo_matricula = (self.codigo_matricula or '').strip()
+        self.periodo_academico = (self.periodo_academico or '').strip()
+        self.sede = re.sub(r'\s+', ' ', (self.sede or '').strip())
+        self.jornada = re.sub(r'\s+', ' ', (self.jornada or '').strip())
         if not self.referencia_externa:
             raise ValidationError({'referencia_externa': 'La referencia externa es obligatoria.'})
+        datos_identidad = (
+            self.tipo_documento_estudiante,
+            self.numero_documento_estudiante,
+            self.fecha_nacimiento_estudiante,
+        )
+        if any(datos_identidad) and not all(datos_identidad):
+            raise ValidationError({
+                'tipo_documento_estudiante': (
+                    'Tipo, numero y fecha de nacimiento deben enviarse juntos.'
+                ),
+            })
+        if (
+            self.fecha_nacimiento_estudiante
+            and self.fecha_nacimiento_estudiante > timezone.localdate()
+        ):
+            raise ValidationError({
+                'fecha_nacimiento_estudiante': (
+                    'La fecha de nacimiento no puede ser futura.'
+                ),
+            })
         if self.institucion_id and not self.institucion.activa:
             raise ValidationError({'institucion': 'La institucion originadora debe estar activa.'})
+
+    @property
+    def identidad_estudiante_completa(self):
+        return bool(
+            self.tipo_documento_estudiante
+            and self.numero_documento_estudiante
+            and self.fecha_nacimiento_estudiante
+        )
+
+    @property
+    def identificacion_estudiante_enmascarada(self):
+        if not self.numero_documento_estudiante:
+            return ''
+        visible = self.numero_documento_estudiante[-4:]
+        return f'{"*" * max(4, len(self.numero_documento_estudiante) - 4)}{visible}'
 
     def __str__(self):
         return f'{self.referencia_externa} - {self.institucion.nombre_comercial}'
@@ -390,6 +468,141 @@ class EntregaInvitacionContinuacion(models.Model):
 
     def __str__(self):
         return f'Entrega {self.solicitud_id} #{self.secuencia}'
+
+
+class EnlaceCapturaMovil(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    solicitud = models.ForeignKey(
+        SolicitudFinanciacionEducativa,
+        on_delete=models.PROTECT,
+        related_name='enlaces_captura_movil',
+    )
+    persona = models.CharField(
+        max_length=20,
+        choices=(
+            (RolParticipante.STUDENT, 'Estudiante'),
+            (RolParticipante.GUARDIAN, 'Tutor'),
+        ),
+    )
+    token_hash = models.CharField(
+        max_length=64,
+        unique=True,
+        validators=[hash_sha256_validator],
+        editable=False,
+    )
+    destinatario_hmac = models.CharField(
+        max_length=64,
+        validators=[hash_sha256_validator],
+        editable=False,
+    )
+    estado = models.CharField(
+        max_length=20,
+        choices=EstadoEnlaceCapturaMovil.choices,
+        default=EstadoEnlaceCapturaMovil.ACTIVE,
+    )
+    estado_entrega = models.CharField(
+        max_length=20,
+        choices=EstadoEntregaCapturaMovil.choices,
+        default=EstadoEntregaCapturaMovil.PENDING,
+    )
+    vence_en = models.DateTimeField()
+    intentos_entrega = models.PositiveSmallIntegerField(default=0)
+    codigo_ultimo_error = models.CharField(max_length=60, blank=True)
+    entrega_iniciada_en = models.DateTimeField(null=True, blank=True)
+    enviada_en = models.DateTimeField(null=True, blank=True)
+    fallida_en = models.DateTimeField(null=True, blank=True)
+    revocada_en = models.DateTimeField(null=True, blank=True)
+    consumida_en = models.DateTimeField(null=True, blank=True)
+    creada_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name='enlaces_captura_movil_creados',
+    )
+    consumida_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='enlaces_captura_movil_consumidos',
+    )
+    creada_en = models.DateTimeField(auto_now_add=True)
+    actualizada_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-creada_en']
+        verbose_name = 'Enlace de captura movil'
+        verbose_name_plural = 'Enlaces de captura movil'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['solicitud'],
+                condition=models.Q(estado=EstadoEnlaceCapturaMovil.ACTIVE),
+                name='uniq_enlace_captura_activo_sol',
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(
+                        estado=EstadoEnlaceCapturaMovil.CONSUMED,
+                        consumida_en__isnull=False,
+                        consumida_por__isnull=False,
+                    )
+                    | ~models.Q(estado=EstadoEnlaceCapturaMovil.CONSUMED)
+                ),
+                name='enlace_captura_consumido_audit',
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=['solicitud', 'estado'],
+                name='enl_cap_sol_estado_idx',
+            ),
+            models.Index(fields=['vence_en'], name='enl_cap_vence_idx'),
+        ]
+
+    @property
+    def esta_vigente(self):
+        return (
+            self.estado == EstadoEnlaceCapturaMovil.ACTIVE
+            and self.vence_en > timezone.now()
+        )
+
+    def __str__(self):
+        return f'Enlace movil {self.id} - {self.get_estado_display()}'
+
+
+class EventoEnlaceCapturaMovil(ModeloInmutableMixin, models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    enlace = models.ForeignKey(
+        EnlaceCapturaMovil,
+        on_delete=models.PROTECT,
+        related_name='eventos',
+    )
+    tipo = models.CharField(
+        max_length=30,
+        choices=TipoEventoEnlaceCapturaMovil.choices,
+    )
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='eventos_enlace_captura_movil',
+    )
+    metadata = models.JSONField(default=dict, blank=True)
+    creado_en = models.DateTimeField(default=timezone.now, editable=False)
+
+    class Meta:
+        ordering = ['creado_en', 'id']
+        verbose_name = 'Evento de enlace de captura movil'
+        verbose_name_plural = 'Eventos de enlaces de captura movil'
+        indexes = [
+            models.Index(
+                fields=['enlace', 'creado_en'],
+                name='evt_enl_cap_fecha_idx',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.enlace_id} - {self.get_tipo_display()}'
 
 
 class ParticipanteFinanciacion(models.Model):
@@ -834,6 +1047,13 @@ class DocumentoFinanciacion(models.Model):
                 condition=models.Q(activo=True, participante__isnull=True),
                 name='uniq_doc_activo_sol_tipo',
             ),
+            models.CheckConstraint(
+                condition=(
+                    ~models.Q(tipo__in=TIPOS_DOCUMENTO_IDENTIDAD_CAMARA)
+                    | models.Q(origen_captura=OrigenCapturaDocumento.CAMERA)
+                ),
+                name='doc_identidad_origen_camara',
+            ),
         ]
         indexes = [
             models.Index(fields=['solicitud', 'tipo'], name='doc_edu_sol_tipo_idx'),
@@ -842,6 +1062,23 @@ class DocumentoFinanciacion(models.Model):
 
     def clean(self):
         super().clean()
+        if (
+            self.tipo in TIPOS_DOCUMENTO_IDENTIDAD_CAMARA
+            and self.origen_captura != OrigenCapturaDocumento.CAMERA
+        ):
+            raise ValidationError({
+                'origen_captura': (
+                    'La identificacion debe capturarse directamente con la camara.'
+                ),
+            })
+        if (
+            self.tipo in TIPOS_DOCUMENTO_IDENTIDAD_CAMARA
+            and self.content_type
+            and self.content_type not in {'image/jpeg', 'image/png'}
+        ):
+            raise ValidationError({
+                'content_type': 'La captura debe ser una imagen JPEG o PNG.',
+            })
         if self.participante_id and self.participante.solicitud_id != self.solicitud_id:
             raise ValidationError({
                 'participante': 'El participante no pertenece a la solicitud.',
@@ -1330,3 +1567,205 @@ class HistorialEstadoSolicitud(ModeloInmutableMixin, models.Model):
 
     def __str__(self):
         return f'{self.solicitud.referencia_externa}: {self.estado_anterior or "INICIAL"} -> {self.estado_nuevo}'
+
+
+class EventoSeguridadFinanciacion(ModeloInmutableMixin, models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    solicitud = models.ForeignKey(
+        SolicitudFinanciacionEducativa,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='eventos_seguridad',
+    )
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='eventos_seguridad_financiacion',
+    )
+    tipo = models.CharField(
+        max_length=50,
+        choices=TipoEventoSeguridadFinanciacion.choices,
+    )
+    endpoint = models.CharField(max_length=100)
+    metadata = models.JSONField(default=dict, blank=True)
+    creado_en = models.DateTimeField(default=timezone.now, editable=False)
+
+    class Meta:
+        ordering = ['-creado_en', 'id']
+        verbose_name = 'Evento de seguridad de financiacion'
+        verbose_name_plural = 'Eventos de seguridad de financiacion'
+        indexes = [
+            models.Index(
+                fields=['solicitud', 'creado_en'],
+                name='evt_seg_edu_sol_fecha',
+            ),
+            models.Index(
+                fields=['tipo', 'creado_en'],
+                name='evt_seg_edu_tipo_fecha',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.get_tipo_display()} - {self.creado_en.isoformat()}'
+
+
+class DecisionRevisionEducativa(ModeloInmutableMixin, models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    solicitud = models.ForeignKey(
+        SolicitudFinanciacionEducativa,
+        on_delete=models.PROTECT,
+        related_name='decisiones_revision',
+    )
+    tipo = models.CharField(
+        max_length=30,
+        choices=TipoDecisionRevisionEducativa.choices,
+    )
+    motivo = models.CharField(
+        max_length=40,
+        choices=MotivoDecisionRevisionEducativa.choices,
+    )
+    mensaje_solicitante = models.CharField(max_length=500, blank=True)
+    observacion_interna = models.CharField(max_length=1000, blank=True)
+    requisitos_pendientes = models.JSONField(default=list, blank=True)
+    fotografia_financiera = models.ForeignKey(
+        CondicionesFinancieras,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='decisiones_revision',
+    )
+    responsable = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name='decisiones_revision_educativa',
+    )
+    creada_en = models.DateTimeField(default=timezone.now, editable=False)
+
+    class Meta:
+        ordering = ['-creada_en', 'id']
+        verbose_name = 'Decision de revision educativa'
+        verbose_name_plural = 'Decisiones de revision educativa'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['solicitud'],
+                condition=models.Q(
+                    tipo__in=[
+                        TipoDecisionRevisionEducativa.APPROVED,
+                        TipoDecisionRevisionEducativa.REJECTED,
+                    ]
+                ),
+                name='uniq_dec_fin_edu_final',
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=['solicitud', 'creada_en'],
+                name='dec_rev_edu_sol_fecha',
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.tipo == TipoDecisionRevisionEducativa.APPROVED:
+            if not self.fotografia_financiera_id:
+                raise ValidationError({
+                    'fotografia_financiera': (
+                        'La aprobacion requiere una fotografia financiera.'
+                    ),
+                })
+            if (
+                self.fotografia_financiera.solicitud_id
+                != self.solicitud_id
+            ):
+                raise ValidationError({
+                    'fotografia_financiera': (
+                        'La fotografia no pertenece a la solicitud.'
+                    ),
+                })
+        elif self.fotografia_financiera_id:
+            raise ValidationError({
+                'fotografia_financiera': (
+                    'La fotografia solo se fija en una aprobacion.'
+                ),
+            })
+        requisitos = self.requisitos_pendientes or []
+        if (
+            not isinstance(requisitos, list)
+            or any(
+                requisito not in RequisitoCorreccionEducativa.values
+                for requisito in requisitos
+            )
+        ):
+            raise ValidationError({
+                'requisitos_pendientes': (
+                    'Los requisitos de correccion no son validos.'
+                ),
+            })
+        if (
+            self.tipo == TipoDecisionRevisionEducativa.CORRECTION_REQUESTED
+            and not requisitos
+        ):
+            raise ValidationError({
+                'requisitos_pendientes': (
+                    'Selecciona al menos un requisito por corregir.'
+                ),
+            })
+        if (
+            self.tipo != TipoDecisionRevisionEducativa.CORRECTION_REQUESTED
+            and requisitos
+        ):
+            raise ValidationError({
+                'requisitos_pendientes': (
+                    'Los requisitos solo aplican a una correccion.'
+                ),
+            })
+
+    def __str__(self):
+        return f'{self.solicitud.referencia_externa} - {self.get_tipo_display()}'
+
+
+class EntregaCorreoEstadoSolicitud(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    solicitud = models.ForeignKey(
+        SolicitudFinanciacionEducativa,
+        on_delete=models.PROTECT,
+        related_name='entregas_correo_estado',
+    )
+    decision = models.OneToOneField(
+        DecisionRevisionEducativa,
+        on_delete=models.PROTECT,
+        related_name='entrega_correo',
+    )
+    estado = models.CharField(
+        max_length=20,
+        choices=EstadoEntregaCorreoSolicitud.choices,
+        default=EstadoEntregaCorreoSolicitud.PENDING,
+    )
+    destinatario_hmac = models.CharField(
+        max_length=64,
+        validators=[hash_sha256_validator],
+        editable=False,
+    )
+    intentos = models.PositiveSmallIntegerField(default=0)
+    codigo_ultimo_error = models.CharField(max_length=60, blank=True)
+    iniciada_en = models.DateTimeField(null=True, blank=True)
+    enviada_en = models.DateTimeField(null=True, blank=True)
+    fallida_en = models.DateTimeField(null=True, blank=True)
+    creada_en = models.DateTimeField(auto_now_add=True)
+    actualizada_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-creada_en']
+        verbose_name = 'Entrega de correo de estado'
+        verbose_name_plural = 'Entregas de correo de estado'
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError(
+            'Las entregas de correo deben conservarse para auditoria.'
+        )
+
+    def __str__(self):
+        return f'{self.solicitud_id} - {self.get_estado_display()}'

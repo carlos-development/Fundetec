@@ -61,7 +61,7 @@ class EvidenciasFinanciacionTests(TestCase):
                     solicitud=self.solicitud,
                     participante=self.participante,
                     tipo=TipoDocumentoFinanciacion.STUDENT_ID_FRONT,
-                    origen_captura=OrigenCapturaDocumento.USER_UPLOAD,
+                    origen_captura=OrigenCapturaDocumento.CAMERA,
                     archivo=SimpleUploadedFile(
                         'documento.png',
                         PNG_VALIDO,
@@ -80,7 +80,7 @@ class EvidenciasFinanciacionTests(TestCase):
                     solicitud=self.solicitud,
                     participante=self.participante,
                     tipo=TipoDocumentoFinanciacion.STUDENT_ID_FRONT,
-                    origen_captura=OrigenCapturaDocumento.USER_UPLOAD,
+                    origen_captura=OrigenCapturaDocumento.CAMERA,
                     archivo=SimpleUploadedFile('uno.png', PNG_VALIDO, content_type='image/png'),
                 )
                 with self.assertRaises(ValidationError):

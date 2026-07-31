@@ -1,20 +1,18 @@
-{% extends "account/libranza/_base.html" %}
+{% extends "financiacion_educativa/_base.html" %}
+{% load static %}
 
-{% block title %}Enlace no disponible{% endblock %}
+{% block title %}Enlace no disponible | Aprobado{% endblock %}
+{% block body_class %}edu-auth-page{% endblock %}
 
 {% block content %}
-{% include "account/common/_auth_content_styles.html" %}
-<main class="section-main">
-  <section class="hero-section-account">
-    <div class="container-account">
-      <div class="div-card-agent-account">
-        <div class="mb-3"><span class="badge rounded-pill border">Acceso seguro</span></div>
-        <h1>Este enlace no esta disponible</h1>
-        <p class="auth-desc">
-          Solicita un nuevo enlace a la institucion que inicio el proceso.
-        </p>
-      </div>
+<section class="edu-auth-main">
+    <div class="edu-auth-panel">
+        <img class="edu-auth-logo" src="{% static education_brand.logo_inverse|default:'images/logo.png' %}" alt="Aprobado">
+        <span class="edu-status-symbol"><i class="bi bi-link-45deg" aria-hidden="true"></i></span>
+        <p class="edu-auth-kicker">Acceso seguro</p>
+        <h1>Este enlace no est&aacute; disponible</h1>
+        <p class="edu-auth-description">Puede haber vencido, haber sido reemplazado o ya haberse utilizado. Solicita un nuevo enlace a la instituci&oacute;n que inici&oacute; el proceso.</p>
+        <a class="edu-button-secondary edu-button-wide" href="{% url 'home' %}">Volver al inicio</a>
     </div>
-  </section>
-</main>
+</section>
 {% endblock %}

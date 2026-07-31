@@ -1,0 +1,45 @@
+{% extends "financiacion_educativa/_base.html" %}
+
+{% block title %}Continuar captura | Aprobado{% endblock %}
+
+{% block content %}
+<section class="edu-flow-page">
+    <div class="edu-flow-container edu-flow-container-narrow">
+        <article class="edu-surface">
+            <div class="edu-page-heading">
+                <p class="edu-eyebrow">Captura desde celular</p>
+                <h1>Validando acceso seguro</h1>
+                <p id="handoff-status" role="status">
+                    Estamos preparando la c&aacute;mara de tu dispositivo.
+                </p>
+            </div>
+            <form id="mobile-capture-handoff" method="post">
+                {% csrf_token %}
+                <input id="mobile-capture-token" type="hidden" name="token">
+                <noscript>
+                    <p>Activa JavaScript para continuar con este enlace.</p>
+                </noscript>
+            </form>
+        </article>
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+(() => {
+    const form = document.getElementById("mobile-capture-handoff");
+    const input = document.getElementById("mobile-capture-token");
+    const status = document.getElementById("handoff-status");
+    const token = window.location.hash.slice(1);
+
+    window.history.replaceState(null, "", window.location.pathname);
+    if (!token) {
+        status.textContent = "Este enlace no está disponible.";
+        return;
+    }
+    input.value = token;
+    form.submit();
+})();
+</script>
+{% endblock %}

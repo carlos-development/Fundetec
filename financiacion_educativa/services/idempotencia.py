@@ -50,9 +50,21 @@ def payload_canonico_desde_datos(datos):
         'phone': datos.celular.strip(),
         'email': datos.correo.strip(),
         'address': datos.direccion.strip(),
+        'document_type': datos.tipo_documento_estudiante.strip(),
+        'document_number': datos.numero_documento_estudiante.strip(),
+        'birth_date': (
+            datos.fecha_nacimiento_estudiante.isoformat()
+            if datos.fecha_nacimiento_estudiante
+            else None
+        ),
+        'enrollment_code': datos.codigo_matricula.strip(),
+        'academic_period': datos.periodo_academico.strip(),
+        'campus': datos.sede.strip(),
+        'schedule': datos.jornada.strip(),
+        'enrollment_date': None,
         'plan_value': _dinero_canonico(datos.valor_plan),
         'term': int(datos.plazo_meses),
-        'course_type': datos.nombre_curso.strip(),
+        'program_name': datos.nombre_curso.strip(),
     }
 
 
@@ -64,9 +76,25 @@ def payload_canonico_desde_solicitud(solicitud):
         'phone': solicitud.celular,
         'email': solicitud.correo,
         'address': solicitud.direccion,
+        'document_type': solicitud.tipo_documento_estudiante,
+        'document_number': solicitud.numero_documento_estudiante,
+        'birth_date': (
+            solicitud.fecha_nacimiento_estudiante.isoformat()
+            if solicitud.fecha_nacimiento_estudiante
+            else None
+        ),
+        'enrollment_code': solicitud.codigo_matricula,
+        'academic_period': solicitud.periodo_academico,
+        'campus': solicitud.sede,
+        'schedule': solicitud.jornada,
+        'enrollment_date': (
+            solicitud.fecha_matricula.isoformat()
+            if solicitud.fecha_matricula
+            else None
+        ),
         'plan_value': _dinero_canonico(solicitud.valor_plan),
         'term': solicitud.plazo_meses,
-        'course_type': solicitud.nombre_curso,
+        'program_name': solicitud.nombre_curso,
     }
 
 

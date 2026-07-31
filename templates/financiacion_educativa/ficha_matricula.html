@@ -1,0 +1,65 @@
+{% extends "financiacion_educativa/_base.html" %}
+
+{% block title %}Ficha de matr&iacute;cula | Aprobado{% endblock %}
+
+{% block content %}
+<section class="edu-flow-page">
+    <div class="edu-flow-container">
+        {% include "financiacion_educativa/_progress.html" with current_step="documents" %}
+        <div class="edu-flow-grid">
+            <article class="edu-surface">
+                <div class="edu-page-heading">
+                    <p class="edu-eyebrow">Ficha de matr&iacute;cula</p>
+                    <h1>Informaci&oacute;n disponible</h1>
+                    <p>La ficha se preparar&aacute; con los datos recibidos y confirmados. No generamos un PDF definitivo porque el formato suministrado es plano y a&uacute;n faltan reglas para sus campos y firmas.</p>
+                </div>
+
+                <div class="alert-info" role="status">
+                    Los datos pendientes no se completan con suposiciones. La fecha de creaci&oacute;n de la solicitud tampoco se interpreta como fecha de matr&iacute;cula.
+                </div>
+
+                {% for grupo, campos in mapeo_ficha.items %}
+                    <section class="edu-section-block">
+                        <div class="edu-section-title">
+                            <h2>{{ grupo }}</h2>
+                        </div>
+                        <div class="edu-mapping-list">
+                            {% for campo in campos %}
+                                <div class="edu-mapping-row {% if not campo.disponible %}is-missing{% endif %}">
+                                    <div>
+                                        <span>{{ campo.campo }}</span>
+                                        <strong>
+                                            {% if campo.disponible %}
+                                                {{ campo.valor }}
+                                            {% else %}
+                                                Pendiente
+                                            {% endif %}
+                                        </strong>
+                                    </div>
+                                    <div>
+                                        {% if campo.disponible %}
+                                            <span>{{ campo.fuente }}</span>
+                                            <small>{{ campo.transformacion }}</small>
+                                        {% else %}
+                                            <span>{{ campo.faltante }}</span>
+                                            <small>No disponible en el expediente actual</small>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    </section>
+                {% endfor %}
+
+                <div class="edu-form-actions">
+                    <a class="edu-button-quiet" href="{% url 'financiacion_educativa_web:documentacion' solicitud.id %}">Volver al expediente</a>
+                    {% if solicitud.estado == "PENDING_DOCUMENT" %}
+                        <a class="edu-button" href="{% url 'financiacion_educativa_web:matricula' solicitud.id %}">Completar evidencia</a>
+                    {% endif %}
+                </div>
+            </article>
+            {% include "financiacion_educativa/_application_summary.html" %}
+        </div>
+    </div>
+</section>
+{% endblock %}
