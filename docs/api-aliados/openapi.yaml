@@ -1,0 +1,737 @@
+openapi: 3.0.3
+info:
+  title: Aprobado - API de financiacion educativa
+  version: 1.0.0
+  description: API institucional versionada para originar y consultar solicitudes
+    de financiacion educativa.
+paths:
+  /api/v1/financiacion-educativa/solicitudes/:
+    post:
+      operationId: crear_solicitud_financiacion_educativa
+      description: 'Una solicitud nueva se persiste con el estado publico RECEIVED.
+        program_name es el nombre canonico del programa; course_type es su alias compatible.
+        Debe enviarse al menos uno y, si se envian ambos, deben coincidir. Repetir
+        la misma clave y payload devuelve la misma solicitud con su estado publico
+        actual, 202 y el encabezado Idempotent-Replayed: true. Para una solicitud
+        nueva se interpreta la persona del payload siempre como estudiante. Si su
+        fecha de nacimiento indica minoria de edad, el flujo privado exigira un tutor
+        adulto como persona relacionada. enrollment_date permanece nulo hasta una
+        futura firma valida. Se programa de forma privada el envio de una invitacion
+        al correo registrado. El enlace nunca se incluye en la respuesta. El 202 confirma
+        recepcion de la solicitud, no entrega final del correo.'
+      summary: Crear una solicitud institucional
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: Clave opaca de hasta 255 caracteres. Su hash se aisla por institucion
+          y permite repetir la misma peticion sin crear duplicados.
+        required: true
+      tags:
+      - Financiacion educativa
+      requestBody:
+        content:
+          application/json:
+            schema:
+              allOf:
+              - $ref: '#/components/schemas/CrearSolicitud'
+              - anyOf:
+                - required:
+                  - program_name
+                - required:
+                  - course_type
+            examples:
+              CreacionInstitucional:
+                value:
+                  external_reference: MAT-2026-000123
+                  first_names: CAMILA ANDREA
+                  last_names: ROJAS DIAZ
+                  phone: '3001234567'
+                  email: camila@example.com
+                  address: 'Calle 10 # 20-30'
+                  document_type: CC
+                  document_number: 0012345678
+                  birth_date: '2002-08-15'
+                  enrollment_code: A2D-2026-00123
+                  academic_period: 2026-2
+                  campus: Sede Centro
+                  schedule: Nocturna
+                  program_name: INGLES BASICO A2 DIAMANTE
+                  enrollment_date: null
+                  plan_value: '2500000.00'
+                  term: 6
+                summary: Creacion institucional
+        required: true
+      security:
+      - InstitutionApiKey: []
+      responses:
+        '202':
+          headers:
+            Idempotent-Replayed:
+              schema:
+                type: boolean
+              description: Se devuelve con valor true unicamente cuando la respuesta
+                corresponde a una repeticion idempotente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SolicitudCreada'
+              examples:
+                SolicitudAceptada:
+                  value:
+                    application_id: 9ed3b91b-d97f-4eaf-bff7-95a24dd51d41
+                    external_reference: MAT-2026-000123
+                    status: RECEIVED
+                    course_authorized: false
+                    authorization_effective_at: null
+                    decision_reason: ''
+                    created_at: '2026-07-23T20:00:00-05:00'
+                    status_url: https://example.com/api/v1/financiacion-educativa/solicitudes/9ed3b91b-d97f-4eaf-bff7-95a24dd51d41/
+                    first_names: CAMILA ANDREA
+                    last_names: ROJAS DIAZ
+                    phone: '3001234567'
+                    email: camila@example.com
+                    address: 'Calle 10 # 20-30'
+                    document_type: CC
+                    document_number: 0012345678
+                    birth_date: '2002-08-15'
+                    enrollment_code: A2D-2026-00123
+                    academic_period: 2026-2
+                    campus: Sede Centro
+                    schedule: Nocturna
+                    program_name: INGLES BASICO A2 DIAMANTE
+                    course_type: INGLES BASICO A2 DIAMANTE
+                    enrollment_date: null
+                    plan_value: '2500000.00'
+                    term: 6
+                    financial_terms: null
+                  summary: Solicitud aceptada
+                RepeticionIdempotente:
+                  value:
+                    application_id: 9ed3b91b-d97f-4eaf-bff7-95a24dd51d41
+                    external_reference: MAT-2026-000123
+                    status: RECEIVED
+                    course_authorized: false
+                    authorization_effective_at: null
+                    decision_reason: ''
+                    created_at: '2026-07-23T20:00:00-05:00'
+                    status_url: https://example.com/api/v1/financiacion-educativa/solicitudes/9ed3b91b-d97f-4eaf-bff7-95a24dd51d41/
+                    first_names: CAMILA ANDREA
+                    last_names: ROJAS DIAZ
+                    phone: '3001234567'
+                    email: camila@example.com
+                    address: 'Calle 10 # 20-30'
+                    document_type: CC
+                    document_number: 0012345678
+                    birth_date: '2002-08-15'
+                    enrollment_code: A2D-2026-00123
+                    academic_period: 2026-2
+                    campus: Sede Centro
+                    schedule: Nocturna
+                    program_name: INGLES BASICO A2 DIAMANTE
+                    course_type: INGLES BASICO A2 DIAMANTE
+                    enrollment_date: null
+                    plan_value: '2500000.00'
+                    term: 6
+                    financial_terms: null
+                  summary: Repeticion idempotente
+                  description: 'No crea registros adicionales y agrega Idempotent-Replayed:
+                    true.'
+          description: Solicitud aceptada o repeticion idempotente.
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                ErrorDeValidacion:
+                  value:
+                    error:
+                      code: VALIDATION_ERROR
+                      message: La solicitud contiene datos invalidos.
+                      fields:
+                        email:
+                        - Este campo es requerido.
+                  summary: Error de validacion
+          description: Payload o encabezado Idempotency-Key invalido.
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                CredencialAusente:
+                  value:
+                    error:
+                      code: AUTHENTICATION_REQUIRED
+                      message: La credencial institucional es obligatoria.
+                  summary: Credencial ausente
+                CredencialInvalida:
+                  value:
+                    error:
+                      code: INVALID_CREDENTIAL
+                      message: La credencial institucional no es valida.
+                  summary: Credencial invalida
+          description: Credencial ausente, invalida, inactiva o asociada a una institucion
+            inactiva.
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                ConflictoDeIdempotencia:
+                  value:
+                    error:
+                      code: IDEMPOTENCY_CONFLICT
+                      message: La clave de idempotencia ya fue usada con otros datos.
+                  summary: Conflicto de idempotencia
+                ConflictoDeReferenciaExterna:
+                  value:
+                    error:
+                      code: EXTERNAL_REFERENCE_CONFLICT
+                      message: La referencia externa ya existe con otros datos.
+                  summary: Conflicto de referencia externa
+          description: Conflicto por reutilizar la clave con otro payload o por referencia
+            externa incompatible.
+  /api/v1/financiacion-educativa/solicitudes/{application_id}/:
+    get:
+      operationId: consultar_solicitud_financiacion_educativa
+      description: Devuelve un estado publico estable y los datos recibidos. APPROVED
+        junto con course_authorized=true es el resultado que autoriza a la institucion
+        a activar el curso. financial_terms solo contiene la fotografia contractual
+        cuando course_authorized es true; de lo contrario es null. Solo la institucion
+        propietaria puede consultarla; una credencial de otra institucion recibe 404
+        para prevenir IDOR.
+      summary: Consultar una solicitud propia
+      parameters:
+      - in: path
+        name: application_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Financiacion educativa
+      security:
+      - InstitutionApiKey: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetalleSolicitud'
+              examples:
+                Consulta:
+                  value:
+                    application_id: 9ed3b91b-d97f-4eaf-bff7-95a24dd51d41
+                    external_reference: MAT-2026-000123
+                    status: RECEIVED
+                    course_authorized: false
+                    authorization_effective_at: null
+                    decision_reason: ''
+                    created_at: '2026-07-23T20:00:00-05:00'
+                    status_url: https://example.com/api/v1/financiacion-educativa/solicitudes/9ed3b91b-d97f-4eaf-bff7-95a24dd51d41/
+                    first_names: CAMILA ANDREA
+                    last_names: ROJAS DIAZ
+                    phone: '3001234567'
+                    email: camila@example.com
+                    address: 'Calle 10 # 20-30'
+                    document_type: CC
+                    document_number: 0012345678
+                    birth_date: '2002-08-15'
+                    enrollment_code: A2D-2026-00123
+                    academic_period: 2026-2
+                    campus: Sede Centro
+                    schedule: Nocturna
+                    program_name: INGLES BASICO A2 DIAMANTE
+                    course_type: INGLES BASICO A2 DIAMANTE
+                    enrollment_date: null
+                    plan_value: '2500000.00'
+                    term: 6
+                    financial_terms: null
+                    updated_at: '2026-07-23T20:00:00-05:00'
+                SolicitudAprobadaYCursoAutorizado:
+                  value:
+                    application_id: 9ed3b91b-d97f-4eaf-bff7-95a24dd51d41
+                    external_reference: MAT-2026-000123
+                    status: APPROVED
+                    course_authorized: true
+                    authorization_effective_at: '2026-07-30T15:45:00-05:00'
+                    decision_reason: ''
+                    created_at: '2026-07-23T20:00:00-05:00'
+                    status_url: https://example.com/api/v1/financiacion-educativa/solicitudes/9ed3b91b-d97f-4eaf-bff7-95a24dd51d41/
+                    first_names: CAMILA ANDREA
+                    last_names: ROJAS DIAZ
+                    phone: '3001234567'
+                    email: camila@example.com
+                    address: 'Calle 10 # 20-30'
+                    document_type: CC
+                    document_number: 0012345678
+                    birth_date: '2002-08-15'
+                    enrollment_code: A2D-2026-00123
+                    academic_period: 2026-2
+                    campus: Sede Centro
+                    schedule: Nocturna
+                    program_name: INGLES BASICO A2 DIAMANTE
+                    course_type: INGLES BASICO A2 DIAMANTE
+                    enrollment_date: null
+                    plan_value: '2500000.00'
+                    term: 6
+                    financial_terms:
+                      currency: COP
+                      requested_amount: '2500000.00'
+                      financed_amount: '2856778.00'
+                      term_months: 6
+                      estimated_installment: '492932.00'
+                    updated_at: '2026-07-30T15:45:00-05:00'
+                  summary: Solicitud aprobada y curso autorizado
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Credencial ausente, invalida, inactiva o asociada a una institucion
+            inactiva.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                RecursoNoVisible:
+                  value:
+                    error:
+                      code: NOT_FOUND
+                      message: El recurso solicitado no existe.
+                  summary: Recurso no visible
+          description: La solicitud no existe o pertenece a otra institucion.
+components:
+  schemas:
+    BlankEnum:
+      enum:
+      - ''
+    CrearSolicitud:
+      type: object
+      properties:
+        external_reference:
+          type: string
+          maxLength: 120
+        first_names:
+          type: string
+          maxLength: 160
+        last_names:
+          type: string
+          maxLength: 160
+        phone:
+          type: string
+          maxLength: 21
+          pattern: ^\+?[0-9]{7,20}$
+        email:
+          type: string
+          format: email
+        address:
+          type: string
+          maxLength: 255
+        document_type:
+          oneOf:
+          - $ref: '#/components/schemas/DocumentTypeEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+        document_number:
+          type: string
+          maxLength: 40
+        birth_date:
+          type: string
+          format: date
+          nullable: true
+        enrollment_code:
+          type: string
+          maxLength: 120
+        academic_period:
+          type: string
+          maxLength: 80
+        campus:
+          type: string
+          maxLength: 160
+        schedule:
+          type: string
+          maxLength: 80
+        plan_value:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+        term:
+          type: integer
+          maximum: 32767
+          minimum: 1
+        course_type:
+          type: string
+          description: Alias compatible de program_name. Debe enviarse este campo
+            o program_name; si se envian ambos, deben coincidir.
+          maxLength: 200
+        program_name:
+          type: string
+          description: Nombre canonico del programa. Debe enviarse este campo o course_type;
+            si se envian ambos, deben coincidir.
+          maxLength: 200
+        enrollment_date:
+          type: string
+          format: date
+          nullable: true
+      required:
+      - address
+      - email
+      - external_reference
+      - first_names
+      - last_names
+      - phone
+      - plan_value
+      - term
+    CurrencyEnum:
+      enum:
+      - COP
+      type: string
+      description: '* `COP` - Peso colombiano'
+    DecisionReasonEnum:
+      enum:
+      - INCOMPLETE_INFORMATION
+      - UNREADABLE_DOCUMENT
+      - IDENTITY_MISMATCH
+      - GUARDIANSHIP_NOT_VERIFIED
+      - ENROLLMENT_NOT_VERIFIED
+      - OTHER
+      type: string
+      description: |-
+        * `` - Sin motivo publico
+        * `INCOMPLETE_INFORMATION` - Informacion incompleta
+        * `UNREADABLE_DOCUMENT` - Documento ilegible
+        * `IDENTITY_MISMATCH` - Inconsistencia de identidad
+        * `GUARDIANSHIP_NOT_VERIFIED` - Representacion no verificada
+        * `ENROLLMENT_NOT_VERIFIED` - Matricula no verificada
+        * `OTHER` - Otro motivo controlado
+    DetalleSolicitud:
+      type: object
+      properties:
+        application_id:
+          type: string
+          format: uuid
+        external_reference:
+          type: string
+        status:
+          $ref: '#/components/schemas/StatusEnum'
+        course_authorized:
+          type: boolean
+          description: Solo puede ser true cuando status es APPROVED y existe una
+            decision contractual aprobada con fotografia financiera.
+        authorization_effective_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Fecha efectiva de la autorizacion contractual; null mientras
+            course_authorized sea false.
+        decision_reason:
+          description: |-
+            Codigo publico de correccion o rechazo. Es una cadena vacia cuando no existe un motivo publico.
+
+            * `` - Sin motivo publico
+            * `INCOMPLETE_INFORMATION` - Informacion incompleta
+            * `UNREADABLE_DOCUMENT` - Documento ilegible
+            * `IDENTITY_MISMATCH` - Inconsistencia de identidad
+            * `GUARDIANSHIP_NOT_VERIFIED` - Representacion no verificada
+            * `ENROLLMENT_NOT_VERIFIED` - Matricula no verificada
+            * `OTHER` - Otro motivo controlado
+          oneOf:
+          - $ref: '#/components/schemas/DecisionReasonEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+        created_at:
+          type: string
+          format: date-time
+        status_url:
+          type: string
+          format: uri
+        first_names:
+          type: string
+        last_names:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+          format: email
+        address:
+          type: string
+        document_type:
+          type: string
+        document_number:
+          type: string
+        birth_date:
+          type: string
+          format: date
+          nullable: true
+        enrollment_code:
+          type: string
+        academic_period:
+          type: string
+        campus:
+          type: string
+        schedule:
+          type: string
+        program_name:
+          type: string
+        course_type:
+          type: string
+        enrollment_date:
+          type: string
+          format: date
+          nullable: true
+        plan_value:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+        term:
+          type: integer
+        financial_terms:
+          allOf:
+          - $ref: '#/components/schemas/TerminosFinancieros'
+          nullable: true
+          description: Condiciones contractuales de la fotografia financiera aprobada;
+            null mientras course_authorized sea false.
+        updated_at:
+          type: string
+          format: date-time
+      required:
+      - academic_period
+      - address
+      - application_id
+      - authorization_effective_at
+      - birth_date
+      - campus
+      - course_authorized
+      - course_type
+      - created_at
+      - decision_reason
+      - document_number
+      - document_type
+      - email
+      - enrollment_code
+      - enrollment_date
+      - external_reference
+      - financial_terms
+      - first_names
+      - last_names
+      - phone
+      - plan_value
+      - program_name
+      - schedule
+      - status
+      - status_url
+      - term
+      - updated_at
+    DocumentTypeEnum:
+      enum:
+      - CC
+      - TI
+      - CE
+      - RC
+      - PASSPORT
+      - OTHER
+      type: string
+      description: |-
+        * `CC` - Cedula de ciudadania
+        * `TI` - Tarjeta de identidad
+        * `CE` - Cedula de extranjeria
+        * `RC` - Registro civil
+        * `PASSPORT` - Pasaporte
+        * `OTHER` - Otro
+    ErrorDetail:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        fields: {}
+      required:
+      - code
+      - message
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          $ref: '#/components/schemas/ErrorDetail'
+      required:
+      - error
+    SolicitudCreada:
+      type: object
+      properties:
+        application_id:
+          type: string
+          format: uuid
+        external_reference:
+          type: string
+        status:
+          $ref: '#/components/schemas/StatusEnum'
+        course_authorized:
+          type: boolean
+          description: Solo puede ser true cuando status es APPROVED y existe una
+            decision contractual aprobada con fotografia financiera.
+        authorization_effective_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Fecha efectiva de la autorizacion contractual; null mientras
+            course_authorized sea false.
+        decision_reason:
+          description: |-
+            Codigo publico de correccion o rechazo. Es una cadena vacia cuando no existe un motivo publico.
+
+            * `` - Sin motivo publico
+            * `INCOMPLETE_INFORMATION` - Informacion incompleta
+            * `UNREADABLE_DOCUMENT` - Documento ilegible
+            * `IDENTITY_MISMATCH` - Inconsistencia de identidad
+            * `GUARDIANSHIP_NOT_VERIFIED` - Representacion no verificada
+            * `ENROLLMENT_NOT_VERIFIED` - Matricula no verificada
+            * `OTHER` - Otro motivo controlado
+          oneOf:
+          - $ref: '#/components/schemas/DecisionReasonEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+        created_at:
+          type: string
+          format: date-time
+        status_url:
+          type: string
+          format: uri
+        first_names:
+          type: string
+        last_names:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+          format: email
+        address:
+          type: string
+        document_type:
+          type: string
+        document_number:
+          type: string
+        birth_date:
+          type: string
+          format: date
+          nullable: true
+        enrollment_code:
+          type: string
+        academic_period:
+          type: string
+        campus:
+          type: string
+        schedule:
+          type: string
+        program_name:
+          type: string
+        course_type:
+          type: string
+        enrollment_date:
+          type: string
+          format: date
+          nullable: true
+        plan_value:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+        term:
+          type: integer
+        financial_terms:
+          allOf:
+          - $ref: '#/components/schemas/TerminosFinancieros'
+          nullable: true
+          description: Condiciones contractuales de la fotografia financiera aprobada;
+            null mientras course_authorized sea false.
+      required:
+      - academic_period
+      - address
+      - application_id
+      - authorization_effective_at
+      - birth_date
+      - campus
+      - course_authorized
+      - course_type
+      - created_at
+      - decision_reason
+      - document_number
+      - document_type
+      - email
+      - enrollment_code
+      - enrollment_date
+      - external_reference
+      - financial_terms
+      - first_names
+      - last_names
+      - phone
+      - plan_value
+      - program_name
+      - schedule
+      - status
+      - status_url
+      - term
+    StatusEnum:
+      enum:
+      - RECEIVED
+      - ACTION_REQUIRED
+      - UNDER_REVIEW
+      - APPROVED
+      - REJECTED
+      - CANCELLED
+      type: string
+      description: |-
+        * `RECEIVED` - Recibida
+        * `ACTION_REQUIRED` - Requiere accion del solicitante
+        * `UNDER_REVIEW` - En revision
+        * `APPROVED` - Aprobada; curso autorizado
+        * `REJECTED` - Rechazada
+        * `CANCELLED` - Cancelada
+    TerminosFinancieros:
+      type: object
+      properties:
+        currency:
+          allOf:
+          - $ref: '#/components/schemas/CurrencyEnum'
+          description: |-
+            Moneda de todos los valores financieros.
+
+            * `COP` - Peso colombiano
+        requested_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+          description: Valor del plan solicitado, redondeado al peso.
+        financed_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+          description: Capital total financiado, incluidos los cargos aplicables.
+        term_months:
+          type: integer
+          maximum: 32767
+          minimum: 1
+        estimated_installment:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+          description: Cuota fija informativa calculada por el motor financiero.
+      required:
+      - currency
+      - estimated_installment
+      - financed_amount
+      - requested_amount
+      - term_months
+  securitySchemes:
+    InstitutionApiKey:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: 'Formato: `Authorization: ApiKey <prefijo>.<secreto>`. El secreto
+        solo se entrega al emitir o rotar la credencial.'

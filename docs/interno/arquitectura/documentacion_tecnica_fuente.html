@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Documentación técnica Aprobado - Financiación educativa</title>
+<style>
+@page { size: Letter; margin: 2.2in .8in 2in .8in; }
+body { font-family: Aptos, Arial, sans-serif; color:#123047; font-size:10pt; line-height:1.25; }
+h1 { color:#0b4b73; font-size:18pt; page-break-before:always; margin:0 0 10pt; }
+h2 { color:#05a7d5; font-size:13pt; margin:12pt 0 6pt; }
+h3 { color:#0b4b73; font-size:11pt; margin:9pt 0 5pt; }
+p { margin:0 0 7pt; }
+ul { margin:0 0 8pt 18pt; }
+li { margin-bottom:3pt; }
+table { width:100%; border-collapse:collapse; margin:6pt 0 12pt; font-size:8.5pt; }
+th { background:#0b4b73; color:white; padding:5pt; border:1px solid #8ca7b8; text-align:left; }
+td { padding:5pt; border:1px solid #b7c9d3; vertical-align:top; }
+tr:nth-child(even) td { background:#f2f7f9; }
+.cover { text-align:center; padding-top:55pt; page-break-after:always; }
+.cover h1 { page-break-before:auto; font-size:28pt; margin-bottom:10pt; }
+.cover h2 { font-size:18pt; color:#0b4b73; }
+.eyebrow { color:#05a7d5; font-weight:bold; letter-spacing:1pt; }
+.callout { border:1px solid #8ecfe1; border-left:5px solid #05a7d5; background:#edf9fc; padding:10pt; margin:10pt 0; }
+.warning { border-left-color:#ffd43b; background:#fff9df; }
+.flow td:first-child { width:9%; text-align:center; font-weight:bold; color:white; background:#05a7d5; }
+.flow td:last-child { width:91%; }
+.toc { page-break-after:always; }
+.no-break { page-break-inside:avoid; }
+.small { font-size:8.5pt; color:#526b7c; }
+@media print {
+  body { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  body::before {
+    content:"";
+    position:fixed;
+    z-index:-10;
+    left:-.8in;
+    top:-2.2in;
+    width:8.5in;
+    height:11in;
+    background:url("../MembreteAprobado.jpg") center/100% 100% no-repeat;
+  }
+}
+</style>
+</head>
+<body>
+<div class="cover">
+  <p class="eyebrow">DOCUMENTO CONTROLADO</p>
+  <h1>DOCUMENTACIÓN TÉCNICA</h1>
+  <h2>Plataforma Aprobado de financiación educativa</h2>
+  <p>Arquitectura, operación, seguridad y hoja de ruta</p>
+  <div class="callout"><b>Versión 1.0</b><br>28 de julio de 2026<br>Estado: implementación local en validación<br>Clasificación: uso interno</div>
+  <p><b>Aprobado Soluciones Digitales S.A.S.</b></p>
+  <p class="small">Sin secretos, credenciales ni datos personales</p>
+</div>
+
+<h1>Control de versiones</h1>
+<table><tr><th>Versión</th><th>Fecha</th><th>Autor</th><th>Descripción</th></tr>
+<tr><td>1.0</td><td>2026-07-28</td><td>Equipo Aprobado</td><td>Línea base técnica de fases 1 a 6.6 y diseños posteriores.</td></tr></table>
+<h2>Aprobaciones requeridas</h2>
+<table><tr><th>Área</th><th>Decisión</th></tr>
+<tr><td>Producto</td><td>Alcance del panel y estados de corrección/rechazo.</td></tr>
+<tr><td>Jurídica</td><td>Textos contractuales, representación del menor y firmantes.</td></tr>
+<tr><td>Finanzas</td><td>Causación contractual, pago anticipado y conciliación.</td></tr>
+<tr><td>Seguridad</td><td>Webhook, retención y segregación de funciones.</td></tr></table>
+<div class="toc"><h2>Tabla de contenido</h2><p>[[TOC]]</p></div>
+
+<h1>1. Objetivo y alcance</h1>
+<p>Este documento describe el dominio Django independiente de financiación educativa Aprobado: recepción institucional, continuación segura, identidad declarada, expediente documental, matrícula, condiciones financieras y preparación de revisión administrativa.</p>
+<ul>
+<li><b>Implementado:</b> API, invitaciones, cuenta, términos, adulto/menor, documentos, cámara, certificado, matrícula y motor financiero.</li>
+<li><b>Preparado:</b> estados y diseños de panel operativo, pagaré, firma, seguridad documental y pagos.</li>
+<li><b>Excluido:</b> scoring, centrales de riesgo, productos de nómina, marketplace, inversionistas, billetera, OCR/IA y aprobación automática.</li>
+</ul>
+<div class="callout"><b>Principio de aislamiento.</b> financiacion_educativa no importa reglas, simuladores, modelos de crédito ni servicios contractuales de dominios heredados.</div>
+
+<h1>2. Arquitectura general</h1>
+<table><tr><th>Capa</th><th>Responsabilidad</th><th>Componentes</th></tr>
+<tr><td>API institucional</td><td>Recepción y consulta asincrónica</td><td>DRF, ApiKey, idempotencia, OpenAPI</td></tr>
+<tr><td>Orquestación</td><td>Solicitud, invitación, estados y eventos</td><td>orquestacion.py, invitaciones.py</td></tr>
+<tr><td>Experiencia web</td><td>Cuenta, términos, expediente y finanzas</td><td>web/views.py, forms.py, templates</td></tr>
+<tr><td>Documentos</td><td>Participantes, archivos y requisitos</td><td>documentos.py, participantes.py, requisitos_documentales.py</td></tr>
+<tr><td>Finanzas</td><td>Política, fotografía y amortización</td><td>motor_financiero.py, reglas_financieras.py</td></tr>
+<tr><td>Persistencia</td><td>Integridad y auditoría</td><td>Modelos propios y migraciones 0001-0009</td></tr></table>
+<h2>Flujo macro</h2>
+<table class="flow"><tr><td>1</td><td>Institución crea solicitud por API y recibe HTTP 202.</td></tr>
+<tr><td>2</td><td>Outbox entrega invitación sin exponer el enlace a la institución.</td></tr>
+<tr><td>3</td><td>Usuario se registra o autentica y acepta términos.</td></tr>
+<tr><td>4</td><td>Se determina adulto o menor y se registra tutor cuando aplica.</td></tr>
+<tr><td>5</td><td>Se captura identidad y se completa expediente privado.</td></tr>
+<tr><td>6</td><td>Se registra matrícula y se consulta fotografía financiera.</td></tr>
+<tr><td>7</td><td>Expediente completo pasa a revisión administrativa.</td></tr></table>
+
+<h1>3. Actores y roles</h1>
+<table><tr><th>Actor</th><th>Responsabilidad</th><th>Límite</th></tr>
+<tr><td>Institución aliada</td><td>Origina y consulta solicitudes</td><td>No recibe enlaces ni documentos privados</td></tr>
+<tr><td>Estudiante adulto</td><td>Solicitante y deudor principal</td><td>Cuenta asociada obligatoria</td></tr>
+<tr><td>Estudiante menor</td><td>Beneficiario educativo</td><td>No representa por sí solo la obligación</td></tr>
+<tr><td>Tutor</td><td>Representante y deudor declarado</td><td>Vínculo sujeto a revisión</td></tr>
+<tr><td>Operador</td><td>Revisa dentro de su alcance</td><td>No administra permisos</td></tr>
+<tr><td>Administrador técnico</td><td>Configura y audita</td><td>Admin no sustituye panel operativo</td></tr></table>
+
+<h1>4. Flujo adulto</h1>
+<table class="flow"><tr><td>1</td><td>Solicitud institucional con identidad y plan.</td></tr>
+<tr><td>2</td><td>Cuenta asociada y términos aceptados.</td></tr>
+<tr><td>3</td><td>Estudiante sincronizado como estudiante/deudor principal.</td></tr>
+<tr><td>4</td><td>Captura de frente y reverso.</td></tr>
+<tr><td>5</td><td>Certificado de ingresos del estudiante/deudor.</td></tr>
+<tr><td>6</td><td>Evidencia de matrícula y condiciones financieras.</td></tr>
+<tr><td>7</td><td>Envío a revisión manual.</td></tr></table>
+<p>La edad se calcula con fecha de nacimiento y referencia. No se usa IA como autoridad de identidad o mayoría de edad.</p>
+
+<h1>5. Flujo menor con tutor</h1>
+<table class="flow"><tr><td>1</td><td>Estudiante identificado como menor por fecha declarada.</td></tr>
+<tr><td>2</td><td>Tutor adulto y relación declarada en registros separados.</td></tr>
+<tr><td>3</td><td>Tutor asignado como representante y deudor principal.</td></tr>
+<tr><td>4</td><td>Identificaciones de estudiante y tutor.</td></tr>
+<tr><td>5</td><td>Certificado del tutor/deudor y matrícula del estudiante.</td></tr>
+<tr><td>6</td><td>Revisión manual de identidad, edad y vínculo.</td></tr></table>
+<div class="callout warning"><b>Límite jurídico.</b> La relación declarada no equivale a representación legal verificada.</div>
+
+<h1>6. API institucional</h1>
+<table><tr><th>Operación</th><th>Método y ruta</th><th>Resultado</th></tr>
+<tr><td>Crear</td><td>POST /api/v1/financiacion-educativa/solicitudes/</td><td>202 con application_id y status</td></tr>
+<tr><td>Consultar</td><td>GET /api/v1/financiacion-educativa/solicitudes/{id}/</td><td>Estado sin enlace</td></tr>
+<tr><td>Contrato</td><td>GET /api/v1/schema/</td><td>OpenAPI; Swagger UI no esta registrada</td></tr></table>
+<p>Authorization usa ApiKey y la creación requiere Idempotency-Key. Un replay compatible devuelve la misma solicitud, no crea invitación adicional y marca Idempotent-Replayed.</p>
+<ul><li>Clave API con hash e institución activa.</li><li>Referencia externa única por institución.</li><li>Token y URL nunca aparecen en serializer/OpenAPI.</li><li>Estados y eventos auditables.</li></ul>
+
+<h1>7. Seguridad e idempotencia</h1>
+<table><tr><th>Riesgo</th><th>Control</th></tr>
+<tr><td>Replay</td><td>Clave idempotente y huella de payload</td></tr>
+<tr><td>Enumeración/IDOR</td><td>Alcance institucional/propietario y respuestas genéricas</td></tr>
+<tr><td>Token</td><td>Aleatorio; solo hash/HMAC; fuera de logs/admin</td></tr>
+<tr><td>CSRF</td><td>Middleware activo y mutaciones por POST</td></tr>
+<tr><td>Documentos</td><td>Storage privado, sesión, propiedad, MIME y cabeceras</td></tr>
+<tr><td>Correo</td><td>Callback posterior al commit captura excepciones</td></tr>
+<tr><td>Concurrencia</td><td>select_for_update y restricciones condicionales</td></tr></table>
+<p>La concurrencia real debe repetirse en staging PostgreSQL; SQLite no reproduce toda su semántica.</p>
+
+<h1>8. Gestión documental</h1>
+<p>DocumentoFinanciacion conserva tipo, participante, MIME, tamaño, hash, origen, escaneo, revisión y reemplazo. Los archivos se sirven solo por vistas autorizadas con soporte PDF/JPEG/PNG.</p>
+<table><tr><th>Evidencia</th><th>Adulto</th><th>Menor</th><th>Formato</th></tr>
+<tr><td>Identificación</td><td>Estudiante</td><td>Estudiante y tutor</td><td>JPEG/PNG por cámara</td></tr>
+<tr><td>Certificado de ingresos</td><td>Estudiante/deudor</td><td>Tutor/deudor</td><td>PDF, JPEG o PNG</td></tr>
+<tr><td>Matrícula</td><td>Estudiante</td><td>Estudiante</td><td>PDF, JPEG o PNG</td></tr></table>
+<p>OCR, IA, scoring, antivirus conectado y aprobación automática no están implementados. Escaneo técnico y decisión administrativa son dimensiones separadas.</p>
+
+<h1>9. Captura y continuidad móvil</h1>
+<p>La cámara usa getUserMedia, encuadre, vista previa y confirmación separada. El servidor exige origen CAMERA para los tipos de captura y valida MIME/tamaño.</p>
+<table class="flow"><tr><td>1</td><td>Propietario solicita enlace por POST.</td></tr>
+<tr><td>2</td><td>Se revoca el activo y se crea token de 48 bytes con HMAC persistido.</td></tr>
+<tr><td>3</td><td>Correo no incluye UUID ni rutas privadas.</td></tr>
+<tr><td>4</td><td>El fragmento no viaja al servidor; un POST con CSRF retira el token de la barra antes de autenticar.</td></tr>
+<tr><td>5</td><td>Cuenta propietaria consume el enlace una vez.</td></tr>
+<tr><td>6</td><td>Se abre la cámara de estudiante/tutor.</td></tr>
+<tr><td>7</td><td>El computador refleja la captura al recargar.</td></tr></table>
+<p>Predeterminados: 30 minutos, cooldown 120 segundos y cinco emisiones por hora. SMTP Gmail depende de cuenta, costo y cuotas del proveedor. Local usa consola/locmem.</p>
+
+<h1>10. Motor financiero educativo</h1>
+<table><tr><th>Concepto</th><th>Regla</th></tr>
+<tr><td>Interés</td><td>1 % mensual</td></tr><tr><td>Método</td><td>Anualidad francesa</td></tr>
+<tr><td>Originación</td><td>10 %</td></tr><tr><td>IVA</td><td>19 % sobre originación</td></tr>
+<tr><td>Fondo de garantía</td><td>2 %</td></tr><tr><td>Seguro vida deudores</td><td>0,3711 %</td></tr>
+<tr><td>Capital</td><td>Cargos financiados</td></tr><tr><td>Moneda</td><td>COP al peso</td></tr></table>
+<p>Los proveedores técnicos Figarantías y SURA permanecen internamente. Cada cálculo contractual crea fotografía versionada; solo una activa por solicitud. Los registros anteriores no se recalculan.</p>
+
+<h1>11. Ejemplo de amortización</h1>
+<p>Monto $1.000.000; capital $1.142.711; plazo 3; tasa 1 %; cuota $388.547.</p>
+<table><tr><th>Cuota</th><th>Fecha</th><th>Saldo inicial</th><th>Interés</th><th>Capital</th><th>Valor</th><th>Saldo final</th></tr>
+<tr><td>1</td><td>2026-08-31</td><td>$1.142.711</td><td>$11.427</td><td>$377.120</td><td>$388.547</td><td>$765.591</td></tr>
+<tr><td>2</td><td>2026-09-30</td><td>$765.591</td><td>$7.656</td><td>$380.891</td><td>$388.547</td><td>$384.700</td></tr>
+<tr><td>3</td><td>2026-10-31</td><td>$384.700</td><td>$3.847</td><td>$384.700</td><td>$388.547</td><td>$0</td></tr></table>
+<p>Intereses $22.930; cuotas $1.165.641. Los cargos financiados pertenecen al capital.</p>
+
+<h1>12. Abono extraordinario</h1>
+<p>Orden: interés diario base 30, conceptos exigibles, remanente a capital. El valor debe superar los primeros componentes. Conserva aproximadamente la cuota, reduce plazo cuando el monto lo permite y admite última cuota menor.</p>
+<table><tr><th>Resultado del motor</th><th>Antes</th><th>Después</th></tr>
+<tr><td>Valor entregado</td><td>-</td><td>$500.000</td></tr><tr><td>Interés causado</td><td>-</td><td>$5.714</td></tr>
+<tr><td>Aplicado a capital</td><td>-</td><td>$494.286</td></tr><tr><td>Saldo</td><td>$1.142.711</td><td>$648.425</td></tr>
+<tr><td>Cuotas pendientes</td><td>3</td><td>2</td></tr><tr><td>Fecha final</td><td>2026-10-31</td><td>2026-09-30</td></tr>
+<tr><td>Última cuota</td><td>$388.547</td><td>$265.751</td></tr><tr><td>Intereses futuros</td><td>$17.216</td><td>$5.873</td></tr>
+<tr><td>Ahorro estimado</td><td>-</td><td>$11.343</td></tr></table>
+<div class="callout warning"><b>Esta es una simulación y no constituye un pago.</b> No modifica registros.</div>
+
+<h1>13. Administración actual</h1>
+<p>Django Admin permite configuración/consulta técnica de instituciones, solicitudes, invitaciones, términos, participantes, documentos, matrícula y finanzas. Los enlaces móviles son de solo lectura y no muestran token, URL ni destinatario.</p>
+<p>El admin no sustituye la aplicación operativa especificada en docs/interno/fases/FASE_7_PANEL_OPERATIVO.md.</p>
+
+<h1>14. Panel operativo previsto</h1>
+<table><tr><th>Incremento</th><th>Alcance</th><th>Criterio</th></tr>
+<tr><td>7.1</td><td>Permisos, bandeja y detalle</td><td>Sin IDOR; solo lectura</td></tr>
+<tr><td>7.2</td><td>Revisión y correcciones</td><td>Motivos y auditoría</td></tr>
+<tr><td>7.3</td><td>Aprobación/rechazo</td><td>Transiciones atómicas</td></tr>
+<tr><td>7.4</td><td>Indicadores y SLA</td><td>Datos existentes</td></tr></table>
+<p>Disponibles: solicitudes, etapa, institución, curso, periodo, monto, capital y tiempos. Recaudos/cartera/mora esperan pagos. Colocación no implica dinero al estudiante. Captaciones no se implementa.</p>
+
+<h1>15. ZapSign previsto</h1>
+<table class="flow"><tr><td>1</td><td>Expediente completo y revisión.</td></tr><tr><td>2</td><td>Corrección/rechazo o aprobación.</td></tr>
+<tr><td>3</td><td>Pagaré educativo versionado.</td></tr><tr><td>4</td><td>Envío idempotente a ZapSign.</td></tr>
+<tr><td>5</td><td>Identificación y firma.</td></tr><tr><td>6</td><td>Webhook autenticado.</td></tr>
+<tr><td>7</td><td>Descarga, hash y conservación.</td></tr><tr><td>8</td><td>Pagaré válido y matrícula.</td></tr></table>
+<p><b>Enviar a revisión no envía el pagaré.</b> La integración histórica mezcla dominios, desembolso y registros sensibles; solo sirve de referencia técnica. La integración educativa no está activa.</p>
+
+<h1>16. Estado funcional</h1>
+<table><tr><th>Estado</th><th>Funciones</th></tr>
+<tr><td>Implementadas</td><td>API, idempotencia, invitación, cuenta, términos, adulto/menor, tutor, documentos, cámara, certificado, matrícula, finanzas y enlace móvil.</td></tr>
+<tr><td>Preparadas</td><td>Estados de revisión/pagaré/firma/pagos, escaneo y diseños.</td></tr>
+<tr><td>Futuras</td><td>Panel, antivirus, OCR/IA, pagaré, firma, webhooks, Mi crédito, pagos y recaudos.</td></tr></table>
+
+<h1>17. Instalación local</h1>
+<table><tr><th>Paso</th><th>Comando</th></tr>
+<tr><td>Entorno</td><td>venv\Scripts\Activate.ps1</td></tr><tr><td>Dependencias</td><td>python -m pip install -r requirements.txt</td></tr>
+<tr><td>Chequeo</td><td>python manage.py check</td></tr><tr><td>Migraciones</td><td>python manage.py migrate (base autorizada)</td></tr>
+<tr><td>Política</td><td>manage.py configurar_politica_financiera_educativa --vigente-desde AAAA-MM-DD --activate</td></tr>
+<tr><td>Servidor</td><td>python manage.py runserver 127.0.0.1:8001</td></tr></table>
+<p>Las pruebas automatizadas usan un backend de correo aislado. La validación manual local puede usar el backend de consola; la validación real usa el backend SMTP configurado por ambiente. Consultar README, README educativo y docs/interno/operaciones/REANUDAR_PROYECTO.md.</p>
+
+<h1>18. Pruebas</h1>
+<p>La regresión cubre API, invitaciones, asociación, términos, participantes, documentos, cámara, matrícula, finanzas, seguridad y flujo integral. Esta iteración agrega enlace móvil, uso único, vencimiento, alteración, usuario ajeno, sustitución, fallo de entrega, CSRF, IDOR y recarga.</p>
+<table><tr><th>Validación</th><th>Finalidad</th></tr>
+<tr><td>manage.py check</td><td>Configuración y registry</td></tr><tr><td>makemigrations --check</td><td>Esquema declarado</td></tr>
+<tr><td>Tests educativos</td><td>Regresión funcional/seguridad</td></tr><tr><td>git diff --check</td><td>Integridad del diff</td></tr>
+<tr><td>SQLite temporal</td><td>Migración desde cero</td></tr><tr><td>Staging PostgreSQL</td><td>Concurrencia real futura</td></tr></table>
+
+<h1>19. Riesgos y pendientes</h1>
+<ul><li>Revisión de identidad, edad y vínculo manual.</li><li>Antivirus no conectado.</li><li>Pagaré y firma no habilitados.</li>
+<li>Sin pagos, conciliación, cartera, mora ni Mi crédito completo.</li><li>SMTP sujeto a proveedor.</li><li>SQLite difiere de PostgreSQL.</li>
+<li>Validar datos corporativos del membrete.</li><li>Antes de producción: threat model, carga, respaldo, monitoreo, retención e incidentes.</li></ul>
+
+<h1>20. Glosario</h1>
+<table><tr><th>Término</th><th>Definición</th></tr>
+<tr><td>Solicitud</td><td>Expediente originado por una institución.</td></tr><tr><td>Fotografía</td><td>Condiciones y plan inmutables/versionados.</td></tr>
+<tr><td>Deudor principal</td><td>Adulto que asume la obligación.</td></tr><tr><td>Idempotencia</td><td>Replay sin duplicación.</td></tr>
+<tr><td>Outbox</td><td>Entrega persistente posterior al commit.</td></tr><tr><td>HMAC</td><td>Huella con clave.</td></tr>
+<tr><td>IDOR</td><td>Acceso por identificador manipulado.</td></tr><tr><td>Colocación</td><td>Obligación aprobada, no necesariamente desembolso.</td></tr></table>
+
+<h1>21. Historial de cambios</h1>
+<table><tr><th>Fase</th><th>Resultado</th></tr>
+<tr><td>1</td><td>Cimentación del dominio</td></tr><tr><td>2</td><td>API institucional</td></tr><tr><td>3</td><td>Cuenta y términos</td></tr>
+<tr><td>4</td><td>Adulto y menor</td></tr><tr><td>5</td><td>Motor financiero</td></tr><tr><td>6</td><td>Orquestación e invitación</td></tr>
+<tr><td>6.5</td><td>Saneamiento heredado</td></tr><tr><td>6.6</td><td>Expediente, cámara y matrícula</td></tr>
+<tr><td>Actual</td><td>Etiquetas, abono y enlace móvil</td></tr></table>
+<div class="callout"><b>Cierre.</b> Refleja el código inspeccionado al 28 de julio de 2026. Lo futuro es diseño, no funcionalidad habilitada.</div>
+</body>
+</html>

@@ -100,9 +100,11 @@ Pendiente:
 - pasar tests a `gestion_creditos/tests/`
 - dejar contratos de servicio más claros
 
-### 2. Limpiar documentación especializada y legacy
+### 2. Mantener separada la documentación vigente y legacy
 
-El frente raíz ya quedó ordenado, pero `docs/` todavía mezcla documentos vigentes con documentos históricos.
+La documentación para aliados, la documentación interna y el archivo histórico
+quedaron separados bajo `docs/`. Antes de publicar, validar que el contrato
+OpenAPI versionado corresponda al código del commit.
 
 ### 3. Terminar la política nueva de notificaciones desde una validación operacional
 

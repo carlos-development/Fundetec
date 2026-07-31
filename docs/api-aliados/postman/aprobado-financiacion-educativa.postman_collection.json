@@ -1,0 +1,526 @@
+{
+  "info": {
+    "_postman_id": "25fa2b65-22c0-47e8-9d04-1fb2df610001",
+    "name": "Aprobado - Financiacion educativa institucional",
+    "description": "Contrato v1 para creacion idempotente y consulta periodica. No contiene credenciales reales, webhooks ni enlaces privados.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://127.0.0.1:8001"
+    },
+    {
+      "key": "api_key",
+      "value": "REEMPLAZAR_CON_CREDENCIAL_DE_DEMOSTRACION",
+      "type": "secret"
+    },
+    {
+      "key": "idempotency_key",
+      "value": "demo-educativa-2026-0001"
+    },
+    {
+      "key": "application_id",
+      "value": ""
+    },
+    {
+      "key": "external_reference",
+      "value": "DEMO-EDU-2026-0001"
+    }
+  ],
+  "event": [
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "const contentType = pm.response.headers.get('Content-Type') || '';",
+          "if (contentType.includes('application/json')) {",
+          "  const body = pm.response.json();",
+          "  if (pm.response.code >= 400) {",
+          "    pm.test('El error usa el envelope contractual', function () {",
+          "      pm.expect(body).to.have.property('error');",
+          "      pm.expect(body.error).to.have.property('code').that.is.a('string');",
+          "      pm.expect(body.error).to.have.property('message').that.is.a('string');",
+          "    });",
+          "  }",
+          "}"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Crear solicitud educativa",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "ApiKey {{api_key}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{idempotency_key}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"external_reference\": \"{{external_reference}}\",\n  \"first_names\": \"LAURA SOFIA\",\n  \"last_names\": \"MARTINEZ RUIZ\",\n  \"phone\": \"3000000000\",\n  \"email\": \"student@example.test\",\n  \"address\": \"Direccion de demostracion\",\n  \"document_type\": \"CC\",\n  \"document_number\": \"0000000001\",\n  \"birth_date\": \"2002-08-15\",\n  \"enrollment_code\": \"DEMO-MAT-001\",\n  \"academic_period\": \"2026-2\",\n  \"campus\": \"Sede demostracion\",\n  \"schedule\": \"Nocturna\",\n  \"program_name\": \"INGLES BASICO A2\",\n  \"enrollment_date\": null,\n  \"plan_value\": \"2500000.00\",\n  \"term\": 6\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": "{{base_url}}/api/v1/financiacion-educativa/solicitudes/",
+        "description": "202 confirma recepcion y persistencia. No confirma aprobacion, entrega del correo, desembolso, pago ni firma."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('POST responde 202', function () { pm.response.to.have.status(202); });",
+              "const data = pm.response.json();",
+              "const publicStates = ['RECEIVED', 'ACTION_REQUIRED', 'UNDER_REVIEW', 'APPROVED', 'REJECTED', 'CANCELLED'];",
+              "pm.test('La respuesta usa un estado publico', function () { pm.expect(publicStates).to.include(data.status); });",
+              "const replayed = pm.response.headers.get('Idempotent-Replayed') === 'true';",
+              "pm.test('Una creacion nueva no se interpreta como aprobacion', function () {",
+              "  if (!replayed) {",
+              "    pm.expect(data.status).to.eql('RECEIVED');",
+              "    pm.expect(data.course_authorized).to.eql(false);",
+              "  }",
+              "});",
+              "pm.test('Nunca expone el enlace privado', function () {",
+              "  const forbidden = ['token', 'continuation_url', 'continuation_link', 'invitation_url', 'invitation_link'];",
+              "  forbidden.forEach(function (key) { pm.expect(data).not.to.have.property(key); });",
+              "});",
+              "pm.test('course_authorized solo puede ser true en APPROVED', function () {",
+              "  if (data.course_authorized) pm.expect(data.status).to.eql('APPROVED');",
+              "});",
+              "if (data.application_id) pm.collectionVariables.set('application_id', data.application_id);",
+              "if (data.external_reference) pm.collectionVariables.set('external_reference', data.external_reference);"
+            ]
+          }
+        }
+      ],
+      "response": [
+        {
+          "name": "202 - RECEIVED",
+          "status": "Accepted",
+          "code": 202,
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "cookie": [],
+          "body": "{\"application_id\":\"11111111-1111-4111-8111-111111111111\",\"external_reference\":\"DEMO-EDU-2026-0001\",\"status\":\"RECEIVED\",\"course_authorized\":false,\"authorization_effective_at\":null,\"decision_reason\":\"\",\"created_at\":\"2026-07-30T10:00:00-05:00\",\"status_url\":\"https://api.example.test/api/v1/financiacion-educativa/solicitudes/11111111-1111-4111-8111-111111111111/\",\"first_names\":\"LAURA SOFIA\",\"last_names\":\"MARTINEZ RUIZ\",\"phone\":\"3000000000\",\"email\":\"student@example.test\",\"address\":\"Direccion de demostracion\",\"document_type\":\"CC\",\"document_number\":\"0000000001\",\"birth_date\":\"2002-08-15\",\"enrollment_code\":\"DEMO-MAT-001\",\"academic_period\":\"2026-2\",\"campus\":\"Sede demostracion\",\"schedule\":\"Nocturna\",\"program_name\":\"INGLES BASICO A2\",\"course_type\":\"INGLES BASICO A2\",\"enrollment_date\":null,\"plan_value\":\"2500000.00\",\"term\":6,\"financial_terms\":null}"
+        }
+      ]
+    },
+    {
+      "name": "2. Repetir solicitud con la misma clave",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "ApiKey {{api_key}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{idempotency_key}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"external_reference\": \"{{external_reference}}\",\n  \"first_names\": \"LAURA SOFIA\",\n  \"last_names\": \"MARTINEZ RUIZ\",\n  \"phone\": \"3000000000\",\n  \"email\": \"student@example.test\",\n  \"address\": \"Direccion de demostracion\",\n  \"document_type\": \"CC\",\n  \"document_number\": \"0000000001\",\n  \"birth_date\": \"2002-08-15\",\n  \"enrollment_code\": \"DEMO-MAT-001\",\n  \"academic_period\": \"2026-2\",\n  \"campus\": \"Sede demostracion\",\n  \"schedule\": \"Nocturna\",\n  \"program_name\": \"INGLES BASICO A2\",\n  \"enrollment_date\": null,\n  \"plan_value\": \"2500000.00\",\n  \"term\": 6\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": "{{base_url}}/api/v1/financiacion-educativa/solicitudes/",
+        "description": "Debe ejecutarse despues de la creacion sin cambiar payload ni Idempotency-Key."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('El replay responde 202', function () { pm.response.to.have.status(202); });",
+              "const data = pm.response.json();",
+              "pm.test('El replay conserva la solicitud', function () { pm.expect(data.application_id).to.eql(pm.collectionVariables.get('application_id')); });",
+              "pm.test('El replay se identifica en el encabezado', function () { pm.expect(pm.response.headers.get('Idempotent-Replayed')).to.eql('true'); });"
+            ]
+          }
+        }
+      ],
+      "response": [
+        {
+          "name": "202 - Repeticion idempotente",
+          "status": "Accepted",
+          "code": 202,
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "key": "Idempotent-Replayed",
+              "value": "true"
+            }
+          ],
+          "cookie": [],
+          "body": "{\"application_id\":\"11111111-1111-4111-8111-111111111111\",\"external_reference\":\"DEMO-EDU-2026-0001\",\"status\":\"RECEIVED\",\"course_authorized\":false,\"authorization_effective_at\":null,\"decision_reason\":\"\",\"created_at\":\"2026-07-30T10:00:00-05:00\",\"status_url\":\"https://api.example.test/api/v1/financiacion-educativa/solicitudes/11111111-1111-4111-8111-111111111111/\",\"first_names\":\"LAURA SOFIA\",\"last_names\":\"MARTINEZ RUIZ\",\"phone\":\"3000000000\",\"email\":\"student@example.test\",\"address\":\"Direccion de demostracion\",\"document_type\":\"CC\",\"document_number\":\"0000000001\",\"birth_date\":\"2002-08-15\",\"enrollment_code\":\"DEMO-MAT-001\",\"academic_period\":\"2026-2\",\"campus\":\"Sede demostracion\",\"schedule\":\"Nocturna\",\"program_name\":\"INGLES BASICO A2\",\"course_type\":\"INGLES BASICO A2\",\"enrollment_date\":null,\"plan_value\":\"2500000.00\",\"term\":6,\"financial_terms\":null}"
+        }
+      ]
+    },
+    {
+      "name": "3. Consultar estado propio",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "ApiKey {{api_key}}",
+            "type": "text"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": "{{base_url}}/api/v1/financiacion-educativa/solicitudes/{{application_id}}/",
+        "description": "Consulta periodica del resultado. Idempotency-Key y Content-Type no son requeridos en GET."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('GET responde 200', function () { pm.response.to.have.status(200); });",
+              "const data = pm.response.json();",
+              "const publicStates = ['RECEIVED', 'ACTION_REQUIRED', 'UNDER_REVIEW', 'APPROVED', 'REJECTED', 'CANCELLED'];",
+              "const reasons = ['', 'INCOMPLETE_INFORMATION', 'UNREADABLE_DOCUMENT', 'IDENTITY_MISMATCH', 'GUARDIANSHIP_NOT_VERIFIED', 'ENROLLMENT_NOT_VERIFIED', 'OTHER'];",
+              "pm.test('El estado pertenece al catalogo publico', function () { pm.expect(publicStates).to.include(data.status); });",
+              "pm.test('decision_reason pertenece al catalogo publico', function () { pm.expect(reasons).to.include(data.decision_reason); });",
+              "pm.test('Solo APPROVED puede autorizar el curso', function () { if (data.course_authorized) pm.expect(data.status).to.eql('APPROVED'); });",
+              "pm.test('La autorizacion contractual trae condiciones financieras', function () {",
+              "  if (data.course_authorized) {",
+              "    pm.expect(data.status).to.eql('APPROVED');",
+              "    pm.expect(data.authorization_effective_at).to.be.a('string');",
+              "    pm.expect(data.financial_terms).to.be.an('object');",
+              "    pm.expect(data.financial_terms.currency).to.eql('COP');",
+              "    pm.expect(data.financial_terms.requested_amount).to.match(/^\\d+\\.\\d{2}$/);",
+              "    pm.expect(data.financial_terms.financed_amount).to.match(/^\\d+\\.\\d{2}$/);",
+              "    pm.expect(data.financial_terms.estimated_installment).to.match(/^\\d+\\.\\d{2}$/);",
+              "    pm.expect(data.financial_terms.term_months).to.be.a('number');",
+              "  }",
+              "});",
+              "pm.test('No expone secretos de continuacion', function () {",
+              "  const forbidden = ['token', 'continuation_url', 'continuation_link', 'invitation_url', 'invitation_link'];",
+              "  forbidden.forEach(function (key) { pm.expect(data).not.to.have.property(key); });",
+              "});"
+            ]
+          }
+        }
+      ],
+      "response": [
+        {
+          "name": "200 - RECEIVED",
+          "status": "OK",
+          "code": 200,
+          "header": [],
+          "cookie": [],
+          "body": "{\"application_id\":\"11111111-1111-4111-8111-111111111111\",\"external_reference\":\"DEMO-EDU-2026-0001\",\"status\":\"RECEIVED\",\"course_authorized\":false,\"authorization_effective_at\":null,\"decision_reason\":\"\",\"created_at\":\"2026-07-30T10:00:00-05:00\",\"updated_at\":\"2026-07-30T10:00:00-05:00\",\"status_url\":\"https://api.example.test/api/v1/financiacion-educativa/solicitudes/11111111-1111-4111-8111-111111111111/\",\"first_names\":\"LAURA SOFIA\",\"last_names\":\"MARTINEZ RUIZ\",\"phone\":\"3000000000\",\"email\":\"student@example.test\",\"address\":\"Direccion de demostracion\",\"document_type\":\"CC\",\"document_number\":\"0000000001\",\"birth_date\":\"2002-08-15\",\"enrollment_code\":\"DEMO-MAT-001\",\"academic_period\":\"2026-2\",\"campus\":\"Sede demostracion\",\"schedule\":\"Nocturna\",\"program_name\":\"INGLES BASICO A2\",\"course_type\":\"INGLES BASICO A2\",\"enrollment_date\":null,\"plan_value\":\"2500000.00\",\"term\":6,\"financial_terms\":null}"
+        },
+        {
+          "name": "200 - ACTION_REQUIRED",
+          "status": "OK",
+          "code": 200,
+          "header": [],
+          "cookie": [],
+          "body": "{\"application_id\":\"11111111-1111-4111-8111-111111111111\",\"external_reference\":\"DEMO-EDU-2026-0001\",\"status\":\"ACTION_REQUIRED\",\"course_authorized\":false,\"authorization_effective_at\":null,\"decision_reason\":\"INCOMPLETE_INFORMATION\",\"created_at\":\"2026-07-30T10:00:00-05:00\",\"updated_at\":\"2026-07-30T11:00:00-05:00\",\"status_url\":\"https://api.example.test/api/v1/financiacion-educativa/solicitudes/11111111-1111-4111-8111-111111111111/\",\"first_names\":\"LAURA SOFIA\",\"last_names\":\"MARTINEZ RUIZ\",\"phone\":\"3000000000\",\"email\":\"student@example.test\",\"address\":\"Direccion de demostracion\",\"document_type\":\"CC\",\"document_number\":\"0000000001\",\"birth_date\":\"2002-08-15\",\"enrollment_code\":\"DEMO-MAT-001\",\"academic_period\":\"2026-2\",\"campus\":\"Sede demostracion\",\"schedule\":\"Nocturna\",\"program_name\":\"INGLES BASICO A2\",\"course_type\":\"INGLES BASICO A2\",\"enrollment_date\":null,\"plan_value\":\"2500000.00\",\"term\":6,\"financial_terms\":null}"
+        },
+        {
+          "name": "200 - UNDER_REVIEW",
+          "status": "OK",
+          "code": 200,
+          "header": [],
+          "cookie": [],
+          "body": "{\"application_id\":\"11111111-1111-4111-8111-111111111111\",\"external_reference\":\"DEMO-EDU-2026-0001\",\"status\":\"UNDER_REVIEW\",\"course_authorized\":false,\"authorization_effective_at\":null,\"decision_reason\":\"\",\"created_at\":\"2026-07-30T10:00:00-05:00\",\"updated_at\":\"2026-07-30T12:00:00-05:00\",\"status_url\":\"https://api.example.test/api/v1/financiacion-educativa/solicitudes/11111111-1111-4111-8111-111111111111/\",\"first_names\":\"LAURA SOFIA\",\"last_names\":\"MARTINEZ RUIZ\",\"phone\":\"3000000000\",\"email\":\"student@example.test\",\"address\":\"Direccion de demostracion\",\"document_type\":\"CC\",\"document_number\":\"0000000001\",\"birth_date\":\"2002-08-15\",\"enrollment_code\":\"DEMO-MAT-001\",\"academic_period\":\"2026-2\",\"campus\":\"Sede demostracion\",\"schedule\":\"Nocturna\",\"program_name\":\"INGLES BASICO A2\",\"course_type\":\"INGLES BASICO A2\",\"enrollment_date\":null,\"plan_value\":\"2500000.00\",\"term\":6,\"financial_terms\":null}"
+        },
+        {
+          "name": "200 - APPROVED",
+          "status": "OK",
+          "code": 200,
+          "header": [],
+          "cookie": [],
+          "body": "{\"application_id\":\"11111111-1111-4111-8111-111111111111\",\"external_reference\":\"DEMO-EDU-2026-0001\",\"status\":\"APPROVED\",\"course_authorized\":true,\"authorization_effective_at\":\"2026-07-30T15:45:00-05:00\",\"decision_reason\":\"\",\"created_at\":\"2026-07-30T10:00:00-05:00\",\"updated_at\":\"2026-07-30T15:45:00-05:00\",\"status_url\":\"https://api.example.test/api/v1/financiacion-educativa/solicitudes/11111111-1111-4111-8111-111111111111/\",\"first_names\":\"LAURA SOFIA\",\"last_names\":\"MARTINEZ RUIZ\",\"phone\":\"3000000000\",\"email\":\"student@example.test\",\"address\":\"Direccion de demostracion\",\"document_type\":\"CC\",\"document_number\":\"0000000001\",\"birth_date\":\"2002-08-15\",\"enrollment_code\":\"DEMO-MAT-001\",\"academic_period\":\"2026-2\",\"campus\":\"Sede demostracion\",\"schedule\":\"Nocturna\",\"program_name\":\"INGLES BASICO A2\",\"course_type\":\"INGLES BASICO A2\",\"enrollment_date\":null,\"plan_value\":\"2500000.00\",\"term\":6,\"financial_terms\":{\"currency\":\"COP\",\"requested_amount\":\"2500000.00\",\"financed_amount\":\"2856778.00\",\"term_months\":6,\"estimated_installment\":\"492932.00\"}}"
+        },
+        {
+          "name": "200 - REJECTED",
+          "status": "OK",
+          "code": 200,
+          "header": [],
+          "cookie": [],
+          "body": "{\"application_id\":\"11111111-1111-4111-8111-111111111111\",\"external_reference\":\"DEMO-EDU-2026-0001\",\"status\":\"REJECTED\",\"course_authorized\":false,\"authorization_effective_at\":null,\"decision_reason\":\"OTHER\",\"created_at\":\"2026-07-30T10:00:00-05:00\",\"updated_at\":\"2026-07-30T15:00:00-05:00\",\"status_url\":\"https://api.example.test/api/v1/financiacion-educativa/solicitudes/11111111-1111-4111-8111-111111111111/\",\"first_names\":\"LAURA SOFIA\",\"last_names\":\"MARTINEZ RUIZ\",\"phone\":\"3000000000\",\"email\":\"student@example.test\",\"address\":\"Direccion de demostracion\",\"document_type\":\"CC\",\"document_number\":\"0000000001\",\"birth_date\":\"2002-08-15\",\"enrollment_code\":\"DEMO-MAT-001\",\"academic_period\":\"2026-2\",\"campus\":\"Sede demostracion\",\"schedule\":\"Nocturna\",\"program_name\":\"INGLES BASICO A2\",\"course_type\":\"INGLES BASICO A2\",\"enrollment_date\":null,\"plan_value\":\"2500000.00\",\"term\":6,\"financial_terms\":null}"
+        },
+        {
+          "name": "200 - CANCELLED",
+          "status": "OK",
+          "code": 200,
+          "header": [],
+          "cookie": [],
+          "body": "{\"application_id\":\"11111111-1111-4111-8111-111111111111\",\"external_reference\":\"DEMO-EDU-2026-0001\",\"status\":\"CANCELLED\",\"course_authorized\":false,\"authorization_effective_at\":null,\"decision_reason\":\"\",\"created_at\":\"2026-07-30T10:00:00-05:00\",\"updated_at\":\"2026-07-30T13:00:00-05:00\",\"status_url\":\"https://api.example.test/api/v1/financiacion-educativa/solicitudes/11111111-1111-4111-8111-111111111111/\",\"first_names\":\"LAURA SOFIA\",\"last_names\":\"MARTINEZ RUIZ\",\"phone\":\"3000000000\",\"email\":\"student@example.test\",\"address\":\"Direccion de demostracion\",\"document_type\":\"CC\",\"document_number\":\"0000000001\",\"birth_date\":\"2002-08-15\",\"enrollment_code\":\"DEMO-MAT-001\",\"academic_period\":\"2026-2\",\"campus\":\"Sede demostracion\",\"schedule\":\"Nocturna\",\"program_name\":\"INGLES BASICO A2\",\"course_type\":\"INGLES BASICO A2\",\"enrollment_date\":null,\"plan_value\":\"2500000.00\",\"term\":6,\"financial_terms\":null}"
+        }
+      ]
+    },
+    {
+      "name": "4. Consultar UUID ajeno o inexistente",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "ApiKey {{api_key}}",
+            "type": "text"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": "{{base_url}}/api/v1/financiacion-educativa/solicitudes/00000000-0000-4000-8000-000000000001/",
+        "description": "El API responde el mismo 404 para un UUID ajeno y para uno inexistente. Para probar aislamiento real, use el application_id de otra institucion sin compartir sus credenciales."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('La consulta aislada responde 404', function () { pm.response.to.have.status(404); });",
+              "const data = pm.response.json();",
+              "pm.test('No revela existencia ni propietario', function () { pm.expect(data.error.code).to.eql('NOT_FOUND'); });"
+            ]
+          }
+        }
+      ],
+      "response": [
+        {
+          "name": "404 - Recurso no visible",
+          "status": "Not Found",
+          "code": 404,
+          "header": [],
+          "cookie": [],
+          "body": "{\"error\":{\"code\":\"NOT_FOUND\",\"message\":\"El recurso solicitado no existe.\"}}"
+        }
+      ]
+    },
+    {
+      "name": "5. Error de validacion",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "ApiKey {{api_key}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "demo-error-validacion",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"external_reference\":\"DEMO-INVALIDA\",\"program_name\":\"INGLES BASICO A2\",\"plan_value\":\"2500000.00\",\"term\":6}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": "{{base_url}}/api/v1/financiacion-educativa/solicitudes/"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Datos incompletos responden 400', function () { pm.response.to.have.status(400); });",
+              "pm.test('Usa VALIDATION_ERROR y fields', function () { const data = pm.response.json(); pm.expect(data.error.code).to.eql('VALIDATION_ERROR'); pm.expect(data.error.fields).to.be.an('object'); });"
+            ]
+          }
+        }
+      ],
+      "response": [
+        {
+          "name": "400 - VALIDATION_ERROR",
+          "status": "Bad Request",
+          "code": 400,
+          "header": [],
+          "cookie": [],
+          "body": "{\"error\":{\"code\":\"VALIDATION_ERROR\",\"message\":\"La solicitud contiene datos invalidos.\",\"fields\":{\"first_names\":[\"Este campo es requerido.\"],\"last_names\":[\"Este campo es requerido.\"],\"phone\":[\"Este campo es requerido.\"],\"email\":[\"Este campo es requerido.\"],\"address\":[\"Este campo es requerido.\"]}}}"
+        }
+      ]
+    },
+    {
+      "name": "6. Credencial invalida",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "ApiKey INVALID_CREDENTIAL_PLACEHOLDER",
+            "type": "text"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": "{{base_url}}/api/v1/financiacion-educativa/solicitudes/00000000-0000-4000-8000-000000000001/"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Credencial invalida responde 401', function () { pm.response.to.have.status(401); });",
+              "pm.test('Usa INVALID_CREDENTIAL', function () { pm.expect(pm.response.json().error.code).to.eql('INVALID_CREDENTIAL'); });"
+            ]
+          }
+        }
+      ],
+      "response": [
+        {
+          "name": "401 - INVALID_CREDENTIAL",
+          "status": "Unauthorized",
+          "code": 401,
+          "header": [],
+          "cookie": [],
+          "body": "{\"error\":{\"code\":\"INVALID_CREDENTIAL\",\"message\":\"La credencial institucional no es valida.\"}}"
+        }
+      ]
+    },
+    {
+      "name": "7. Conflicto de idempotencia",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "ApiKey {{api_key}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{idempotency_key}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"external_reference\": \"{{external_reference}}\",\n  \"first_names\": \"LAURA SOFIA\",\n  \"last_names\": \"MARTINEZ RUIZ\",\n  \"phone\": \"3000000000\",\n  \"email\": \"student@example.test\",\n  \"address\": \"Direccion de demostracion\",\n  \"document_type\": \"CC\",\n  \"document_number\": \"0000000001\",\n  \"birth_date\": \"2002-08-15\",\n  \"enrollment_code\": \"DEMO-MAT-001\",\n  \"academic_period\": \"2026-2\",\n  \"campus\": \"Sede demostracion\",\n  \"schedule\": \"Nocturna\",\n  \"program_name\": \"INGLES BASICO A2\",\n  \"enrollment_date\": null,\n  \"plan_value\": \"2500000.00\",\n  \"term\": 12\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": "{{base_url}}/api/v1/financiacion-educativa/solicitudes/",
+        "description": "Debe ejecutarse despues de la creacion: reutiliza la clave con un plazo distinto."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Payload distinto con la misma clave responde 409', function () { pm.response.to.have.status(409); });",
+              "pm.test('Usa IDEMPOTENCY_CONFLICT', function () { pm.expect(pm.response.json().error.code).to.eql('IDEMPOTENCY_CONFLICT'); });"
+            ]
+          }
+        }
+      ],
+      "response": [
+        {
+          "name": "409 - IDEMPOTENCY_CONFLICT",
+          "status": "Conflict",
+          "code": 409,
+          "header": [],
+          "cookie": [],
+          "body": "{\"error\":{\"code\":\"IDEMPOTENCY_CONFLICT\",\"message\":\"La clave de idempotencia ya fue usada con otros datos.\"}}"
+        },
+        {
+          "name": "409 - EXTERNAL_REFERENCE_CONFLICT",
+          "status": "Conflict",
+          "code": 409,
+          "header": [],
+          "cookie": [],
+          "body": "{\"error\":{\"code\":\"EXTERNAL_REFERENCE_CONFLICT\",\"message\":\"La referencia externa ya existe con otros datos.\"}}"
+        }
+      ]
+    }
+  ]
+}

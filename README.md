@@ -1,5 +1,28 @@
 # Aprobado
 
+## Clon educativo actual
+
+Este arbol de trabajo conserva modelos y migraciones historicas para consulta,
+pero sus entradas publicas de libranza, contractors, marketplace, pagador,
+billetera e integraciones Wompi/ZapSign estan desactivadas. La experiencia
+publica activa es Aprobado - financiacion educativa:
+
+- pagina institucional e ingreso por invitacion;
+- API institucional idempotente;
+- registro, autenticacion y terminos;
+- expediente de estudiante adulto o menor con tutor;
+- documentos y evidencia academica;
+- condiciones y proyecciones financieras educativas;
+- envio a revision manual.
+
+Pagare, firma, pagos, OCR y panel operativo integral no estan disponibles aun.
+La referencia tecnica vigente del dominio es
+`financiacion_educativa/README.md`. Para operar localmente y conectar un aliado:
+
+- `docs/interno/operaciones/REANUDAR_PROYECTO.md`;
+- `docs/api-aliados/GUIA_INTEGRACION_API.md`;
+- `docs/api-aliados/postman/aprobado-financiacion-educativa.postman_collection.json`.
+
 Fuente principal de verdad del proyecto. Este archivo describe el estado operativo actual del sistema, su estructura general y cómo trabajar sobre él sin apoyarse en documentación obsoleta.
 
 ## Qué es
