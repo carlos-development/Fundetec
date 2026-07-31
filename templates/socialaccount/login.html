@@ -1,41 +1,32 @@
 {% extends "socialaccount/base_socialaccount.html" %}
-{% load socialaccount %}
+{% load static socialaccount %}
 
 {% block content %}
-<main class="section-main">
-    <section class="hero-section-account">
-        <div class="container-account">
-            <div class="div-card-agent-account">
-                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"
-                     alt="Google" style="height: 40px; margin-bottom: 1rem;">
-                <h2 class="mb-3">Inicio de sesión con Google</h2>
-                {% if 'libranza' in request.GET.next|default:'' or 'libranza' in request.path %}
-                    <p>Debes iniciar sesión con tu cuenta de Google para acceder al formulario de crédito de Libranza</p>
-                {% else %}
-                    <p>Debes iniciar sesión con tu cuenta de Google para acceder al formulario de crédito</p>
-                {% endif %}
-
-                <form method="post" class="form-account">
-                    {% csrf_token %}
-                    <button type="submit" class="btn-account">
-                        <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"
-                             alt="Google" style="height: 20px;">
-                        <span>Continuar con Google</span>
-                    </button>
-                </form>
-            </div>
+<section class="edu-auth-main">
+    <div class="edu-auth-panel">
+        <img class="edu-auth-logo" src="{% static education_brand.logo_inverse|default:'images/logo.png' %}" alt="Aprobado">
+        <span class="edu-status-symbol"><i class="bi bi-google" aria-hidden="true"></i></span>
+        <h1>Contin&uacute;a con Google</h1>
+        <p class="edu-auth-description">Confirma el acceso con tu cuenta de Google para regresar a tu solicitud de financiaci&oacute;n educativa.</p>
+        <form method="post" class="edu-form social-login-confirm">
+            {% csrf_token %}
+            <button type="submit" class="edu-button edu-button-wide">
+                <i class="bi bi-google" aria-hidden="true"></i>
+                Continuar con Google
+            </button>
+        </form>
+        <div class="edu-auth-links">
+            <a href="/accounts/login/">Volver al acceso con correo</a>
         </div>
-    </section>
-</main>
+    </div>
+</section>
 
 <script>
-    window.addEventListener('DOMContentLoaded', function() {
-        const urlParams = new URLSearchParams(window.location.search);
-        if (urlParams.get('process') === 'login') {
-            const form = document.querySelector('.form-account');
-            if (form) {
-                form.submit();
-            }
+    window.addEventListener("DOMContentLoaded", function () {
+        const params = new URLSearchParams(window.location.search);
+        const form = document.querySelector(".social-login-confirm");
+        if (params.get("process") === "login" && form) {
+            form.submit();
         }
     });
 </script>

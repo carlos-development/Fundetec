@@ -1,51 +1,55 @@
-{% extends "base_general.html" %}
-{% load socialaccount %}
+{% extends "financiacion_educativa/_base.html" %}
+{% load static socialaccount %}
+{% get_providers as socialaccount_providers %}
 
-{% block title %}Acceso general - Aprobado{% endblock %}
+{% block title %}Contin&uacute;a tu financiaci&oacute;n | Aprobado{% endblock %}
+{% block body_class %}edu-auth-page{% endblock %}
 
 {% block content %}
-{% include "account/_auth_content_styles.html" %}
+<section class="edu-auth-main">
+    <div class="edu-auth-panel">
+        <img class="edu-auth-logo" src="{% static education_brand.logo_inverse|default:'images/logo.png' %}" alt="Aprobado">
+        <p class="edu-auth-kicker"><i class="bi bi-shield-lock" aria-hidden="true"></i> Acceso seguro</p>
+        <h1>Contin&uacute;a tu financiaci&oacute;n</h1>
+        <p class="edu-auth-description">Ingresa con tu cuenta. Las solicitudes educativas nuevas comienzan desde una invitaci&oacute;n enviada a tu correo.</p>
 
-<main class="section-main">
-  <section class="hero-section-account">
-    <div class="container-account">
-      <div class="div-card-agent-account is-status-card">
-        <div class="mb-3">
-          <span class="badge rounded-pill border">Acceso general</span>
-        </div>
-        <h1>Accede a tu cuenta</h1>
-        <p class="auth-desc">Usa este acceso solo cuando vengas de un flujo interno de autenticacion. Para clientes, entra desde Libranza, Emprendimiento, Marketplace o Inversionista.</p>
-
-        <form method="post">
-          {% csrf_token %}
-          {% if form.non_field_errors %}
-          <div class="alert alert-danger py-2">{{ form.non_field_errors }}</div>
-          {% endif %}
-          <div class="auth-field">
-            <label class="form-label" for="{{ form.login.id_for_label }}">Correo</label>
-            {{ form.login }}
-          </div>
-          <div class="auth-field">
-            <label class="form-label" for="{{ form.password.id_for_label }}">Contrasena</label>
-            {{ form.password }}
-          </div>
-          {% if redirect_field_value %}
-          <input type="hidden" name="{{ redirect_field_name }}" value="{{ redirect_field_value }}">
-          {% endif %}
-          <div class="forgot-row">
-            <a href="/accounts/password/reset/">Recuperar acceso</a>
-          </div>
-          <button type="submit" class="btn-account">Continuar con correo</button>
+        <form class="edu-form" method="post" novalidate>
+            {% csrf_token %}
+            {% if form.non_field_errors %}
+                <div class="edu-error-summary" role="alert">{{ form.non_field_errors }}</div>
+            {% endif %}
+            <div class="edu-field">
+                <label for="{{ form.login.id_for_label }}">Correo electr&oacute;nico</label>
+                {{ form.login }}
+                {{ form.login.errors }}
+            </div>
+            <div class="edu-field">
+                <label for="{{ form.password.id_for_label }}">Contrase&ntilde;a</label>
+                {{ form.password }}
+                {{ form.password.errors }}
+            </div>
+            {% if redirect_field_value %}
+                <input type="hidden" name="{{ redirect_field_name }}" value="{{ redirect_field_value }}">
+            {% endif %}
+            <div class="edu-auth-links">
+                <span></span>
+                <a href="/accounts/password/reset/">Recuperar contrase&ntilde;a</a>
+            </div>
+            <button type="submit" class="edu-button edu-button-wide">Acceder a mi solicitud</button>
         </form>
 
-        <div class="auth-divider">o continua con</div>
-        <a href="{% provider_login_url 'google' %}" class="btn-social-account">Continuar con Google</a>
+        {% for provider in socialaccount_providers %}
+            {% if provider.id == "google" %}
+                <div class="edu-auth-divider">o contin&uacute;a con</div>
+                <a href="{% provider_login_url provider.id %}" class="edu-button-secondary edu-button-wide">
+                    <i class="bi bi-google" aria-hidden="true"></i> Continuar con Google
+                </a>
+            {% endif %}
+        {% endfor %}
 
-        <div class="auth-footer-links is-centered">
-          <a href="{% url 'home' %}">&larr; Volver al inicio</a>
+        <div class="edu-auth-links">
+            <a href="{% url 'home' %}">Volver al inicio</a>
         </div>
-      </div>
     </div>
-  </section>
-</main>
+</section>
 {% endblock %}

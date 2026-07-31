@@ -1,19 +1,17 @@
-from django.shortcuts import redirect
+from django.http import JsonResponse
+from django.shortcuts import render
+from django.views.decorators.http import require_safe
+
+
+@require_safe
+def health_check_view(request):
+    response = JsonResponse({'status': 'ok'})
+    response['Cache-Control'] = 'no-store'
+    return response
 
 
 def portal_entrypoint_view(request):
-    """
-    Enruta la raiz segun el host:
-    - market.aprobado.com.co      -> marketplace general
-    - emprender.aprobado.com.co   -> emprendimiento
-    - aprobado.com.co / www       -> libranza
-    """
-    host = request.get_host().split(':')[0].lower()
-
-    if host.startswith('market.'):
-        return redirect('marketplace:home')
-
-    if host.startswith('emprender.'):
-        return redirect('emprendimiento:landing')
-
-    return redirect('libranza:landing')
+    return render(
+        request,
+        'financiacion_educativa/institucional.html',
+    )

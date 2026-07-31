@@ -287,3 +287,9 @@ class ProductAccessProfileAdmin(admin.ModelAdmin):
     list_filter = ('flow',)
     search_fields = ('usuario__username', 'usuario__email')
     readonly_fields = ('locked_at', 'updated_at')
+
+
+from aprobado_web.historical_admin import restrict_registered_app_admin
+
+
+restrict_registered_app_admin('usuarios')

@@ -921,3 +921,9 @@ class ZapSignWebhookLogAdmin(admin.ModelAdmin):
         return False
 
 
+from aprobado_web.historical_admin import restrict_registered_app_admin
+
+
+restrict_registered_app_admin('gestion_creditos')
+
+

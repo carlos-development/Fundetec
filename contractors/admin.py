@@ -415,3 +415,9 @@ class InformacionLaboralSolicitudContratistaAdmin(AdminContratistasBase):
             'fields': ('created_at', 'updated_at'),
         }),
     )
+
+
+from aprobado_web.historical_admin import restrict_registered_app_admin
+
+
+restrict_registered_app_admin('contractors')

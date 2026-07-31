@@ -5,22 +5,12 @@ from django.contrib import admin
 from django.urls import include, path
 from django.views.generic import TemplateView
 
-from gestion_creditos import views as gestion_views
-from gestion_creditos.services.pagare_url import descargar_pagare_publico
-from usuarios import views as usuarios_views
-
 
 common_urlpatterns = [
     # Admin Django
     path("admin/", admin.site.urls),
 
-    # Webhooks/APIs publicas
-    path("webhook/wompi/events/", gestion_views.wompi_webhook_view, name="wompi_webhook"),
-    path("api/webhooks/zapsign/", gestion_views.zapsign_webhook_view, name="zapsign_webhook"),
-    path("api/pagares/download/<str:token>/", descargar_pagare_publico, name="descargar_pagare_publico"),
-
-    # Autenticacion
-    path("auth/login/", usuarios_views.login_dispatch_view, name="login_dispatch"),
+    # Autenticacion provisional; no forma parte del flujo educativo.
     path("accounts/", include("allauth.urls")),
 
     # Legales

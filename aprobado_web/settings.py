@@ -1,9 +1,11 @@
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import importlib.util
 import os
 import socket
 import sys
 from urllib.parse import urlparse
+
+from django.core.exceptions import ImproperlyConfigured
 
 try:
     import dj_database_url
@@ -15,8 +17,13 @@ try:
 except ModuleNotFoundError:
     load_dotenv = None
 
-# Cargar variables de entorno desde .env
-if load_dotenv is not None:
+# Cargar variables de entorno desde .env solo cuando se habilite expresamente.
+# En servicios administrados se recomienda inyectar el entorno desde systemd.
+if (
+    load_dotenv is not None
+    and os.environ.get('DJANGO_LOAD_DOTENV', 'true').strip().lower()
+    in ('1', 'true', 'yes', 'on', 'si', 'sí')
+):
     load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -26,11 +33,26 @@ SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 # Seguridad y Debug
 # ========================
 
-SECRET_KEY = os.environ.get('SECRET_KEY', 'dev-secret-key')  # clave de respaldo para local
-
-# Si existe la variable RENDER, asumimos que estamos en producción
 DEBUG = os.environ.get('DEBUG', 'True').lower() == 'true'
 RUNNING_TESTS = 'test' in sys.argv
+DEPLOYMENT_ENVIRONMENT = os.environ.get(
+    'DEPLOYMENT_ENVIRONMENT',
+    'local',
+).strip().lower()
+if DEPLOYMENT_ENVIRONMENT not in {'local', 'staging', 'production'}:
+    raise ImproperlyConfigured(
+        'DEPLOYMENT_ENVIRONMENT debe ser local, staging o production.'
+    )
+
+_external_secret_key = os.environ.get('SECRET_KEY', '').strip()
+if not DEBUG and (
+    len(_external_secret_key) < 32
+    or _external_secret_key in {'dev-secret-key', 'changeme', 'replace-me'}
+):
+    raise ImproperlyConfigured(
+        'SECRET_KEY debe definirse externamente con al menos 32 caracteres.'
+    )
+SECRET_KEY = _external_secret_key or 'dev-secret-key'
 
 
 def _module_available(module_name):
@@ -54,6 +76,11 @@ def env_bool(name, default=False):
 def _split_env_list(name, default=''):
     value = os.environ.get(name, default)
     return [item.strip() for item in value.split(',') if item.strip()]
+
+
+def _require_nonempty_setting(name, value):
+    if not str(value or '').strip():
+        raise ImproperlyConfigured(f'{name} es obligatorio en este entorno.')
 
 
 def _is_local_redis_url(redis_url):
@@ -81,6 +108,15 @@ PRIMARY_DOMAIN_HOST = os.environ.get('PRIMARY_DOMAIN_HOST', 'aprobado.com.co')
 EMPRENDER_SUBDOMAIN_HOST = os.environ.get('EMPRENDER_SUBDOMAIN_HOST', 'emprender.aprobado.com.co')
 MARKET_SUBDOMAIN_HOST = os.environ.get('MARKET_SUBDOMAIN_HOST', 'market.aprobado.com.co')
 CONTRACTORS_PORTAL_HOST = os.environ.get('CONTRACTORS_PORTAL_HOST', f'contratistas.{PRIMARY_DOMAIN_HOST}')
+LEGACY_DISABLED_HOSTS = (
+    EMPRENDER_SUBDOMAIN_HOST,
+    MARKET_SUBDOMAIN_HOST,
+    CONTRACTORS_PORTAL_HOST,
+    f'contratistas.{PRIMARY_DOMAIN_HOST}',
+    'emprender.aprobado.com.co',
+    'market.aprobado.com.co',
+    'contratistas.aprobado.com.co',
+)
 
 # ========================
 # Marca blanca
@@ -96,6 +132,16 @@ BRAND_LOGO = os.environ.get('BRAND_LOGO', 'images/fundetec-logo.png')
 BRAND_LOGO_DARK = os.environ.get('BRAND_LOGO_DARK', BRAND_LOGO)
 BRAND_FAVICON = os.environ.get('BRAND_FAVICON', BRAND_LOGO)
 BRAND_PUBLIC_BASE_URL = os.environ.get('BRAND_PUBLIC_BASE_URL', f'https://{PRIMARY_DOMAIN_HOST}')
+
+# Identidad propia del producto educativo. No hereda la marca blanca historica.
+EDUCATION_BRAND_NAME = 'Aprobado'
+EDUCATION_BRAND_LOGO = 'images/logo-dark.png'
+EDUCATION_BRAND_LOGO_INVERSE = 'images/logo.png'
+EDUCATION_BRAND_FAVICON = 'images/favicon.png'
+EDUCATION_EMAIL_LOGO_URL = os.environ.get(
+    'EDUCATION_EMAIL_LOGO_URL',
+    'https://aprobado.com.co/static/images/logo-dark.png',
+).strip()
 
 CONTACT_EMAIL = os.environ.get(
     'CONTACT_EMAIL',
@@ -152,7 +198,36 @@ FINANCIACION_EDUCATIVA_INVITATION_RECOVERY_STALE_SECONDS = int(
 )
 FINANCIACION_EDUCATIVA_INVITATION_RECIPIENT_HMAC_KEY = os.environ.get(
     'FINANCIACION_EDUCATIVA_INVITATION_RECIPIENT_HMAC_KEY',
-    SECRET_KEY,
+    SECRET_KEY if DEBUG else '',
+)
+FINANCIACION_EDUCATIVA_MOBILE_CAPTURE_TTL_MINUTES = int(
+    os.environ.get('FINANCIACION_EDUCATIVA_MOBILE_CAPTURE_TTL_MINUTES', '30')
+)
+FINANCIACION_EDUCATIVA_MOBILE_CAPTURE_COOLDOWN_SECONDS = int(
+    os.environ.get(
+        'FINANCIACION_EDUCATIVA_MOBILE_CAPTURE_COOLDOWN_SECONDS',
+        '120',
+    )
+)
+FINANCIACION_EDUCATIVA_MOBILE_CAPTURE_REISSUE_LIMIT = int(
+    os.environ.get('FINANCIACION_EDUCATIVA_MOBILE_CAPTURE_REISSUE_LIMIT', '5')
+)
+FINANCIACION_EDUCATIVA_MOBILE_CAPTURE_REISSUE_WINDOW_HOURS = int(
+    os.environ.get(
+        'FINANCIACION_EDUCATIVA_MOBILE_CAPTURE_REISSUE_WINDOW_HOURS',
+        '1',
+    )
+)
+FINANCIACION_EDUCATIVA_MOBILE_CAPTURE_TOKEN_HMAC_KEY = os.environ.get(
+    'FINANCIACION_EDUCATIVA_MOBILE_CAPTURE_TOKEN_HMAC_KEY',
+    SECRET_KEY if DEBUG else '',
+)
+FINANCIACION_EDUCATIVA_MOBILE_CAPTURE_DELIVERY_BACKEND = os.environ.get(
+    'FINANCIACION_EDUCATIVA_MOBILE_CAPTURE_DELIVERY_BACKEND',
+    (
+        'financiacion_educativa.services.captura_movil.'
+        'DjangoEmailMobileCaptureDeliveryBackend'
+    ),
 )
 FINANCIACION_EDUCATIVA_MAYORIA_EDAD = int(
     os.environ.get('FINANCIACION_EDUCATIVA_MAYORIA_EDAD', '18')
@@ -198,7 +273,7 @@ ZAPSIGN_SEND_COPY_EMAILS = env_bool('ZAPSIGN_SEND_COPY_EMAILS', False)
 
 ALLOWED_HOSTS = _split_env_list(
     'ALLOWED_HOSTS',
-    (
+    '' if not DEBUG else (
         f'{PRIMARY_DOMAIN_HOST},'
         f'www.{PRIMARY_DOMAIN_HOST},'
         f'.{PRIMARY_DOMAIN_HOST},'
@@ -210,15 +285,29 @@ ALLOWED_HOSTS = _split_env_list(
     )
 )
 
-CSRF_TRUSTED_ORIGINS = _split_env_list(
-    'CSRF_TRUSTED_ORIGINS',
-    (
-        'https://aprobado.com.co,'
-        'https://www.aprobado.com.co,'
-        'https://emprender.aprobado.com.co,'
-        'https://market.aprobado.com.co'
+CSRF_TRUSTED_ORIGINS = _split_env_list('CSRF_TRUSTED_ORIGINS')
+
+if not DEBUG:
+    if not ALLOWED_HOSTS:
+        raise ImproperlyConfigured(
+            'ALLOWED_HOSTS debe definirse explicitamente cuando DEBUG=False.'
+        )
+    if not CSRF_TRUSTED_ORIGINS:
+        raise ImproperlyConfigured(
+            'CSRF_TRUSTED_ORIGINS debe definirse cuando DEBUG=False.'
+        )
+    if any(not origin.startswith('https://') for origin in CSRF_TRUSTED_ORIGINS):
+        raise ImproperlyConfigured(
+            'CSRF_TRUSTED_ORIGINS solo puede contener origenes HTTPS fuera de desarrollo.'
+        )
+    _require_nonempty_setting(
+        'FINANCIACION_EDUCATIVA_INVITATION_RECIPIENT_HMAC_KEY',
+        FINANCIACION_EDUCATIVA_INVITATION_RECIPIENT_HMAC_KEY,
     )
-)
+    _require_nonempty_setting(
+        'FINANCIACION_EDUCATIVA_MOBILE_CAPTURE_TOKEN_HMAC_KEY',
+        FINANCIACION_EDUCATIVA_MOBILE_CAPTURE_TOKEN_HMAC_KEY,
+    )
 
 USE_X_FORWARDED_HOST = True
 
@@ -229,13 +318,15 @@ CONTRACTORS_DATACREDITO_ENABLED = os.environ.get('CONTRACTORS_DATACREDITO_ENABLE
 CONTRACTORS_DATACREDITO_PROVIDER = os.environ.get('CONTRACTORS_DATACREDITO_PROVIDER', 'mock')
 CONTRACTORS_DATACREDITO_TIMEOUT_SECONDS = int(os.environ.get('CONTRACTORS_DATACREDITO_TIMEOUT_SECONDS', '10'))
 CONTRACTORS_DATACREDITO_MOCK_SCENARIO = os.environ.get('CONTRACTORS_DATACREDITO_MOCK_SCENARIO', 'bueno')
-MANUAL_PAYMENT_AUTH_KEY = os.environ.get('MANUAL_PAYMENT_AUTH_KEY', 'clave-secreta-para-desarrollo')
+MANUAL_PAYMENT_AUTH_KEY = os.environ.get('MANUAL_PAYMENT_AUTH_KEY', '')
 WHATSAPP_INTERNAL_API_KEY = os.environ.get('WHATSAPP_INTERNAL_API_KEY', '')
 WHATSAPP_INTERNAL_API_RATE_LIMIT = int(os.environ.get('WHATSAPP_INTERNAL_API_RATE_LIMIT', '120'))
 WHATSAPP_CREDIT_TASA_MENSUAL = os.environ.get('WHATSAPP_CREDIT_TASA_MENSUAL', '3.5')
 WHATSAPP_CREDIT_ORIGINATION_RATE = os.environ.get('WHATSAPP_CREDIT_ORIGINATION_RATE', '10')
 WHATSAPP_CREDIT_VAT_RATE = os.environ.get('WHATSAPP_CREDIT_VAT_RATE', '19')
 WHATSAPP_SIMULATION_VALID_DAYS = int(os.environ.get('WHATSAPP_SIMULATION_VALID_DAYS', '7'))
+
+
 
 # ========================
 # Aplicaciones
@@ -300,7 +391,7 @@ SITE_ID = 1
 # ========================================
 # Django Allauth - Autenticación
 # ========================================
-LOGIN_URL = '/auth/login/'
+LOGIN_URL = '/accounts/login/'
 LOGIN_REDIRECT_URL = '/'
 ACCOUNT_LOGOUT_REDIRECT_URL = '/'
 SOCIALACCOUNT_AUTO_SIGNUP = True
@@ -324,14 +415,12 @@ if DEBUG:
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'aprobado_web.middleware.RetiredLegacySurfaceMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
-    'aprobado_web.middleware.SubdomainRoutingMiddleware',
-    'contractors.middleware.ContractorTenantMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
-    'usuarios.middleware.ProductoContextMiddleware',  # Detecta producto con auth/messages ya disponibles
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
@@ -353,11 +442,8 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
-                'usuarios.context_processors.user_groups_processor',
-                'usuarios.context_processors.notificaciones_processor',
-                'usuarios.context_processors.producto_context_processor',
-                'usuarios.context_processors.public_whatsapp_processor',
-                'usuarios.context_processors.brand_processor',
+                'aprobado_web.context_processors.public_whatsapp_processor',
+                'aprobado_web.context_processors.brand_processor',
             ],
         },
     },
@@ -372,7 +458,18 @@ WSGI_APPLICATION = 'aprobado_web.wsgi.application'
 USE_SQLITE = os.environ.get('USE_SQLITE', '').lower() == 'true'
 DATABASE_URL = os.environ.get('DATABASE_URL', '').strip()
 
-if USE_SQLITE or not DATABASE_URL or dj_database_url is None:
+if not DEBUG:
+    if USE_SQLITE:
+        raise ImproperlyConfigured(
+            'SQLite no esta permitido cuando DEBUG=False.'
+        )
+    _require_nonempty_setting('DATABASE_URL', DATABASE_URL)
+    if dj_database_url is None:
+        raise ImproperlyConfigured(
+            'dj-database-url es obligatorio para configurar PostgreSQL.'
+        )
+
+if USE_SQLITE or not DATABASE_URL:
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.sqlite3',
@@ -380,9 +477,25 @@ if USE_SQLITE or not DATABASE_URL or dj_database_url is None:
         }
     }
 else:
+    if dj_database_url is None:
+        raise ImproperlyConfigured(
+            'DATABASE_URL esta definida, pero dj-database-url no esta instalado.'
+        )
     DATABASES = {
-        'default': dj_database_url.config(default=DATABASE_URL)
+        'default': dj_database_url.config(
+            default=DATABASE_URL,
+            conn_max_age=60,
+            conn_health_checks=True,
+        )
     }
+
+if not DEBUG and DATABASES['default']['ENGINE'] not in {
+    'django.db.backends.postgresql',
+    'django.db.backends.postgresql_psycopg2',
+}:
+    raise ImproperlyConfigured(
+        'DATABASE_URL debe apuntar a PostgreSQL cuando DEBUG=False.'
+    )
 
 # ========================
 # Validación de contraseñas
@@ -411,12 +524,67 @@ USE_THOUSAND_SEPARATOR = True
 
 STATIC_URL = 'static/'
 STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')]
-STATIC_ROOT = '/var/www/aprobado/staticfiles'
+_static_root_value = os.environ.get(
+    'STATIC_ROOT',
+    str(BASE_DIR / 'staticfiles'),
+)
+STATIC_ROOT = Path(_static_root_value).expanduser()
 if WHITENOISE_AVAILABLE:
     STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 MEDIA_URL = '/media/'
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+_media_root_value = os.environ.get('MEDIA_ROOT', str(BASE_DIR / 'media'))
+MEDIA_ROOT = Path(_media_root_value).expanduser()
+
+_private_root_value = str(FINANCIACION_EDUCATIVA_PRIVATE_ROOT)
+FINANCIACION_EDUCATIVA_PRIVATE_ROOT = Path(
+    FINANCIACION_EDUCATIVA_PRIVATE_ROOT
+).expanduser()
+
+if not DEBUG:
+    for _path_setting_name in (
+        'STATIC_ROOT',
+        'MEDIA_ROOT',
+        'FINANCIACION_EDUCATIVA_PRIVATE_ROOT',
+    ):
+        _require_nonempty_setting(
+            _path_setting_name,
+            os.environ.get(_path_setting_name, ''),
+        )
+    _storage_roots = {
+        'STATIC_ROOT': STATIC_ROOT,
+        'MEDIA_ROOT': MEDIA_ROOT,
+        'FINANCIACION_EDUCATIVA_PRIVATE_ROOT': (
+            FINANCIACION_EDUCATIVA_PRIVATE_ROOT
+        ),
+    }
+    _raw_storage_roots = {
+        'STATIC_ROOT': _static_root_value,
+        'MEDIA_ROOT': _media_root_value,
+        'FINANCIACION_EDUCATIVA_PRIVATE_ROOT': _private_root_value,
+    }
+    for _root_name, _root_path in _storage_roots.items():
+        _raw_root = _raw_storage_roots[_root_name].replace('\\', '/')
+        if not (
+            _root_path.is_absolute()
+            or PurePosixPath(_raw_root).is_absolute()
+        ):
+            raise ImproperlyConfigured(
+                f'{_root_name} debe ser una ruta absoluta fuera de desarrollo.'
+            )
+    if len({str(path.resolve()) for path in _storage_roots.values()}) != 3:
+        raise ImproperlyConfigured(
+            'STATIC_ROOT, MEDIA_ROOT y el almacenamiento privado deben ser distintos.'
+        )
+    if DEPLOYMENT_ENVIRONMENT == 'staging':
+        _protected_root = Path('/var/www/aprobado')
+        if any(
+            path.resolve().is_relative_to(_protected_root)
+            for path in _storage_roots.values()
+        ):
+            raise ImproperlyConfigured(
+                'Staging no puede reutilizar rutas del proyecto Aprobado existente.'
+            )
 
 # ========================
 # Seguridad
@@ -425,6 +593,12 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 SECURE_SSL_REDIRECT = not DEBUG and not RUNNING_TESTS
 SESSION_COOKIE_SECURE = not DEBUG and not RUNNING_TESTS
 CSRF_COOKIE_SECURE = not DEBUG and not RUNNING_TESTS
+SECURE_HSTS_SECONDS = int(os.environ.get('SECURE_HSTS_SECONDS', '0'))
+SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool(
+    'SECURE_HSTS_INCLUDE_SUBDOMAINS',
+    False,
+)
+SECURE_HSTS_PRELOAD = env_bool('SECURE_HSTS_PRELOAD', False)
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
@@ -433,22 +607,55 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # ========================
 
 # Backend de email - usando SMTP de Gmail
-EMAIL_BACKEND = os.environ.get('EMAIL_BACKEND', 'aprobado_web.email_backends.SafeRoutingEmailBackend')
-EMAIL_HOST = 'smtp.gmail.com'
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
-EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', 'noreply@aprobado.com.co')
-EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')  # Contraseña de aplicación de Gmail
-DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', f'{BRAND_NAME} <noreply@aprobado.com.co>')
+EMAIL_BACKEND = os.environ.get(
+    'EMAIL_BACKEND',
+    'django.core.mail.backends.smtp.EmailBackend',
+)
+EMAIL_HOST = os.environ.get('EMAIL_HOST', 'smtp.gmail.com').strip()
+EMAIL_PORT = int(os.environ.get('EMAIL_PORT', '587'))
+EMAIL_USE_TLS = env_bool('EMAIL_USE_TLS', True)
+EMAIL_USE_SSL = env_bool('EMAIL_USE_SSL', False)
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '').strip()
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
+EMAIL_TIMEOUT = int(os.environ.get('EMAIL_TIMEOUT', '10'))
+DEFAULT_FROM_EMAIL = os.environ.get(
+    'DEFAULT_FROM_EMAIL',
+    'Aprobado <noreply@aprobado.com.co>',
+).strip()
 SERVER_EMAIL = os.environ.get('SERVER_EMAIL', EMAIL_HOST_USER)
+
+SAFE_ROUTING_EMAIL_BACKEND = (
+    'aprobado_web.email_backends.SafeRoutingEmailBackend'
+)
+if EMAIL_QA_MODE and not EMAIL_QA_REDIRECT_TO:
+    raise ImproperlyConfigured(
+        'EMAIL_QA_REDIRECT_TO es obligatorio cuando EMAIL_QA_MODE=True.'
+    )
+if DEPLOYMENT_ENVIRONMENT == 'staging':
+    if DEBUG:
+        raise ImproperlyConfigured('Staging requiere DEBUG=False.')
+    if EMAIL_BACKEND != SAFE_ROUTING_EMAIL_BACKEND:
+        raise ImproperlyConfigured(
+            'Staging requiere SafeRoutingEmailBackend.'
+        )
+    if not EMAIL_QA_MODE:
+        raise ImproperlyConfigured('Staging requiere EMAIL_QA_MODE=True.')
+    for _email_setting_name, _email_setting_value in {
+        'EMAIL_QA_REDIRECT_TO': EMAIL_QA_REDIRECT_TO,
+        'EMAIL_HOST': EMAIL_HOST,
+        'EMAIL_HOST_USER': EMAIL_HOST_USER,
+        'EMAIL_HOST_PASSWORD': EMAIL_HOST_PASSWORD,
+        'DEFAULT_FROM_EMAIL': DEFAULT_FROM_EMAIL,
+    }.items():
+        _require_nonempty_setting(_email_setting_name, _email_setting_value)
 
 # ========================
 # Configuración de WOMPI (Pasarela de Pagos)
 # ========================
-WOMPI_PUBLIC_KEY = os.environ.get('WOMPI_PUBLIC_KEY', 'pub_test_xxxxx')
-WOMPI_PRIVATE_KEY = os.environ.get('WOMPI_PRIVATE_KEY', 'priv_test_xxxxx')
-WOMPI_INTEGRITY_KEY = os.environ.get('WOMPI_INTEGRITY_KEY', 'int_test_xxxxx')
-WOMPI_EVENTS_SECRET = os.environ.get('WOMPI_EVENTS_SECRET', 'evt_test_xxxxx')
+WOMPI_PUBLIC_KEY = os.environ.get('WOMPI_PUBLIC_KEY', '')
+WOMPI_PRIVATE_KEY = os.environ.get('WOMPI_PRIVATE_KEY', '')
+WOMPI_INTEGRITY_KEY = os.environ.get('WOMPI_INTEGRITY_KEY', '')
+WOMPI_EVENTS_SECRET = os.environ.get('WOMPI_EVENTS_SECRET', '')
 WOMPI_ENVIRONMENT = os.environ.get('WOMPI_ENVIRONMENT', 'sandbox')  # 'sandbox' o 'production'
 
 # URL base se calcula automáticamente según el ambiente
@@ -537,6 +744,6 @@ CELERY_TIMEZONE = 'America/Bogota'
 CELERY_ENABLE_UTC = False
 
 # Configuración de Celery Beat (tareas programadas)
-if DJANGO_CELERY_BEAT_AVAILABLE:
-    CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
+CELERY_BEAT_SCHEDULE = {}
 
+APROBADO_INSTITUTION_API_KEY = os.environ.get('APROBADO_INSTITUTION_API_KEY', '')

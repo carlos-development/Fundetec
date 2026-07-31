@@ -59,11 +59,26 @@ coverage.xml
 local_settings.py
 db.sqlite3
 db.sqlite3-journal
+db.sqlite3.backup-*
 media/
 private_uploads/
 staticfiles/
 .env
-.env.example
+.env.*
+!.env.example
+*.sqlite3
+*.sqlite3-*
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+
+# Local audit and manual-validation artifacts
+.tmp_visual_shots/
+.tmp_phase65_emails/
+.tmp_manual_fase65.sqlite3
+docs/~$*
 
 # Flask stuff:
 instance/

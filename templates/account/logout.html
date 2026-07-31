@@ -1,32 +1,23 @@
-{% extends "base_general.html" %}
+{% extends "financiacion_educativa/_base.html" %}
+{% load static %}
 
-{% block title %}Cerrar sesion{% endblock %}
+{% block title %}Cerrar sesi&oacute;n | Aprobado{% endblock %}
+{% block body_class %}edu-auth-page{% endblock %}
 
 {% block content %}
-{% include "account/_auth_content_styles.html" %}
-
-<main class="section-main">
-  <section class="hero-section-account">
-    <div class="container-account">
-      <div class="div-card-agent-account is-status-card">
-        <div class="auth-status-icon">&#21A9;</div>
-        <div class="mb-3">
-          <span class="badge rounded-pill border">Cerrar sesion</span>
-        </div>
-
-        <h1>Quieres salir de tu cuenta?</h1>
-        <p class="auth-desc">Cierra la sesion actual para proteger tu acceso en este dispositivo.</p>
-
+<section class="edu-auth-main">
+    <div class="edu-auth-panel">
+        <img class="edu-auth-logo" src="{% static education_brand.logo_inverse|default:'images/logo.png' %}" alt="Aprobado">
+        <span class="edu-status-symbol"><i class="bi bi-box-arrow-right" aria-hidden="true"></i></span>
+        <h1>&iquest;Quieres cerrar sesi&oacute;n?</h1>
+        <p class="edu-auth-description">Cierra tu sesi&oacute;n para proteger el acceso desde este dispositivo.</p>
         <form method="post">
-          {% csrf_token %}
-          <button type="submit" class="btn-account">Si, cerrar sesion</button>
+            {% csrf_token %}
+            <button type="submit" class="edu-button edu-button-wide">S&iacute;, cerrar sesi&oacute;n</button>
         </form>
-
-        <div class="auth-footer-links is-centered">
-          <a href="{% url 'home' %}">Cancelar</a>
+        <div class="edu-auth-links">
+            <a href="{% url 'home' %}">Cancelar y volver al inicio</a>
         </div>
-      </div>
     </div>
-  </section>
-</main>
+</section>
 {% endblock %}

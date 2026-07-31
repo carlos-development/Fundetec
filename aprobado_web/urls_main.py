@@ -1,18 +1,17 @@
-"""
-URLConf del dominio principal (aprobado.com.co).
-Scope principal: Libranza + paneles internos.
-"""
+"""URLConf publico de financiacion educativa."""
 from django.conf import settings
 from django.conf.urls.static import static
 from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView
 
 from .urls_common import common_urlpatterns
-from .views import portal_entrypoint_view
+from .views import health_check_view, portal_entrypoint_view
 
 
 urlpatterns = [
     *common_urlpatterns,
+
+    path("health/", health_check_view, name="health"),
 
     # Continuacion del flujo educativo para usuarios
     path(
@@ -27,20 +26,7 @@ urlpatterns = [
     ),
     path("api/v1/schema/", SpectacularAPIView.as_view(), name="api-schema"),
 
-    # Producto principal
-    path("libranza/", include("usuarios.urls_libranza")),
-
-    # Roles administrativos internos
-    path("gestion/", include("gestion_creditos.urls_gestion")),
-    path("pagador/", include("gestion_creditos.urls_pagador")),
-    path("ejecutivos/", include("gestion_creditos.urls_ejecutivos")),
-    path("asesores/", include("gestion_creditos.urls_asesores")),
-
-    # Billetera
-    path("billetera/", include("gestion_creditos.urls_billetera")),
-    path("inversionista/", include("gestion_creditos.urls_inversionista")),
-
-    # Inicio segun host
+    # Entrada institucional; las solicitudes continuan desde una invitacion.
     path("", portal_entrypoint_view, name="home"),
 ]
 
