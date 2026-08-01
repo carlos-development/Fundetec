@@ -3,6 +3,30 @@
 Dominio aislado para solicitudes educativas originadas por instituciones. No
 depende de servicios de `gestion_creditos`.
 
+## Credenciales de la API institucional
+
+La API autentica `Authorization: ApiKey <prefijo>.<secreto>` mediante
+`InstitutionApiKeyAuthentication`. El modelo persiste el prefijo y un hash de
+Django, nunca el secreto recuperable. Emision, listado, rotacion y revocacion
+se operan exclusivamente con estos comandos:
+
+```text
+listar_instituciones_api
+emitir_credencial_institucional
+listar_credenciales_institucionales
+rotar_credencial_institucional
+revocar_credencial_institucional
+```
+
+Emision y rotacion exigen escoger entre `--mostrar-token` y
+`--archivo-token`. La segunda opcion crea un archivo nuevo `0600`, no lo
+sobrepone y no imprime el token. La guia completa para staging esta en
+`docs/interno/operaciones/MANTENIMIENTO_STAGING.md`.
+
+`APROBADO_INSTITUTION_API_KEY` es una variable heredada y no emite ni
+autentica estas credenciales. Los `alcances` almacenados son metadatos: los
+permisos actuales aun no implementan autorizacion por alcance.
+
 ## Orquestacion de solicitud e invitacion
 
 La creacion institucional entra por

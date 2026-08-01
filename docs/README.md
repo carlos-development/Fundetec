@@ -14,6 +14,8 @@ material heredado sin presentarlo como parte del producto educativo actual.
 
 - `interno/arquitectura/`: fuente HTML y documento tecnico derivado.
 - `interno/operaciones/`: procedimientos para reanudar y validar el proyecto.
+- `interno/operaciones/MANTENIMIENTO_STAGING.md`: configuracion, correo y
+  credenciales institucionales del staging desplegado.
 - `interno/fases/`: auditorias y disenos de fases pendientes.
 - `interno/integraciones/`: disenos no habilitados de integraciones futuras.
 

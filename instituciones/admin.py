@@ -34,9 +34,15 @@ class CredencialAPIInstitucionAdmin(admin.ModelAdmin):
     )
     list_filter = ('activa', 'institucion', 'creada_en')
     search_fields = ('nombre', 'prefijo_clave', 'institucion__nombre_comercial')
+    exclude = ('secreto_hash',)
     readonly_fields = (
         'id',
-        'secreto_hash',
+        'institucion',
+        'nombre',
+        'prefijo_clave',
+        'alcances',
+        'activa',
+        'expira_en',
         'ultimo_uso_en',
         'creada_en',
         'actualizada_en',
@@ -46,4 +52,7 @@ class CredencialAPIInstitucionAdmin(admin.ModelAdmin):
         return False
 
     def has_delete_permission(self, request, obj=None):
+        return False
+
+    def has_change_permission(self, request, obj=None):
         return False

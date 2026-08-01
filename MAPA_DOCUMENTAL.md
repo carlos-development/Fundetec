@@ -8,6 +8,8 @@
 - `docs/api-aliados/GUIA_INTEGRACION_API.md`: guia para instituciones.
 - `docs/api-aliados/openapi.yaml`: contrato mecanico de la API.
 - `docs/interno/operaciones/REANUDAR_PROYECTO.md`: reanudacion local segura.
+- `docs/interno/operaciones/MANTENIMIENTO_STAGING.md`: operacion segura de
+  staging, correo y credenciales institucionales.
 
 ## Estado y trazabilidad
 

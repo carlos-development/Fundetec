@@ -48,10 +48,22 @@ venv\Scripts\python.exe manage.py runserver 127.0.0.1:8001
 Abrir `http://127.0.0.1:8001/admin/` y crear:
 
 1. Una institucion activa con NIT ficticio.
-2. Una credencial API activa para esa institucion. Guardar el token completo
-   mostrado una sola vez.
-3. Al menos una version obligatoria de terminos, publicarla mediante la accion
+2. Al menos una version obligatoria de terminos, publicarla mediante la accion
    administrativa y comprobar que quede vigente.
+
+El admin no emite secretos de credenciales. Consultar el UUID de la institucion
+y emitir una credencial mediante el servicio probado del dominio:
+
+```powershell
+venv\Scripts\python.exe manage.py listar_instituciones_api --solo-activas
+venv\Scripts\python.exe manage.py emitir_credencial_institucional `
+  --institucion-id '<UUID_INSTITUCION>' `
+  --nombre 'Prueba manual local' `
+  --mostrar-token
+```
+
+Guardar el token completo mostrado una sola vez solo durante esta validacion
+local temporal.
 
 No usar correos, identificaciones ni archivos reales.
 
