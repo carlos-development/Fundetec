@@ -26,7 +26,6 @@ from financiacion_educativa.models import (
 )
 from financiacion_educativa.services.documentos import (
     registrar_documento,
-    registrar_resultado_escaneo,
     revisar_documento,
 )
 from financiacion_educativa.services.matricula import (
@@ -43,6 +42,10 @@ from financiacion_educativa.services.requisitos_documentales import (
     fase_documental_completa,
 )
 from financiacion_educativa.tests.factories import crear_solicitud
+from financiacion_educativa.tests.scan_helpers import (
+    conceder_permisos_documentales,
+    registrar_resultado_escaneo,
+)
 
 
 def pdf(marca):
@@ -83,6 +86,7 @@ class RequisitosDocumentalesFase4Tests(TestCase):
             password='Clave-2026',
             is_staff=True,
         )
+        conceder_permisos_documentales(self.revisor)
         self.solicitud = crear_solicitud()
         self.solicitud.usuario = self.usuario
         self.solicitud.estado = EstadoSolicitudFinanciacion.PENDING_DOCUMENT
@@ -259,10 +263,10 @@ class RequisitosDocumentalesFase4Tests(TestCase):
         )
         self.assertEqual(rechazada.estado, EstadoEvidenciaMatricula.REJECTED)
 
-    def test_documentos_aportados_pasan_a_revision_sin_aprobacion_previa(self):
+    def test_soporte_matricula_aportado_debe_resolverse_antes_de_revision(self):
         estudiante = self._participante()
         self._documentos_adulto(estudiante)
-        registrar_o_actualizar_evidencia_matricula(
+        evidencia = registrar_o_actualizar_evidencia_matricula(
             solicitud=self.solicitud,
             actor=self.usuario,
             institucion_declarada='Institucion declarada',
@@ -272,6 +276,23 @@ class RequisitosDocumentalesFase4Tests(TestCase):
             archivo=pdf('matricula-pendiente-envio'),
         )
 
+        self.assertFalse(fase_documental_completa(self.solicitud))
+        registrar_resultado_escaneo(
+            documento=evidencia.documento_soporte,
+            actor=self.revisor,
+            estado=EstadoEscaneoDocumento.SAFE,
+            referencia_escaneo='scanner-matricula-envio',
+        )
+        revisar_documento(
+            documento=evidencia.documento_soporte,
+            actor=self.revisor,
+            aceptar=True,
+        )
+        revisar_evidencia_matricula(
+            evidencia=evidencia,
+            actor=self.revisor,
+            aceptar=True,
+        )
         self.assertTrue(fase_documental_completa(self.solicitud))
         completar_fase_documental(
             solicitud=self.solicitud,
@@ -321,6 +342,7 @@ class RequisitosDocumentalesFase4Tests(TestCase):
             requisito.codigo: requisito
             for requisito in calcular_requisitos_documentales(self.solicitud)
         }
+        self.assertIn('STUDENT_ID_FRONT', requisitos, requisitos.keys())
         self.assertFalse(requisitos['STUDENT_ID_FRONT'].cumplido)
         with self.assertRaises(ValidationError):
             completar_fase_documental(

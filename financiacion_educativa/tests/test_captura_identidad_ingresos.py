@@ -101,6 +101,8 @@ class CapturaIdentidadEIngresosTests(TestCase):
         roles,
         numero='1000200030',
         relacion=RelacionEstudiante.SELF,
+        tipo_documento=TipoDocumentoIdentidad.CC,
+        participante_id=None,
     ):
         return registrar_o_actualizar_participante(
             solicitud=self.solicitud,
@@ -108,12 +110,13 @@ class CapturaIdentidadEIngresosTests(TestCase):
             datos=DatosParticipante(
                 nombres='Persona',
                 apellidos='Prueba',
-                tipo_documento=TipoDocumentoIdentidad.CC,
+                tipo_documento=tipo_documento,
                 numero_documento=numero,
                 fecha_nacimiento=nacimiento,
                 relacion_estudiante=relacion,
             ),
             roles=roles,
+            participante_id=participante_id,
         )
 
     def _capturar(self, lado, archivo):
@@ -196,6 +199,30 @@ class CapturaIdentidadEIngresosTests(TestCase):
                 )
             )
         )
+
+    def test_pasaporte_solo_admite_pagina_biografica_como_frente(self):
+        self.estudiante = self._crear_participante(
+            nacimiento=date(1990, 1, 1),
+            roles={RolParticipante.STUDENT, RolParticipante.PRINCIPAL_DEBTOR},
+            tipo_documento=TipoDocumentoIdentidad.PASSPORT,
+            participante_id=self.estudiante.pk,
+        )
+        self._autorizar_captura_movil()
+
+        pagina = self.client.get(self.url_camara)
+        reverso = self._capturar('reverso', jpeg(marca=b'reverso'))
+        frente = self._capturar('frente', jpeg(marca=b'biografica'))
+        requisitos = {
+            requisito.codigo
+            for requisito in calcular_requisitos_documentales(self.solicitud)
+        }
+
+        self.assertNotContains(pagina, 'Parte posterior')
+        self.assertContains(pagina, 'data-requires-back="false"')
+        self.assertEqual(reverso.status_code, 400)
+        self.assertEqual(frente.status_code, 200)
+        self.assertIn('STUDENT_ID_FRONT', requisitos)
+        self.assertNotIn('STUDENT_ID_BACK', requisitos)
 
     def test_repetir_captura_reemplaza_y_deja_una_activa(self):
         self._autorizar_captura_movil()

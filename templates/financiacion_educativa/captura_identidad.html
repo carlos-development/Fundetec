@@ -10,7 +10,7 @@
             <article class="edu-surface">
                 <div class="edu-page-heading">
                     <p class="edu-eyebrow">Identificaci&oacute;n en tiempo real</p>
-                    <h1>Captura frente y reverso</h1>
+                    <h1>{% if requiere_reverso %}Captura frente y reverso{% else %}Captura la identificaci&oacute;n{% endif %}</h1>
                     <p>
                         Usa la c&aacute;mara para fotografiar el documento de
                         {{ participante.nombre_completo }}. Esta captura no realiza OCR
@@ -31,6 +31,7 @@
                             {% endif %}
                         </div>
                     </div>
+                    {% if requiere_reverso %}
                     <div class="edu-camera-side {% if documento_reverso %}is-complete{% endif %}" data-side-status="reverso">
                         <i class="bi bi-card-text" aria-hidden="true"></i>
                         <div>
@@ -43,6 +44,7 @@
                             {% endif %}
                         </div>
                     </div>
+                    {% endif %}
                 </div>
 
                 {% if captura_movil_autorizada %}
@@ -50,7 +52,8 @@
                     class="edu-camera"
                     data-camera-capture
                     data-upload-url="{% url 'financiacion_educativa_web:capturar-identidad' solicitud.id persona %}"
-                    data-initial-side="{% if not documento_frente %}frente{% elif not documento_reverso %}reverso{% else %}frente{% endif %}"
+                    data-requires-back="{% if requiere_reverso %}true{% else %}false{% endif %}"
+                    data-initial-side="{% if not documento_frente %}frente{% elif requiere_reverso and not documento_reverso %}reverso{% else %}frente{% endif %}"
                 >
                     <form data-camera-csrf hidden>{% csrf_token %}</form>
                     <div class="edu-camera-instruction" role="status" aria-live="polite">

@@ -2,21 +2,16 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 
 from financiacion_educativa.choices import (
-    EstadoEscaneoDocumento,
-    EstadoEvidenciaMatricula,
     EstadoSolicitudFinanciacion,
-    EstadoValidacionDocumento,
     MotivoDecisionRevisionEducativa,
     RequisitoCorreccionEducativa,
     RolParticipante,
     TipoDecisionRevisionEducativa,
-    TipoDocumentoFinanciacion,
 )
 from financiacion_educativa.models import (
     CondicionesFinancieras,
     DecisionRevisionEducativa,
     EntregaCorreoEstadoSolicitud,
-    EvidenciaMatricula,
     SolicitudFinanciacionEducativa,
 )
 from financiacion_educativa.services.correos import normalizar_destinatario
@@ -30,14 +25,10 @@ from financiacion_educativa.services.estados import transicionar_solicitud
 from financiacion_educativa.services.participantes import (
     solicitud_requiere_tutor,
 )
-
-
-TIPOS_DOCUMENTALES_APROBACION = {
-    TipoDocumentoFinanciacion.STUDENT_ID_FRONT,
-    TipoDocumentoFinanciacion.STUDENT_ID_BACK,
-    TipoDocumentoFinanciacion.INCOME_CERTIFICATE,
-    TipoDocumentoFinanciacion.ENROLLMENT_EVIDENCE,
-}
+from financiacion_educativa.services.politica_documental import (
+    construir_politica_documental,
+    requisito_listo_para_aprobacion,
+)
 
 
 def _validar_revisor(actor):
@@ -52,37 +43,24 @@ def _validar_revisor(actor):
 
 
 def _validar_aprobacion(solicitud):
-    tipos_requeridos = set(TIPOS_DOCUMENTALES_APROBACION)
-    if solicitud_requiere_tutor(solicitud):
-        tipos_requeridos.update({
-            TipoDocumentoFinanciacion.GUARDIAN_ID_FRONT,
-            TipoDocumentoFinanciacion.GUARDIAN_ID_BACK,
-        })
-    documentos = solicitud.documentos.filter(
-        activo=True,
-        tipo__in=tipos_requeridos,
-    )
-    presentes = set(documentos.values_list('tipo', flat=True))
-    if not tipos_requeridos.issubset(presentes):
+    politica = construir_politica_documental(solicitud)
+    faltantes = [
+        requisito.codigo
+        for requisito in politica
+        if requisito.obligatorio and requisito.documento is None
+    ]
+    if faltantes:
         raise ValidationError(
             'El expediente no contiene todos los documentos obligatorios.'
         )
-    if documentos.exclude(
-        estado_escaneo=EstadoEscaneoDocumento.SAFE,
-        estado_validacion=EstadoValidacionDocumento.APPROVED,
-    ).exists():
+    no_resueltos = [
+        requisito.codigo
+        for requisito in politica
+        if not requisito_listo_para_aprobacion(requisito)
+    ]
+    if no_resueltos:
         raise ValidationError(
-            'Todos los documentos obligatorios deben estar seguros y aceptados.'
-        )
-    try:
-        evidencia = solicitud.evidencia_matricula
-    except EvidenciaMatricula.DoesNotExist as exc:
-        raise ValidationError(
-            'La evidencia de matricula no esta disponible.'
-        ) from exc
-    if evidencia.estado != EstadoEvidenciaMatricula.ACCEPTED:
-        raise ValidationError(
-            'La evidencia de matricula debe estar aceptada.'
+            'Todos los documentos aportados deben estar seguros y aceptados.'
         )
 
 

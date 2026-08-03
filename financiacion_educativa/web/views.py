@@ -74,6 +74,9 @@ from financiacion_educativa.services.participantes import (
     sincronizar_estudiante_desde_solicitud,
     solicitud_requiere_tutor,
 )
+from financiacion_educativa.services.politica_documental import (
+    caras_identificacion_requeridas,
+)
 from financiacion_educativa.services.requisitos_documentales import (
     calcular_requisitos_documentales,
     completar_fase_documental,
@@ -791,6 +794,12 @@ def capturar_identidad_view(request, solicitud_id, persona):
     if not asignacion:
         raise Http404
     participante = asignacion.participante
+    caras_requeridas = caras_identificacion_requeridas(
+        participante.tipo_documento
+    )
+    tipos_requeridos = tuple(
+        configuracion[cara] for cara in caras_requeridas
+    )
     captura_movil_autorizada = _captura_movil_autorizada(
         request,
         solicitud,
@@ -809,6 +818,11 @@ def capturar_identidad_view(request, solicitud_id, persona):
             )
             raise Http404
         lado = request.POST.get('lado', '')
+        if lado not in caras_requeridas:
+            return JsonResponse(
+                {'ok': False, 'error': 'La cara indicada no es requerida.'},
+                status=400,
+            )
         tipo = configuracion.get(lado)
         captura = request.FILES.get('captura')
         if not tipo or not captura:
@@ -851,14 +865,13 @@ def capturar_identidad_view(request, solicitud_id, persona):
                 )
         except ValidationError as error:
             return _error_json_validacion(error)
-        tipos_requeridos = (configuracion['frente'], configuracion['reverso'])
         if (
             solicitud.documentos.filter(
                 participante=participante,
                 tipo__in=tipos_requeridos,
                 activo=True,
             ).values('tipo').distinct().count()
-            == 2
+            == len(tipos_requeridos)
         ):
             request.session.pop(SESSION_CAPTURA_MOVIL_GRANT, None)
         return JsonResponse({
@@ -872,7 +885,7 @@ def capturar_identidad_view(request, solicitud_id, persona):
         documento.tipo: documento
         for documento in solicitud.documentos.filter(
             participante=participante,
-            tipo__in=(configuracion['frente'], configuracion['reverso']),
+            tipo__in=tipos_requeridos,
             activo=True,
         )
     }
@@ -885,6 +898,7 @@ def capturar_identidad_view(request, solicitud_id, persona):
             'persona': persona,
             'documento_frente': documentos.get(configuracion['frente']),
             'documento_reverso': documentos.get(configuracion['reverso']),
+            'requiere_reverso': 'reverso' in caras_requeridas,
             'captura_movil_autorizada': captura_movil_autorizada,
         },
     )
@@ -1120,7 +1134,6 @@ def matricula_view(request, solicitud_id):
         request.POST or None,
         request.FILES or None,
         initial=initial,
-        requiere_archivo=evidencia is None,
         periodo_institucional=solicitud.periodo_academico,
         codigo_institucional=solicitud.codigo_matricula,
     )

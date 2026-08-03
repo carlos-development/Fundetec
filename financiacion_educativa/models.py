@@ -28,10 +28,12 @@ from .choices import (
     EstadoValidacionDocumento,
     EstadoConfiguracionFinanciera,
     EstadoInvitacionContinuacion,
+    EstadoIntentoEscaneoDocumento,
     EstadoVersionTerminos,
     MetodoCalculoFinanciero,
     MotivoRechazoDocumento,
     OrigenEntregaInvitacion,
+    OrigenIntentoEscaneoDocumento,
     OrigenCapturaDocumento,
     PoliticaCausacionInteres,
     PoliticaRedondeoFinanciero,
@@ -940,7 +942,59 @@ class VersionTerminosFinanciacion(models.Model):
         return f'{self.titulo} - {self.version}'
 
 
+class DocumentoFinanciacionQuerySet(models.QuerySet):
+    CAMPOS_SEGURIDAD_PROTEGIDOS = frozenset({
+        'estado_escaneo',
+        'ultimo_intento_limpio',
+        'ultimo_intento_limpio_id',
+        'escaneo_requerido_desde',
+    })
+    MENSAJE_ACTUALIZACION_PROTEGIDA = (
+        'Los campos de seguridad documental deben modificarse mediante '
+        'el servicio oficial de escaneo.'
+    )
+
+    @classmethod
+    def _validar_campos_actualizacion(cls, campos):
+        nombres = {getattr(campo, 'name', campo) for campo in campos}
+        if nombres & cls.CAMPOS_SEGURIDAD_PROTEGIDOS:
+            raise ValidationError(cls.MENSAJE_ACTUALIZACION_PROTEGIDA)
+
+    def update(self, **kwargs):
+        self._validar_campos_actualizacion(kwargs)
+        return super().update(**kwargs)
+
+    def bulk_update(self, objs, fields, batch_size=None):
+        fields = tuple(fields)
+        self._validar_campos_actualizacion(fields)
+        return super().bulk_update(objs, fields, batch_size=batch_size)
+
+    def bulk_create(self, objs, **kwargs):
+        if kwargs.get('update_conflicts'):
+            self._validar_campos_actualizacion(
+                kwargs.get('update_fields') or ()
+            )
+        objs = list(objs)
+        for documento in objs:
+            if (
+                documento.estado_escaneo
+                != EstadoEscaneoDocumento.PENDING_SECURITY_SCAN
+                or documento.ultimo_intento_limpio_id is not None
+                or documento.escaneo_requerido_desde is not None
+            ):
+                raise ValidationError(self.MENSAJE_ACTUALIZACION_PROTEGIDA)
+        return super().bulk_create(objs, **kwargs)
+
+
+class DocumentoFinanciacionManager(
+    models.Manager.from_queryset(DocumentoFinanciacionQuerySet)
+):
+    pass
+
+
 class DocumentoFinanciacion(models.Model):
+    objects = DocumentoFinanciacionManager()
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     solicitud = models.ForeignKey(
         SolicitudFinanciacionEducativa,
@@ -979,6 +1033,19 @@ class DocumentoFinanciacion(models.Model):
         default=EstadoEscaneoDocumento.PENDING_SECURITY_SCAN,
     )
     escaneado_en = models.DateTimeField(null=True, blank=True)
+    escaneo_requerido_desde = models.DateTimeField(
+        null=True,
+        blank=True,
+        editable=False,
+    )
+    ultimo_intento_limpio = models.ForeignKey(
+        'IntentoEscaneoDocumento',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        editable=False,
+        related_name='documentos_autorizados_safe',
+    )
     referencia_escaneo = models.CharField(max_length=120, blank=True)
     estado_validacion = models.CharField(
         max_length=20,
@@ -1028,9 +1095,20 @@ class DocumentoFinanciacion(models.Model):
     actualizado_en = models.DateTimeField(auto_now=True)
 
     class Meta:
+        base_manager_name = 'objects'
         ordering = ['-cargado_en']
         verbose_name = 'Documento de financiacion'
         verbose_name_plural = 'Documentos de financiacion'
+        permissions = [
+            (
+                'escanear_documento_financiacion',
+                'Puede solicitar escaneos de documentos educativos',
+            ),
+            (
+                'revisar_documento_financiacion',
+                'Puede revisar documentos educativos',
+            ),
+        ]
         constraints = [
             models.UniqueConstraint(
                 fields=['solicitud', 'sha256'],
@@ -1118,6 +1196,84 @@ class DocumentoFinanciacion(models.Model):
             raise ValidationError({
                 'motivo_rechazo': 'El motivo solo aplica a documentos rechazados.',
             })
+        self._validar_transicion_a_seguro()
+
+    def _validar_transicion_a_seguro(self):
+        if self.estado_escaneo != EstadoEscaneoDocumento.SAFE:
+            return
+        if not self.pk:
+            raise ValidationError({
+                'estado_escaneo': (
+                    'El estado seguro requiere un escaneo limpio registrado.'
+                ),
+            })
+        anterior = type(self).objects.filter(pk=self.pk).values(
+            'estado_escaneo',
+            'ultimo_intento_limpio_id',
+            'escaneo_requerido_desde',
+        ).first()
+        desde = self.escaneo_requerido_desde
+        if self.ultimo_intento_limpio_id:
+            intentos = self.intentos_escaneo.filter(
+                pk=self.ultimo_intento_limpio_id,
+                estado=EstadoIntentoEscaneoDocumento.CLEAN,
+                veredicto=EstadoIntentoEscaneoDocumento.CLEAN,
+                finalizado_en__isnull=False,
+            )
+            if desde is not None:
+                intentos = intentos.filter(finalizado_en__gte=desde)
+            if not intentos.exists():
+                raise ValidationError({
+                    'estado_escaneo': (
+                        'El estado seguro requiere un intento limpio reciente '
+                        'del servicio de escaneo.'
+                    ),
+                })
+
+        if anterior and anterior['estado_escaneo'] == EstadoEscaneoDocumento.SAFE:
+            campos_seguridad_sin_cambios = (
+                anterior['ultimo_intento_limpio_id']
+                == self.ultimo_intento_limpio_id
+                and anterior['escaneo_requerido_desde']
+                == self.escaneo_requerido_desde
+            )
+            if not campos_seguridad_sin_cambios:
+                raise ValidationError({
+                    'estado_escaneo': (
+                        'Los campos de seguridad de un documento seguro no '
+                        'pueden modificarse directamente.'
+                    ),
+                })
+            if self.ultimo_intento_limpio_id is None:
+                return
+
+        if not self.ultimo_intento_limpio_id:
+            raise ValidationError({
+                'estado_escaneo': (
+                    'El estado seguro requiere un intento limpio reciente '
+                    'del servicio de escaneo.'
+                ),
+            })
+
+    def save(self, *args, **kwargs):
+        if self.pk:
+            estado_anterior = type(self).objects.filter(pk=self.pk).values_list(
+                'estado_escaneo', flat=True
+            ).first()
+            if (
+                estado_anterior == EstadoEscaneoDocumento.SAFE
+                and self.estado_escaneo != EstadoEscaneoDocumento.SAFE
+            ):
+                self.escaneo_requerido_desde = timezone.now()
+                self.ultimo_intento_limpio = None
+                update_fields = kwargs.get('update_fields')
+                if update_fields is not None:
+                    kwargs['update_fields'] = set(update_fields) | {
+                        'escaneo_requerido_desde',
+                        'ultimo_intento_limpio',
+                    }
+        self._validar_transicion_a_seguro()
+        return super().save(*args, **kwargs)
 
     def __str__(self):
         return f'{self.get_tipo_display()} - {self.solicitud.referencia_externa}'
@@ -1126,6 +1282,138 @@ class DocumentoFinanciacion(models.Model):
         raise ValidationError(
             'Los documentos deben conservarse para mantener su trazabilidad.'
         )
+
+
+class IntentoEscaneoDocumento(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    documento = models.ForeignKey(
+        DocumentoFinanciacion,
+        on_delete=models.PROTECT,
+        related_name='intentos_escaneo',
+    )
+    numero = models.PositiveSmallIntegerField()
+    estado = models.CharField(
+        max_length=20,
+        choices=EstadoIntentoEscaneoDocumento.choices,
+        default=EstadoIntentoEscaneoDocumento.STARTED,
+    )
+    origen = models.CharField(
+        max_length=20,
+        choices=OrigenIntentoEscaneoDocumento.choices,
+    )
+    proveedor = models.CharField(max_length=60, blank=True)
+    veredicto = models.CharField(max_length=30, blank=True)
+    firma_amenaza = models.CharField(max_length=120, blank=True)
+    codigo_error = models.CharField(max_length=60, blank=True)
+    solicitado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='escaneos_documentales_solicitados',
+    )
+    iniciado_en = models.DateTimeField(default=timezone.now, editable=False)
+    finalizado_en = models.DateTimeField(null=True, blank=True, editable=False)
+
+    class Meta:
+        ordering = ['documento', 'numero']
+        verbose_name = 'Intento de escaneo documental'
+        verbose_name_plural = 'Intentos de escaneo documental'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['documento', 'numero'],
+                name='uniq_intento_scan_doc_num',
+            ),
+            models.UniqueConstraint(
+                fields=['documento'],
+                condition=models.Q(
+                    estado=EstadoIntentoEscaneoDocumento.STARTED
+                ),
+                name='uniq_intento_scan_doc_activo',
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=['estado', 'iniciado_en'],
+                name='scan_doc_estado_fecha_idx',
+            ),
+        ]
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError(
+            'Los intentos de escaneo deben conservarse para auditoria.'
+        )
+
+    def _validar_cambio_estado_directo(self):
+        if self._state.adding:
+            if self.estado != EstadoIntentoEscaneoDocumento.STARTED:
+                raise ValidationError(
+                    'Los intentos deben crearse en estado iniciado.'
+                )
+            return
+        anterior = type(self).objects.filter(pk=self.pk).values_list(
+            'estado', flat=True
+        ).first()
+        if anterior is not None and anterior != self.estado:
+            raise ValidationError(
+                'El resultado del intento solo puede registrarlo el servicio de escaneo.'
+            )
+
+    def clean(self):
+        super().clean()
+        self._validar_cambio_estado_directo()
+
+    def save(self, *args, **kwargs):
+        self._validar_cambio_estado_directo()
+        return super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f'{self.documento_id} - intento {self.numero}'
+
+
+class ReaperturaEscaneoDocumento(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    documento = models.ForeignKey(
+        DocumentoFinanciacion,
+        on_delete=models.PROTECT,
+        related_name='reaperturas_escaneo',
+    )
+    autorizado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name='reaperturas_escaneo_autorizadas',
+    )
+    motivo = models.CharField(max_length=500)
+    intentos_adicionales = models.PositiveSmallIntegerField()
+    creado_en = models.DateTimeField(default=timezone.now, editable=False)
+
+    class Meta:
+        ordering = ['documento', 'creado_en']
+        verbose_name = 'Reapertura de escaneo documental'
+        verbose_name_plural = 'Reaperturas de escaneo documental'
+        indexes = [
+            models.Index(
+                fields=['documento', 'creado_en'],
+                name='scan_reopen_doc_fecha_idx',
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        if not (self.motivo or '').strip():
+            raise ValidationError({'motivo': 'El motivo operativo es obligatorio.'})
+        if self.intentos_adicionales <= 0:
+            raise ValidationError({
+                'intentos_adicionales': 'El presupuesto debe ser positivo.',
+            })
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError(
+            'Las reaperturas deben conservarse para auditoria.'
+        )
+
+    def __str__(self):
+        return f'Reapertura {self.documento_id} - {self.creado_en:%Y-%m-%d %H:%M}'
 
 
 class EvidenciaMatricula(models.Model):
@@ -1142,6 +1430,8 @@ class EvidenciaMatricula(models.Model):
     documento_soporte = models.ForeignKey(
         DocumentoFinanciacion,
         on_delete=models.PROTECT,
+        null=True,
+        blank=True,
         related_name='evidencias_matricula',
     )
     estado = models.CharField(
@@ -1194,6 +1484,15 @@ class EvidenciaMatricula(models.Model):
             })
         if self.estado == EstadoEvidenciaMatricula.REJECTED and not self.motivo_rechazo:
             raise ValidationError({'motivo_rechazo': 'Selecciona un motivo de rechazo.'})
+        if (
+            self.estado == EstadoEvidenciaMatricula.ACCEPTED
+            and not self.documento_soporte_id
+        ):
+            raise ValidationError({
+                'documento_soporte': (
+                    'Solo un soporte adjunto puede marcarse como aceptado.'
+                ),
+            })
 
     def __str__(self):
         return f'Matricula {self.solicitud.referencia_externa}'

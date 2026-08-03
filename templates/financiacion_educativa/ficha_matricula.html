@@ -54,7 +54,7 @@
                 <div class="edu-form-actions">
                     <a class="edu-button-quiet" href="{% url 'financiacion_educativa_web:documentacion' solicitud.id %}">Volver al expediente</a>
                     {% if solicitud.estado == "PENDING_DOCUMENT" %}
-                        <a class="edu-button" href="{% url 'financiacion_educativa_web:matricula' solicitud.id %}">Completar evidencia</a>
+                        <a class="edu-button" href="{% url 'financiacion_educativa_web:matricula' solicitud.id %}">Completar datos de matr&iacute;cula</a>
                     {% endif %}
                 </div>
             </article>

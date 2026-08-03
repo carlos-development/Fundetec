@@ -254,8 +254,11 @@ class EvidenciaMatriculaForm(forms.Form):
         required=False,
     )
     archivo = forms.FileField(
-        label='Soporte de matricula',
+        label='Soporte de matricula (opcional)',
         required=False,
+        help_text=(
+            'La ficha y los datos de matricula no dependen de este adjunto.'
+        ),
         widget=forms.ClearableFileInput(
             attrs={'accept': '.pdf,.jpg,.jpeg,.png'}
         ),
@@ -264,13 +267,11 @@ class EvidenciaMatriculaForm(forms.Form):
     def __init__(
         self,
         *args,
-        requiere_archivo=True,
         periodo_institucional='',
         codigo_institucional='',
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
-        self.fields['archivo'].required = requiere_archivo
         if periodo_institucional:
             self.fields['periodo_academico'].initial = periodo_institucional
             self.fields['periodo_academico'].disabled = True

@@ -235,3 +235,79 @@ staging_manage revocar_credencial_institucional \
 
 La revocacion es idempotente y conserva la trazabilidad. Ninguna operacion
 requiere editar PostgreSQL directamente.
+
+## Escaneo antivirus documental
+
+El dominio educativo usa un puerto interno y el adaptador ClamAV configurado
+por entorno. Debe configurarse exactamente un destino: socket Unix, o bien TCP
+dejando `FINANCIACION_EDUCATIVA_CLAMAV_UNIX_SOCKET` vacio y configurando host y
+puerto. `manage.py check` rechaza configuraciones vacias, ambiguas o invalidas.
+
+Variables operativas:
+
+- `FINANCIACION_EDUCATIVA_DOCUMENT_SCAN_BACKEND`;
+- `FINANCIACION_EDUCATIVA_CLAMAV_UNIX_SOCKET`;
+- `FINANCIACION_EDUCATIVA_CLAMAV_HOST`;
+- `FINANCIACION_EDUCATIVA_CLAMAV_PORT`;
+- `FINANCIACION_EDUCATIVA_CLAMAV_CONNECT_TIMEOUT_SECONDS`;
+- `FINANCIACION_EDUCATIVA_CLAMAV_READ_TIMEOUT_SECONDS`;
+- `FINANCIACION_EDUCATIVA_SCAN_MAX_ATTEMPTS`;
+- `FINANCIACION_EDUCATIVA_SCAN_STALE_SECONDS`;
+- `FINANCIACION_EDUCATIVA_SCAN_MAX_REOPENINGS`;
+- `FINANCIACION_EDUCATIVA_SCAN_REOPEN_EXTRA_ATTEMPTS`.
+
+Los checks de Django reportan identificadores `financiacion_educativa.E005` a
+`E011` cuando los valores ya cargados tienen tipos o rangos invalidos. Las
+variables se convierten con `int()` o `float()` durante la importacion de
+`settings.py`; por ello, texto no convertible en `staging.env` detiene Django
+con `ValueError` antes de que `manage.py check` pueda emitir esos
+identificadores. En ese caso debe corregirse la variable y volver a ejecutar
+el check, sin intentar iniciar el servicio.
+
+Comprobar el daemon sin exponer archivos privados y procesar pendientes:
+
+```bash
+systemctl is-active clamav-daemon.service
+staging_manage procesar_escaneos_documentales --help
+staging_manage procesar_escaneos_documentales --limit 50
+staging_manage procesar_escaneos_documentales \
+  --solicitud-id UUID_SOLICITUD --limit 20
+staging_manage procesar_escaneos_documentales \
+  --documento-id UUID_DOCUMENTO
+```
+
+Los errores operativos conservan el documento pendiente y generan un intento
+auditable. Solo un veredicto limpio del adaptador cambia el estado a `SAFE`.
+El administrador puede solicitar el mismo procesamiento, pero no asignar ese
+estado manualmente.
+
+El manager predeterminado de `DocumentoFinanciacion` bloquea `update()`,
+`bulk_update()` y altas inseguras por `bulk_create()` sobre los campos de
+estado, puntero y vigencia del escaneo. Esta proteccion cubre operaciones del
+ORM de Django; no sustituye los controles de acceso a PostgreSQL ni protege
+frente a SQL directo. El SQL directo no forma parte del procedimiento
+operativo.
+
+Cuando se agota el presupuesto, una reapertura exige un actor con el permiso
+`escanear_documento_financiacion` y un motivo operativo. La operacion conserva
+los intentos anteriores y agrega solamente el presupuesto configurado:
+
+```bash
+staging_manage reabrir_escaneo_documental \
+  --documento-id UUID_DOCUMENTO \
+  --actor-id ID_USUARIO_OPERADOR \
+  --motivo 'ClamAV restablecido despues de incidente operativo'
+staging_manage procesar_escaneos_documentales --documento-id UUID_DOCUMENTO
+```
+
+La concurrencia entre procesos debe validarse sobre PostgreSQL antes del
+despliegue de este bloque. Con `staging.env` cargado, ejecutar:
+
+```bash
+staging_manage test \
+  financiacion_educativa.tests.test_escaneo_concurrencia_postgresql \
+  --noinput
+```
+
+En SQLite esa prueba se reporta como `SKIPPED`; ese resultado no demuestra la
+concurrencia de produccion.

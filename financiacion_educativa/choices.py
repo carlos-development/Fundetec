@@ -83,6 +83,18 @@ class EstadoEscaneoDocumento(models.TextChoices):
     BLOCKED = 'BLOCKED', 'Bloqueado por seguridad'
 
 
+class EstadoIntentoEscaneoDocumento(models.TextChoices):
+    STARTED = 'STARTED', 'Iniciado'
+    CLEAN = 'CLEAN', 'Limpio'
+    INFECTED = 'INFECTED', 'Amenaza detectada'
+    ERROR = 'ERROR', 'Error operativo'
+
+
+class OrigenIntentoEscaneoDocumento(models.TextChoices):
+    ADMIN = 'ADMIN', 'Administrador'
+    COMMAND = 'COMMAND', 'Comando de recuperacion'
+
+
 class MotivoRechazoDocumento(models.TextChoices):
     UNREADABLE = 'UNREADABLE', 'Documento ilegible'
     INCOMPLETE = 'INCOMPLETE', 'Documento incompleto'

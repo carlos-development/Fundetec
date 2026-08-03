@@ -189,20 +189,22 @@ escritorio.
 ## 6. Completar expediente y finanzas
 
 1. Registrar o revisar los datos del estudiante.
-2. Para una solicitud de menor, registrar un tutor adulto y capturar ambas
-   caras de su identificacion.
+2. Para una solicitud de menor, registrar un tutor adulto y capturar las caras
+   exigidas por su tipo de identificacion (frente y reverso para CC o TI).
 3. Cargar un certificado de ingresos ficticio.
-4. Cargar una evidencia de matricula ficticia.
+4. Completar los datos de matricula. El soporte adjunto es opcional; si se
+   aporta, tambien debe superar escaneo y revision.
 5. Abrir finanzas y crear la fotografia financiera cuando la interfaz lo
    solicite.
-6. Simular el resultado del puerto de escaneo exclusivamente en la base
-   temporal:
+6. Conectar la base temporal a una instancia ClamAV de pruebas y procesar los
+   documentos por el puerto real. Nunca asignar `SAFE` desde `shell`:
 
 ```powershell
-venv\Scripts\python.exe manage.py shell -c "import os; from django.contrib.auth import get_user_model; from financiacion_educativa.choices import EstadoEscaneoDocumento; from financiacion_educativa.models import DocumentoFinanciacion; from financiacion_educativa.services.documentos import registrar_resultado_escaneo; actor=get_user_model().objects.get(username=os.environ['DEMO_ADMIN_USERNAME']); documentos=DocumentoFinanciacion.objects.filter(solicitud_id='$($response.application_id)', activo=True); [registrar_resultado_escaneo(documento=documento, actor=actor, estado=EstadoEscaneoDocumento.SAFE, referencia_escaneo=f'manual-{documento.pk}') for documento in documentos]"
+venv\Scripts\python.exe manage.py procesar_escaneos_documentales --limit 20
 ```
 
-7. Desde admin, aceptar los documentos y la evidencia.
+7. Desde admin, aceptar los documentos y, solo si se adjunto, el soporte de
+   matricula.
 8. Enviar el expediente a revision.
 
 Resultado esperado: la consulta institucional devuelve `UNDER_REVIEW`,

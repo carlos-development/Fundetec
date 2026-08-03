@@ -108,7 +108,7 @@ def construir_mapeo_ficha_matricula(solicitud):
                 (
                     'Solicitud institucional'
                     if solicitud.codigo_matricula
-                    else 'Evidencia academica'
+                    else 'Datos de matricula declarados'
                 ),
                 faltante='Codigo o referencia oficial de matricula',
             ),
@@ -137,7 +137,7 @@ def construir_mapeo_ficha_matricula(solicitud):
                 (
                     'Solicitud institucional'
                     if solicitud.periodo_academico
-                    else 'Evidencia academica'
+                    else 'Datos de matricula declarados'
                 ),
                 faltante='Periodo academico',
             ),

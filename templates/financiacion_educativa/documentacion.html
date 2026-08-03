@@ -190,11 +190,11 @@
 
                 <section class="edu-section-block" aria-labelledby="enrollment-title">
                     <div class="edu-section-title">
-                        <h2 id="enrollment-title">Ficha y evidencia acad&eacute;mica</h2>
+                        <h2 id="enrollment-title">Ficha y datos de matr&iacute;cula</h2>
                         {% if documental_editable %}
                             <a class="edu-button-secondary" href="{% url 'financiacion_educativa_web:matricula' solicitud.id %}">
                                 <i class="bi bi-journal-plus" aria-hidden="true"></i>
-                                {% if matricula %}Actualizar evidencia{% else %}Registrar evidencia{% endif %}
+                                {% if matricula %}Actualizar datos{% else %}Registrar datos{% endif %}
                             </a>
                         {% endif %}
                     </div>
@@ -204,11 +204,16 @@
                                 <strong class="edu-document-name">{{ matricula.programa_curso }}</strong>
                                 <span class="edu-document-meta">{{ matricula.periodo_academico }}</span>
                             </div>
-                            <span class="edu-badge">{{ matricula.get_estado_display }}</span>
-                            <span class="edu-document-meta">Sujeta a revisi&oacute;n</span>
+                            {% if matricula.documento_soporte %}
+                                <span class="edu-badge">{{ matricula.get_estado_display }}</span>
+                                <span class="edu-document-meta">Soporte opcional sujeto a revisi&oacute;n</span>
+                            {% else %}
+                                <span class="edu-badge edu-badge-success">Datos registrados</span>
+                                <span class="edu-document-meta">Sin soporte adjunto opcional</span>
+                            {% endif %}
                         </div>
                     {% else %}
-                        <div class="edu-empty">No se ha registrado evidencia de matr&iacute;cula.</div>
+                        <div class="edu-empty">No se han completado los datos adicionales de matr&iacute;cula. Esto no impide enviar el expediente.</div>
                     {% endif %}
                     <a class="edu-inline-link" href="{% url 'financiacion_educativa_web:ficha-matricula' solicitud.id %}">Consultar datos disponibles para la ficha</a>
                 </section>

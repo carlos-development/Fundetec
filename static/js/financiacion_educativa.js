@@ -166,6 +166,7 @@ document.addEventListener('DOMContentLoaded', function () {
         let captureBlob = null;
         let previewUrl = '';
         let side = cameraRoot.dataset.initialSide || 'frente';
+        const requiresBack = cameraRoot.dataset.requiresBack === 'true';
         let replacementSide = '';
 
         const setSide = function (newSide) {
@@ -329,12 +330,12 @@ document.addEventListener('DOMContentLoaded', function () {
                 confirmButton.hidden = true;
                 startButton.hidden = false;
                 placeholder.hidden = false;
-                if (savedSide === 'frente') setSide('reverso');
+                if (savedSide === 'frente' && requiresBack) setSide('reverso');
                 replacementSide = '';
                 showMessage(
                     'Captura guardada de forma privada. Continua con '
                     + (
-                        savedSide === 'reverso'
+                        savedSide === 'reverso' || !requiresBack
                             ? 'el siguiente requisito.'
                             : 'el reverso.'
                     )

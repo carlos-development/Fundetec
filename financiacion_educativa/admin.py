@@ -23,8 +23,10 @@ from .models import (
     EventoSeguridadFinanciacion,
     EventoParticipanteFinanciacion,
     HistorialEstadoSolicitud,
+    IntentoEscaneoDocumento,
     InvitacionContinuacionSolicitud,
     ParticipanteFinanciacion,
+    ReaperturaEscaneoDocumento,
     RegistroIdempotenciaSolicitud,
     RolParticipanteFinanciacion,
     SolicitudFinanciacionEducativa,
@@ -48,6 +50,7 @@ from .services.configuracion_financiera import (
     seleccionar_configuracion_vigente,
 )
 from .services.documentos import revisar_documento
+from .services.escaneo_documentos import procesar_escaneo_documento
 from .services.matricula import revisar_evidencia_matricula
 from .services.terminos import publicar_version_terminos, retirar_version_terminos
 from .services.orquestacion import (
@@ -248,7 +251,12 @@ class SolicitudFinanciacionEducativaAdmin(admin.ModelAdmin):
                     solicitud=solicitud,
                     actor=request.user,
                 )
-            except ValidationError:
+            except ValidationError as error:
+                self.message_user(
+                    request,
+                    f'{solicitud.pk}: {"; ".join(error.messages)}',
+                    level=messages.WARNING,
+                )
                 continue
             programadas += int(resultado.creada)
         self.message_user(request, f'Invitaciones programadas: {programadas}.')
@@ -263,7 +271,12 @@ class SolicitudFinanciacionEducativaAdmin(admin.ModelAdmin):
                     origen=OrigenEntregaInvitacion.MANUAL_REISSUE,
                     actor=request.user,
                 )
-            except ValidationError:
+            except ValidationError as error:
+                self.message_user(
+                    request,
+                    f'{solicitud.pk}: {"; ".join(error.messages)}',
+                    level=messages.WARNING,
+                )
                 continue
             reemitidas += 1
         self.message_user(request, f'Invitaciones reemitidas: {reemitidas}.')
@@ -677,7 +690,48 @@ class DocumentoFinanciacionAdmin(admin.ModelAdmin):
         'actualizado_en',
     )
     fields = readonly_fields
-    actions = ('aceptar_seleccionados', 'rechazar_tipo_incorrecto')
+    actions = (
+        'solicitar_escaneo_seleccionados',
+        'aceptar_seleccionados',
+        'rechazar_tipo_incorrecto',
+    )
+
+    def get_actions(self, request):
+        actions = super().get_actions(request)
+        if not request.user.has_perm(
+            'financiacion_educativa.escanear_documento_financiacion'
+        ):
+            actions.pop('solicitar_escaneo_seleccionados', None)
+        if not request.user.has_perm(
+            'financiacion_educativa.revisar_documento_financiacion'
+        ):
+            actions.pop('aceptar_seleccionados', None)
+            actions.pop('rechazar_tipo_incorrecto', None)
+        return actions
+
+    @admin.action(description='Solicitar escaneo antivirus')
+    def solicitar_escaneo_seleccionados(self, request, queryset):
+        procesados = 0
+        incidencias = []
+        for documento in queryset:
+            resultado = procesar_escaneo_documento(
+                documento=documento,
+                actor=request.user,
+            )
+            procesados += int(resultado.procesado)
+            if resultado.codigo_error:
+                incidencias.append(
+                    f'{documento.pk}: {resultado.codigo_error}'
+                )
+            elif not resultado.procesado:
+                incidencias.append(f'{documento.pk}: {resultado.estado}')
+        self.message_user(request, f'Documentos procesados: {procesados}.')
+        if incidencias:
+            self.message_user(
+                request,
+                'No procesados: ' + '; '.join(incidencias),
+                level=messages.WARNING,
+            )
 
     @admin.display(description='Archivo privado')
     def archivo_privado(self, obj):
@@ -693,7 +747,12 @@ class DocumentoFinanciacionAdmin(admin.ModelAdmin):
                     actor=request.user,
                     aceptar=True,
                 )
-            except ValidationError:
+            except ValidationError as error:
+                self.message_user(
+                    request,
+                    f'{documento.pk}: {"; ".join(error.messages)}',
+                    level=messages.WARNING,
+                )
                 continue
             aceptados += 1
         self.message_user(request, f'Documentos aceptados: {aceptados}.')
@@ -709,7 +768,12 @@ class DocumentoFinanciacionAdmin(admin.ModelAdmin):
                     aceptar=False,
                     motivo_rechazo=MotivoRechazoDocumento.WRONG_DOCUMENT,
                 )
-            except ValidationError:
+            except ValidationError as error:
+                self.message_user(
+                    request,
+                    f'{documento.pk}: {"; ".join(error.messages)}',
+                    level=messages.WARNING,
+                )
                 continue
             rechazados += 1
         self.message_user(request, f'Documentos rechazados: {rechazados}.')
@@ -736,6 +800,15 @@ class EvidenciaMatriculaAdmin(admin.ModelAdmin):
         field.name for field in EvidenciaMatricula._meta.fields
     )
     actions = ('aceptar_seleccionadas', 'rechazar_soporte_incorrecto')
+
+    def get_actions(self, request):
+        actions = super().get_actions(request)
+        if not request.user.has_perm(
+            'financiacion_educativa.revisar_documento_financiacion'
+        ):
+            actions.pop('aceptar_seleccionadas', None)
+            actions.pop('rechazar_soporte_incorrecto', None)
+        return actions
 
     @admin.action(description='Aceptar evidencias seleccionadas')
     def aceptar_seleccionadas(self, request, queryset):
@@ -769,6 +842,58 @@ class EvidenciaMatriculaAdmin(admin.ModelAdmin):
         self.message_user(request, f'Evidencias rechazadas: {rechazadas}.')
 
     def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(IntentoEscaneoDocumento)
+class IntentoEscaneoDocumentoAdmin(admin.ModelAdmin):
+    list_display = (
+        'documento',
+        'numero',
+        'estado',
+        'origen',
+        'proveedor',
+        'codigo_error',
+        'iniciado_en',
+        'finalizado_en',
+    )
+    list_filter = ('estado', 'origen', 'proveedor', 'iniciado_en')
+    search_fields = ('documento__solicitud__referencia_externa',)
+    readonly_fields = tuple(
+        field.name for field in IntentoEscaneoDocumento._meta.fields
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(ReaperturaEscaneoDocumento)
+class ReaperturaEscaneoDocumentoAdmin(admin.ModelAdmin):
+    list_display = (
+        'documento',
+        'autorizado_por',
+        'intentos_adicionales',
+        'creado_en',
+    )
+    list_filter = ('creado_en',)
+    search_fields = ('documento__solicitud__referencia_externa',)
+    readonly_fields = tuple(
+        field.name for field in ReaperturaEscaneoDocumento._meta.fields
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
         return False
 
     def has_delete_permission(self, request, obj=None):

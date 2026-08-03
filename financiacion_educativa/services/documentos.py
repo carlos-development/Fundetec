@@ -271,44 +271,14 @@ def reemplazar_documento(
 
 
 def _validar_revisor(actor):
-    if not actor or not actor.is_authenticated or not actor.is_staff:
-        raise ValidationError('La revision requiere un usuario administrativo.')
-
-
-@transaction.atomic
-def registrar_resultado_escaneo(
-    *,
-    documento,
-    actor,
-    estado,
-    referencia_escaneo,
-):
-    _validar_revisor(actor)
-    if estado not in {EstadoEscaneoDocumento.SAFE, EstadoEscaneoDocumento.BLOCKED}:
-        raise ValidationError({'estado': 'Resultado de escaneo no valido.'})
-    referencia = re.sub(r'[\r\n\t]+', ' ', (referencia_escaneo or '').strip())[:120]
-    if not referencia:
-        raise ValidationError({
-            'referencia_escaneo': 'Registra la referencia del escaneo externo.',
-        })
-
-    documento = DocumentoFinanciacion.objects.select_for_update().get(pk=documento.pk)
-    if documento.estado_escaneo == estado and documento.referencia_escaneo == referencia:
-        return documento
-    if documento.estado_validacion == EstadoValidacionDocumento.APPROVED:
-        raise ValidationError('Un documento aceptado no puede cambiar de escaneo.')
-    documento.estado_escaneo = estado
-    documento.escaneado_en = timezone.now()
-    documento.referencia_escaneo = referencia
-    documento.save(
-        update_fields=[
-            'estado_escaneo',
-            'escaneado_en',
-            'referencia_escaneo',
-            'actualizado_en',
-        ]
-    )
-    return documento
+    if (
+        not actor
+        or not actor.is_authenticated
+        or not actor.has_perm(
+            'financiacion_educativa.revisar_documento_financiacion'
+        )
+    ):
+        raise ValidationError('No tiene permiso para revisar documentos.')
 
 
 @transaction.atomic

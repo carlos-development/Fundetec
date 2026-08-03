@@ -26,7 +26,6 @@ from financiacion_educativa.models import (
 )
 from financiacion_educativa.services.documentos import (
     registrar_documento,
-    registrar_resultado_escaneo,
     revisar_documento,
 )
 from financiacion_educativa.services.matricula import (
@@ -40,6 +39,10 @@ from financiacion_educativa.tests.delivery_backends import (
     RecordingInvitationDeliveryBackend,
 )
 from financiacion_educativa.tests.factories import crear_configuracion_financiera
+from financiacion_educativa.tests.scan_helpers import (
+    conceder_permisos_documentales,
+    registrar_resultado_escaneo,
+)
 from financiacion_educativa.models import VersionTerminosFinanciacion
 from instituciones.models import Institucion
 from instituciones.services.credenciales import crear_credencial_api
@@ -116,6 +119,7 @@ class FlujoIntegralFinanciacionEducativaTests(APITestCase):
             password='Clave-2026',
             is_staff=True,
         )
+        conceder_permisos_documentales(self.revisor)
         self.version = VersionTerminosFinanciacion.objects.create(
             tipo=TipoConsentimiento.TERMS,
             version='integral-v1',
@@ -450,7 +454,7 @@ class FlujoIntegralFinanciacionEducativaTests(APITestCase):
             archivo=pdf('ingresos-tutor'),
             actor=solicitud.usuario,
         )
-        registrar_o_actualizar_evidencia_matricula(
+        evidencia_matricula = registrar_o_actualizar_evidencia_matricula(
             solicitud=solicitud,
             actor=solicitud.usuario,
             institucion_declarada=self.institucion.nombre_comercial,
@@ -458,6 +462,21 @@ class FlujoIntegralFinanciacionEducativaTests(APITestCase):
             periodo_academico=solicitud.periodo_academico,
             referencia_matricula=solicitud.codigo_matricula,
             archivo=pdf('matricula-estudiante-menor'),
+        )
+        registrar_resultado_escaneo(
+            documento=evidencia_matricula.documento_soporte,
+            actor=self.revisor,
+            estado=EstadoEscaneoDocumento.SAFE,
+        )
+        revisar_documento(
+            documento=evidencia_matricula.documento_soporte,
+            actor=self.revisor,
+            aceptar=True,
+        )
+        revisar_evidencia_matricula(
+            evidencia=evidencia_matricula,
+            actor=self.revisor,
+            aceptar=True,
         )
 
         previsualizacion = self.client.get(

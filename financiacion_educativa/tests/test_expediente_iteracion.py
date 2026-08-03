@@ -25,7 +25,6 @@ from financiacion_educativa.models import (
 )
 from financiacion_educativa.services.documentos import (
     registrar_documento,
-    registrar_resultado_escaneo,
     revisar_documento,
 )
 from financiacion_educativa.services.matricula import (
@@ -38,6 +37,10 @@ from financiacion_educativa.services.participantes import (
     sincronizar_estudiante_desde_solicitud,
 )
 from financiacion_educativa.tests.factories import crear_solicitud
+from financiacion_educativa.tests.scan_helpers import (
+    conceder_permisos_documentales,
+    registrar_resultado_escaneo,
+)
 
 
 def pdf(nombre):
@@ -83,6 +86,7 @@ class ExpedienteVerificableIteracionTests(TestCase):
             password='Clave-2026',
             is_staff=True,
         )
+        conceder_permisos_documentales(self.revisor)
         self.solicitud = crear_solicitud(usuario=self.usuario)
         self.solicitud.estado = EstadoSolicitudFinanciacion.PENDING_DOCUMENT
         self.solicitud.tipo_documento_estudiante = TipoDocumentoIdentidad.CC
@@ -261,7 +265,11 @@ class ExpedienteVerificableIteracionTests(TestCase):
         self.assertContains(respuesta, 'No fue posible enviar el expediente')
         self.assertContains(respuesta, 'Abrir c&aacute;mara')
         self.assertContains(respuesta, 'Cargar certificado')
-        self.assertContains(respuesta, 'Completar evidencia')
+        self.assertNotContains(respuesta, 'Completar evidencia')
+        self.assertContains(
+            respuesta,
+            'Esto no impide enviar el expediente',
+        )
 
     def test_envio_completo_transiciona_y_reintento_es_idempotente(self):
         estudiante = sincronizar_estudiante_desde_solicitud(

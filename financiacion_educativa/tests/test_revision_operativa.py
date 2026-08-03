@@ -34,7 +34,6 @@ from financiacion_educativa.models import (
 from financiacion_educativa.services.documentos import (
     reemplazar_documento,
     registrar_documento,
-    registrar_resultado_escaneo,
     revisar_documento,
 )
 from financiacion_educativa.services.estado_publico import (
@@ -60,6 +59,7 @@ from financiacion_educativa.tests.factories import (
     crear_configuracion_financiera,
     crear_solicitud,
 )
+from financiacion_educativa.tests.scan_helpers import registrar_resultado_escaneo
 from instituciones.services.credenciales import crear_credencial_api
 
 

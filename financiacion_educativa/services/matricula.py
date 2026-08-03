@@ -69,9 +69,17 @@ def registrar_o_actualizar_evidencia_matricula(
     evidencia = EvidenciaMatricula.objects.select_for_update().filter(
         solicitud=solicitud
     ).first()
-    if evidencia and archivo:
+    if evidencia and archivo and evidencia.documento_soporte_id:
         documento = reemplazar_documento(
             documento=evidencia.documento_soporte,
+            archivo=archivo,
+            actor=actor,
+        )
+    elif evidencia and archivo:
+        documento = registrar_documento(
+            solicitud=solicitud,
+            tipo=TipoDocumentoFinanciacion.ENROLLMENT_EVIDENCE,
+            origen_captura=OrigenCapturaDocumento.USER_UPLOAD,
             archivo=archivo,
             actor=actor,
         )
@@ -86,11 +94,15 @@ def registrar_o_actualizar_evidencia_matricula(
             actor=actor,
         )
     else:
-        raise ValidationError({'archivo': 'Adjunta la evidencia de matricula.'})
+        documento = None
 
     if evidencia:
         cambios = any(getattr(evidencia, campo) != valor for campo, valor in valores.items())
-        cambios = cambios or evidencia.documento_soporte_id != documento.pk
+        cambios = cambios or evidencia.documento_soporte_id != getattr(
+            documento,
+            'pk',
+            None,
+        )
         for campo, valor in valores.items():
             setattr(evidencia, campo, valor)
         evidencia.documento_soporte = documento
@@ -123,8 +135,14 @@ def revisar_evidencia_matricula(
     motivo_rechazo='',
     observacion='',
 ):
-    if not actor or not actor.is_authenticated or not actor.is_staff:
-        raise ValidationError('La revision requiere un usuario administrativo.')
+    if (
+        not actor
+        or not actor.is_authenticated
+        or not actor.has_perm(
+            'financiacion_educativa.revisar_documento_financiacion'
+        )
+    ):
+        raise ValidationError('No tiene permiso para revisar documentos.')
     evidencia = EvidenciaMatricula.objects.select_for_update().select_related(
         'documento_soporte'
     ).get(pk=evidencia.pk)
@@ -137,6 +155,11 @@ def revisar_evidencia_matricula(
         return evidencia
     if evidencia.estado == EstadoEvidenciaMatricula.ACCEPTED:
         raise ValidationError('Una evidencia aceptada debe reemplazarse para cambiar.')
+    if (
+        aceptar
+        and not evidencia.documento_soporte_id
+    ):
+        raise ValidationError('No existe un soporte de matricula para revisar.')
     if (
         aceptar
         and evidencia.documento_soporte.estado_validacion

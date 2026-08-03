@@ -20,9 +20,12 @@ from financiacion_educativa.choices import (
 )
 from financiacion_educativa.services.documentos import (
     registrar_documento,
-    registrar_resultado_escaneo,
     reemplazar_documento,
     revisar_documento,
+)
+from financiacion_educativa.tests.scan_helpers import (
+    conceder_permisos_documentales,
+    registrar_resultado_escaneo,
 )
 from financiacion_educativa.services.participantes import (
     DatosParticipante,
@@ -82,6 +85,7 @@ class DocumentosPrivadosFase4Tests(TestCase):
             password='Clave-2026',
             is_staff=True,
         )
+        conceder_permisos_documentales(self.revisor)
         self.solicitud = crear_solicitud(usuario=self.usuario)
         self.solicitud.estado = EstadoSolicitudFinanciacion.PENDING_DOCUMENT
         self.solicitud.save(update_fields=['estado'])
