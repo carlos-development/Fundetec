@@ -90,7 +90,9 @@ class SimuladorPublicoFinanciacionEducativaTests(TestCase):
         self.assertContains(response, 'Capital financiado')
         self.assertContains(response, 'Total por pagar')
         self.assertContains(response, 'Cuota aproximada')
-        self.assertContains(response, 'Anualidad francesa')
+        self.assertNotContains(response, 'M&eacute;todo de c&aacute;lculo')
+        self.assertNotContains(response, 'Anualidad francesa')
+        self.assertContains(response, 'edu-public-simulator-page')
         self.assertContains(response, 'Plan completo de pagos')
         self.assertContains(response, '<tbody data-simulator-plan>')
         self.assertContains(

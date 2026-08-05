@@ -2,6 +2,7 @@
 {% load financiacion_format %}
 
 {% block title %}Simulador educativo | {{ education_brand.name|default:"Aprobado" }}{% endblock %}
+{% block body_class %}{% if simulador_publico %}edu-public-simulator-page{% endif %}{% endblock %}
 
 {% block content %}
 {% url 'financiacion_educativa_web:reanudar-solicitudes' as resume_url %}
@@ -84,7 +85,9 @@
                     <div class="is-subtotal"><dt>Capital financiado</dt><dd data-simulator-result="capital_total_financiado">{% if simulacion %}{{ simulacion.resultado.capital_total_financiado|cop }}{% else %}&mdash;{% endif %}</dd></div>
                     <div><dt>Intereses proyectados <span data-simulator-rate="tasa_interes_mensual">{% if simulacion %}({{ simulacion.configuracion.tasa_interes_mensual|porcentaje }} % mensual){% endif %}</span></dt><dd data-simulator-result="intereses_totales">{% if simulacion %}{{ simulacion.resultado.intereses_totales|cop }}{% else %}&mdash;{% endif %}</dd></div>
                     <div><dt>{% if simulador_publico %}Total por pagar{% else %}Total proyectado{% endif %}</dt><dd data-simulator-result="total_proyectado">{% if simulacion %}{{ simulacion.resultado.total_proyectado|cop }}{% else %}&mdash;{% endif %}</dd></div>
-                    <div><dt>M&eacute;todo de c&aacute;lculo</dt><dd data-simulator-method>{% if simulacion %}{{ simulacion.configuracion.get_metodo_calculo_display }}{% else %}&mdash;{% endif %}</dd></div>
+                    {% if not simulador_publico %}
+                        <div><dt>M&eacute;todo de c&aacute;lculo</dt><dd data-simulator-method>{% if simulacion %}{{ simulacion.configuracion.get_metodo_calculo_display }}{% else %}&mdash;{% endif %}</dd></div>
+                    {% endif %}
                     <div class="is-installment"><dt>{% if simulador_publico %}Cuota aproximada{% else %}Cuota mensual estimada{% endif %}</dt><dd data-simulator-result="cuota_informativa">{% if simulacion %}{{ simulacion.resultado.cuota_informativa|cop }}{% else %}&mdash;{% endif %}</dd></div>
                 </dl>
 

@@ -33,6 +33,10 @@
     margin: 0 auto;
 }
 
+.edu-public-simulator-page .edu-simulator-shell {
+    font-size: 0.95rem;
+}
+
 .edu-simulator-heading {
     max-width: 720px;
     margin-bottom: 28px;
