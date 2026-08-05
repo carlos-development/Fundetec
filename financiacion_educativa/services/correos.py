@@ -163,7 +163,7 @@ def construir_correo_decision_educativa(
     recipient = normalizar_destinatario(recipient)
     titulos = {
         TipoDecisionRevisionEducativa.APPROVED: (
-            'Tu financiacion educativa fue aprobada'
+            'Tu expediente fue aprobado para continuar a firma'
         ),
         TipoDecisionRevisionEducativa.REJECTED: (
             'Resultado de tu solicitud educativa'
@@ -177,9 +177,7 @@ def construir_correo_decision_educativa(
         'decision_type': decision.tipo,
         'title': titulos[decision.tipo],
         'message': decision.mensaje_solicitante,
-        'course_authorized': (
-            decision.tipo == TipoDecisionRevisionEducativa.APPROVED
-        ),
+        'course_authorized': False,
         'email_logo_url': str(
             getattr(settings, 'EDUCATION_EMAIL_LOGO_URL', '')
         ).strip(),

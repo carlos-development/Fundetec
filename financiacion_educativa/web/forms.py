@@ -289,6 +289,38 @@ class CrearFotografiaFinancieraForm(forms.Form):
     )
 
 
+class SimulacionFinanciacionEducativaForm(forms.Form):
+    monto_solicitado = forms.DecimalField(
+        label='Monto a financiar',
+        max_digits=14,
+        decimal_places=2,
+        min_value=1,
+        widget=forms.NumberInput(
+            attrs={
+                'inputmode': 'decimal',
+                'min': '1',
+                'step': '50000',
+                'autocomplete': 'off',
+            }
+        ),
+    )
+    plazo_meses = forms.IntegerField(
+        label='Plazo en meses',
+        min_value=1,
+        max_value=120,
+        widget=forms.NumberInput(
+            attrs={
+                'inputmode': 'numeric',
+                'min': '1',
+                'max': '120',
+                'step': '1',
+                'autocomplete': 'off',
+            }
+        ),
+        help_text='El simulador admite plazos de 1 a 120 meses.',
+    )
+
+
 class BaseProyeccionFinancieraForm(forms.Form):
     fecha_efectiva = forms.DateField(
         label='Fecha efectiva hipotetica',

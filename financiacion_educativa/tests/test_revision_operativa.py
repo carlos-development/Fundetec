@@ -1,4 +1,5 @@
 from datetime import date
+from tempfile import TemporaryDirectory
 
 from django.contrib.auth import get_user_model
 from django.core import mail
@@ -22,13 +23,18 @@ from financiacion_educativa.choices import (
     RolParticipante,
     TipoDecisionRevisionEducativa,
     TipoConsentimiento,
+    TipoArtefactoContractualEducativo,
     TipoDocumentoFinanciacion,
     TipoDocumentoIdentidad,
 )
 from financiacion_educativa.models import (
+    ArtefactoContractualEducativo,
+    CondicionesFinancieras,
+    ConfiguracionFinancieraEducativa,
     Consentimiento,
     DecisionRevisionEducativa,
     EntregaCorreoEstadoSolicitud,
+    ProcesoFirmaEducativa,
     VersionTerminosFinanciacion,
 )
 from financiacion_educativa.services.documentos import (
@@ -47,10 +53,10 @@ from financiacion_educativa.services.participantes import (
     DatosParticipante,
     registrar_o_actualizar_participante,
 )
-from financiacion_educativa.services.reglas_financieras import (
-    crear_fotografia_condiciones_financieras,
-)
 from financiacion_educativa.services.revision import decidir_solicitud
+from financiacion_educativa.services.firma_zapsign import (
+    enviar_pagare_educativo,
+)
 from financiacion_educativa.services.requisitos_documentales import (
     calcular_requisitos_documentales,
     completar_fase_documental,
@@ -60,6 +66,9 @@ from financiacion_educativa.tests.factories import (
     crear_solicitud,
 )
 from financiacion_educativa.tests.scan_helpers import registrar_resultado_escaneo
+from financiacion_educativa.tests.signature_backends import (
+    RecordingEducationalSignatureBackend,
+)
 from instituciones.services.credenciales import crear_credencial_api
 
 
@@ -73,9 +82,26 @@ def jpeg(nombre, marca):
 
 @override_settings(
     EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
+    FINANCIACION_EDUCATIVA_ACREEDOR_RAZON_SOCIAL=(
+        'APROBADO SOLUCIONES DIGITALES S.A.S.'
+    ),
+    FINANCIACION_EDUCATIVA_ZAPSIGN_BACKEND=(
+        'financiacion_educativa.tests.signature_backends.'
+        'RecordingEducationalSignatureBackend'
+    ),
+    FINANCIACION_EDUCATIVA_ALLOW_TEST_SIGNATURE_BACKENDS=True,
+    FINANCIACION_EDUCATIVA_ZAPSIGN_WEBHOOK_SECRET='revision-webhook-secret',
 )
 class RevisionOperativaTests(TestCase):
     def setUp(self):
+        RecordingEducationalSignatureBackend.reset()
+        self.private_root = TemporaryDirectory()
+        self.addCleanup(self.private_root.cleanup)
+        self.private_override = override_settings(
+            FINANCIACION_EDUCATIVA_PRIVATE_ROOT=self.private_root.name,
+        )
+        self.private_override.enable()
+        self.addCleanup(self.private_override.disable)
         User = get_user_model()
         self.propietario = User.objects.create_user(
             username='revision@example.com',
@@ -123,6 +149,8 @@ class RevisionOperativaTests(TestCase):
                 tipo_documento=TipoDocumentoIdentidad.CC,
                 numero_documento='100200300',
                 fecha_nacimiento=date(1990, 1, 1),
+                correo='revision@example.com',
+                telefono='3001234567',
                 relacion_estudiante=RelacionEstudiante.SELF,
             ),
             roles={
@@ -188,11 +216,6 @@ class RevisionOperativaTests(TestCase):
             aceptar=True,
         )
         crear_configuracion_financiera()
-        self.fotografia = crear_fotografia_condiciones_financieras(
-            self.solicitud,
-            fecha_inicio_plan=date(2026, 8, 1),
-            actor=self.propietario,
-        )
         self.solicitud.estado = (
             EstadoSolicitudFinanciacion.PENDING_MANUAL_REVIEW
         )
@@ -215,34 +238,88 @@ class RevisionOperativaTests(TestCase):
                 requisitos_pendientes=requisitos,
             )
 
-    def test_aprobacion_bloquea_fotografia_y_autoriza_curso(self):
+    def test_aprobacion_bloquea_fotografia_y_genera_contratos(self):
+        self.assertFalse(
+            CondicionesFinancieras.objects.filter(
+                solicitud=self.solicitud
+            ).exists()
+        )
         decision = self._decidir(
             TipoDecisionRevisionEducativa.APPROVED,
             MotivoDecisionRevisionEducativa.REQUIREMENTS_VERIFIED,
         )
 
         self.solicitud.refresh_from_db()
+        self.fotografia = CondicionesFinancieras.objects.get(
+            solicitud=self.solicitud,
+            activa=True,
+        )
         self.fotografia.refresh_from_db()
         entrega = EntregaCorreoEstadoSolicitud.objects.get(decision=decision)
         resultado = obtener_resultado_publico(self.solicitud)
 
         self.assertEqual(
             self.solicitud.estado,
-            EstadoSolicitudFinanciacion.APPROVED,
+            EstadoSolicitudFinanciacion.PENDING_PROMISSORY_NOTE,
         )
         self.assertTrue(self.fotografia.bloqueada)
+        self.assertEqual(self.fotografia.fecha_inicio_plan, timezone.localdate())
         self.assertEqual(decision.fotografia_financiera, self.fotografia)
         self.assertEqual(entrega.estado, EstadoEntregaCorreoSolicitud.SENT)
         self.assertEqual(len(mail.outbox), 1)
-        self.assertTrue(resultado.curso_autorizado)
-        self.assertEqual(resultado.estado, 'APPROVED')
-        self.assertEqual(
-            resultado.condiciones_financieras['currency'],
-            'COP',
+        self.assertFalse(resultado.curso_autorizado)
+        self.assertEqual(resultado.estado, 'UNDER_REVIEW')
+        self.assertIsNone(resultado.condiciones_financieras)
+        self.assertSetEqual(
+            set(
+                ArtefactoContractualEducativo.objects.filter(
+                    solicitud=self.solicitud,
+                ).values_list('tipo', flat=True)
+            ),
+            {
+                TipoArtefactoContractualEducativo.PROMISSORY_NOTE,
+                TipoArtefactoContractualEducativo.ENROLLMENT_FORM,
+            },
         )
         decision.mensaje_solicitante = 'Cambio no permitido'
         with self.assertRaises(ValidationError):
             decision.save()
+
+    def test_aprobacion_sin_politica_revierte_decision_y_estado(self):
+        ConfiguracionFinancieraEducativa.objects.all().delete()
+
+        with self.assertRaises(ValidationError):
+            self._decidir(
+                TipoDecisionRevisionEducativa.APPROVED,
+                MotivoDecisionRevisionEducativa.REQUIREMENTS_VERIFIED,
+            )
+
+        self.solicitud.refresh_from_db()
+        self.assertEqual(
+            self.solicitud.estado,
+            EstadoSolicitudFinanciacion.PENDING_MANUAL_REVIEW,
+        )
+        self.assertFalse(DecisionRevisionEducativa.objects.exists())
+        self.assertFalse(CondicionesFinancieras.objects.exists())
+
+    def test_aprobacion_sin_correo_del_firmante_revierte_todo(self):
+        self.estudiante.correo = ''
+        self.estudiante.save(update_fields=['correo', 'actualizado_en'])
+
+        with self.assertRaises(ValidationError):
+            self._decidir(
+                TipoDecisionRevisionEducativa.APPROVED,
+                MotivoDecisionRevisionEducativa.REQUIREMENTS_VERIFIED,
+            )
+
+        self.solicitud.refresh_from_db()
+        self.assertEqual(
+            self.solicitud.estado,
+            EstadoSolicitudFinanciacion.PENDING_MANUAL_REVIEW,
+        )
+        self.assertFalse(DecisionRevisionEducativa.objects.exists())
+        self.assertFalse(CondicionesFinancieras.objects.exists())
+        self.assertFalse(ArtefactoContractualEducativo.objects.exists())
 
     @override_settings(
         EMAIL_BACKEND=(
@@ -261,7 +338,7 @@ class RevisionOperativaTests(TestCase):
 
         self.assertEqual(
             self.solicitud.estado,
-            EstadoSolicitudFinanciacion.APPROVED,
+            EstadoSolicitudFinanciacion.PENDING_PROMISSORY_NOTE,
         )
         self.assertEqual(entrega.estado, EstadoEntregaCorreoSolicitud.FAILED)
         self.assertEqual(
@@ -406,7 +483,7 @@ class RevisionOperativaTests(TestCase):
         self.assertEqual(respuesta.status_code, 302)
         self.assertTrue(DecisionRevisionEducativa.objects.exists())
 
-    def test_api_expone_resultado_reducido_que_autoriza_curso(self):
+    def test_api_mantiene_curso_bloqueado_hasta_la_firma(self):
         self._decidir(
             TipoDecisionRevisionEducativa.APPROVED,
             MotivoDecisionRevisionEducativa.REQUIREMENTS_VERIFIED,
@@ -425,9 +502,55 @@ class RevisionOperativaTests(TestCase):
 
         self.assertEqual(respuesta.status_code, 200)
         datos = respuesta.json()
-        self.assertEqual(datos['status'], 'APPROVED')
-        self.assertTrue(datos['course_authorized'])
-        self.assertIsNotNone(datos['authorization_effective_at'])
-        self.assertEqual(datos['financial_terms']['currency'], 'COP')
+        self.assertEqual(datos['status'], 'UNDER_REVIEW')
+        self.assertFalse(datos['course_authorized'])
+        self.assertIsNone(datos['authorization_effective_at'])
+        self.assertIsNone(datos['financial_terms'])
         self.assertNotIn('observacion_interna', str(datos))
         self.assertNotIn('Nota interna', str(datos))
+
+    def test_recorrido_manual_hasta_firma_autoriza_api(self):
+        self._decidir(
+            TipoDecisionRevisionEducativa.APPROVED,
+            MotivoDecisionRevisionEducativa.REQUIREMENTS_VERIFIED,
+        )
+        proceso = ProcesoFirmaEducativa.objects.get(solicitud=self.solicitud)
+        enviar_pagare_educativo(proceso=proceso)
+        proceso.refresh_from_db()
+        webhook = self.client.post(
+            reverse('financiacion_educativa_api:zapsign-webhook'),
+            {
+                'event_type': 'doc_signed',
+                'token': proceso.token_documento_externo,
+                'external_id': proceso.external_id,
+                'status': 'signed',
+                'signers': [
+                    {'status': 'signed', 'signed_at': '2026-08-04'}
+                ],
+            },
+            content_type='application/json',
+            HTTP_X_EDUCATIONAL_SIGNATURE_SECRET='revision-webhook-secret',
+        )
+        credencial = crear_credencial_api(
+            institucion=self.solicitud.institucion,
+            nombre='Consulta posterior a firma',
+        )
+        respuesta = self.client.get(
+            reverse(
+                'financiacion_educativa_api:solicitud-detalle',
+                kwargs={'application_id': self.solicitud.pk},
+            ),
+            HTTP_AUTHORIZATION=f'ApiKey {credencial.token}',
+        )
+
+        self.solicitud.refresh_from_db()
+        self.assertEqual(webhook.status_code, 200)
+        self.assertEqual(
+            self.solicitud.estado,
+            EstadoSolicitudFinanciacion.APPROVED,
+        )
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta.data['status'], 'APPROVED')
+        self.assertTrue(respuesta.data['course_authorized'])
+        self.assertIsNotNone(respuesta.data['financial_terms'])
+        self.assertIsNotNone(respuesta.data['enrollment_date'])

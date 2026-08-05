@@ -1,5 +1,6 @@
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.utils import timezone
 
 from financiacion_educativa.choices import (
     EstadoSolicitudFinanciacion,
@@ -15,6 +16,9 @@ from financiacion_educativa.models import (
     SolicitudFinanciacionEducativa,
 )
 from financiacion_educativa.services.correos import normalizar_destinatario
+from financiacion_educativa.services.artefactos_contractuales import (
+    generar_artefactos_contractuales,
+)
 from financiacion_educativa.services.entrega_invitaciones import (
     calcular_hmac_destinatario,
 )
@@ -25,9 +29,14 @@ from financiacion_educativa.services.estados import transicionar_solicitud
 from financiacion_educativa.services.participantes import (
     solicitud_requiere_tutor,
 )
+from financiacion_educativa.services.orquestacion_automatica import (
+    programar_orquestacion_automatica,
+)
 from financiacion_educativa.services.politica_documental import (
-    construir_politica_documental,
-    requisito_listo_para_aprobacion,
+    validar_expediente_para_aprobacion,
+)
+from financiacion_educativa.services.reglas_financieras import (
+    crear_fotografia_condiciones_financieras,
 )
 
 
@@ -43,25 +52,7 @@ def _validar_revisor(actor):
 
 
 def _validar_aprobacion(solicitud):
-    politica = construir_politica_documental(solicitud)
-    faltantes = [
-        requisito.codigo
-        for requisito in politica
-        if requisito.obligatorio and requisito.documento is None
-    ]
-    if faltantes:
-        raise ValidationError(
-            'El expediente no contiene todos los documentos obligatorios.'
-        )
-    no_resueltos = [
-        requisito.codigo
-        for requisito in politica
-        if not requisito_listo_para_aprobacion(requisito)
-    ]
-    if no_resueltos:
-        raise ValidationError(
-            'Todos los documentos aportados deben estar seguros y aceptados.'
-        )
+    validar_expediente_para_aprobacion(solicitud)
 
 
 def _programar_correo(*, solicitud, decision):
@@ -130,18 +121,21 @@ def decidir_solicitud(
             es_legado=False,
         ).first()
         if not fotografia:
-            raise ValidationError(
-                'La aprobacion requiere una fotografia financiera activa.'
+            fotografia = crear_fotografia_condiciones_financieras(
+                solicitud,
+                fecha_inicio_plan=timezone.localdate(),
+                actor=actor,
+                bloquear=True,
             )
         if not mensaje:
             mensaje = (
-                'La financiacion fue aprobada y la institucion puede '
-                'activar el curso.'
+                'La revision fue aprobada. Ahora debes completar la firma '
+                'del pagare antes de autorizar el curso.'
             )
         CondicionesFinancieras.objects.filter(pk=fotografia.pk).update(
             bloqueada=True
         )
-        nuevo_estado = EstadoSolicitudFinanciacion.APPROVED
+        nuevo_estado = EstadoSolicitudFinanciacion.PENDING_PROMISSORY_NOTE
     elif tipo == TipoDecisionRevisionEducativa.REJECTED:
         if requisitos:
             raise ValidationError({
@@ -198,16 +192,19 @@ def decidir_solicitud(
             'decision_id': str(decision.pk),
             'decision_type': tipo,
             'reason_code': motivo,
-            'course_authorized': (
-                tipo == TipoDecisionRevisionEducativa.APPROVED
-            ),
+            'course_authorized': False,
         },
     )
     if tipo == TipoDecisionRevisionEducativa.APPROVED:
+        generar_artefactos_contractuales(
+            solicitud=solicitud,
+            actor=actor,
+        )
         solicitud.participantes.update(
             identidad_verificada=True,
             relacion_verificada=True,
             actualizado_por=actor,
         )
+        programar_orquestacion_automatica(solicitud_id=solicitud.pk)
     _programar_correo(solicitud=solicitud, decision=decision)
     return decision

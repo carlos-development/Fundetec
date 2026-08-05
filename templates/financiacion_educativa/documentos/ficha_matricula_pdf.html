@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <title>Ficha de matricula {{ numero_documento }}</title>
+    <style>
+        @page { size: Letter; margin: 16mm; }
+        body { color: #172033; font: 9.5pt Arial, sans-serif; }
+        h1 { color: #0b4da2; font-size: 18pt; margin: 0; }
+        h2 { border-bottom: 2px solid #f2c500; color: #0b4da2; font-size: 11pt; margin: 6mm 0 2mm; padding-bottom: 1mm; }
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #d7dee8; padding: 2mm; text-align: left; }
+        th { background: #eef4fb; width: 28%; }
+        .brand { color: #0b4da2; float: right; font-size: 15pt; font-weight: 700; }
+        .meta { color: #596579; margin: 2mm 0 5mm; }
+        .missing { color: #7a5310; }
+        .fine { color: #5e6878; font-size: 8pt; margin-top: 6mm; }
+    </style>
+</head>
+<body>
+    <div class="brand">Aprobado</div>
+    <h1>Ficha de matr&iacute;cula</h1>
+    <div class="meta">{{ numero_documento }} &middot; {{ solicitud.referencia_externa }}</div>
+
+    {% for grupo, campos in mapeo_ficha.items %}
+        <h2>{{ grupo }}</h2>
+        <table>
+            {% for campo in campos %}
+                <tr>
+                    <th>{{ campo.campo }}</th>
+                    <td class="{% if not campo.disponible %}missing{% endif %}">
+                        {% if campo.disponible %}{{ campo.valor }}{% else %}No informado{% endif %}
+                    </td>
+                </tr>
+            {% endfor %}
+        </table>
+    {% endfor %}
+
+    <h2>Resumen financiero</h2>
+    <table>
+        <tr><th>Valor del programa</th><td>COP {{ fotografia.valor_financiado }}</td></tr>
+        <tr><th>Capital financiado</th><td>COP {{ fotografia.capital_financiado }}</td></tr>
+        <tr><th>Plazo</th><td>{{ fotografia.plazo_meses }} meses</td></tr>
+        <tr><th>Cuota estimada</th><td>COP {{ fotografia.valor_cuota_estimada }}</td></tr>
+    </table>
+    <p class="fine">
+        Esta ficha refleja exclusivamente datos disponibles en la solicitud y el expediente. Los campos
+        no informados permanecen vac&iacute;os y no se completan mediante inferencias.
+    </p>
+</body>
+</html>

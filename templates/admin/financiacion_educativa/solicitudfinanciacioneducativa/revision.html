@@ -17,6 +17,7 @@
                     <th>Titular</th>
                     <th>Escaneo</th>
                     <th>Revisi&oacute;n</th>
+                    <th>Validaci&oacute;n IA</th>
                     <th>Archivo</th>
                 </tr>
             </thead>
@@ -28,13 +29,25 @@
                     <td>{{ documento.get_estado_escaneo_display }}</td>
                     <td>{{ documento.get_estado_validacion_display }}</td>
                     <td>
+                        {% with validacion=documento.validaciones_ia_recientes.0 %}
+                            {% if validacion %}
+                                {{ validacion.get_estado_display }}
+                                {% if validacion.confianza is not None %}<br>Confianza: {{ validacion.confianza }}{% endif %}
+                                {% if validacion.hallazgos %}<br>Hallazgos: {{ validacion.hallazgos|join:", " }}{% endif %}
+                                {% if validacion.codigo_error %}<br>Error: {{ validacion.codigo_error }}{% endif %}
+                            {% else %}
+                                Sin procesar
+                            {% endif %}
+                        {% endwith %}
+                    </td>
+                    <td>
                         <a target="_blank" rel="noopener" href="{% url 'financiacion_educativa_web:documento-previsualizar' original.pk documento.pk %}">
                             Previsualizar
                         </a>
                     </td>
                 </tr>
             {% empty %}
-                <tr><td colspan="5">No hay documentos activos.</td></tr>
+                <tr><td colspan="6">No hay documentos activos.</td></tr>
             {% endfor %}
             </tbody>
         </table>

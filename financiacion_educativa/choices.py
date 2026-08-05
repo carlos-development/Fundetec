@@ -95,6 +95,19 @@ class OrigenIntentoEscaneoDocumento(models.TextChoices):
     COMMAND = 'COMMAND', 'Comando de recuperacion'
 
 
+class EstadoValidacionIADocumento(models.TextChoices):
+    STARTED = 'STARTED', 'Iniciada'
+    AUTO_APPROVED = 'AUTO_APPROVED', 'Aceptacion automatica concluyente'
+    MANUAL_REVIEW = 'MANUAL_REVIEW', 'Requiere revision manual'
+    ERROR = 'ERROR', 'Fallo tecnico'
+
+
+class OrigenValidacionIADocumento(models.TextChoices):
+    ADMIN = 'ADMIN', 'Administrador'
+    COMMAND = 'COMMAND', 'Comando operativo'
+    AUTOMATIC = 'AUTOMATIC', 'Orquestacion automatica'
+
+
 class MotivoRechazoDocumento(models.TextChoices):
     UNREADABLE = 'UNREADABLE', 'Documento ilegible'
     INCOMPLETE = 'INCOMPLETE', 'Documento incompleto'
@@ -221,7 +234,7 @@ class TipoEventoSeguridadFinanciacion(models.TextChoices):
 
 
 class TipoDecisionRevisionEducativa(models.TextChoices):
-    APPROVED = 'APPROVED', 'Aprobar y autorizar curso'
+    APPROVED = 'APPROVED', 'Aprobar expediente y continuar a pagare'
     REJECTED = 'REJECTED', 'Rechazar'
     CORRECTION_REQUESTED = (
         'CORRECTION_REQUESTED',
@@ -282,6 +295,35 @@ class EstadoPublicoSolicitud(models.TextChoices):
     APPROVED = 'APPROVED', 'Aprobada; curso autorizado'
     REJECTED = 'REJECTED', 'Rechazada'
     CANCELLED = 'CANCELLED', 'Cancelada'
+
+
+class TipoArtefactoContractualEducativo(models.TextChoices):
+    PROMISSORY_NOTE = 'PROMISSORY_NOTE', 'Pagare educativo'
+    ENROLLMENT_FORM = 'ENROLLMENT_FORM', 'Ficha de matricula'
+
+
+class EstadoArtefactoContractualEducativo(models.TextChoices):
+    GENERATED = 'GENERATED', 'Generado'
+    SENT_FOR_SIGNATURE = 'SENT_FOR_SIGNATURE', 'Enviado a firma'
+    SIGNED = 'SIGNED', 'Firmado'
+    CANCELLED = 'CANCELLED', 'Cancelado'
+
+
+class EstadoProcesoFirmaEducativa(models.TextChoices):
+    PENDING = 'PENDING', 'Pendiente de envio'
+    SENDING = 'SENDING', 'Enviando'
+    SENT = 'SENT', 'Pendiente de firma'
+    SIGNED = 'SIGNED', 'Firmado'
+    REFUSED = 'REFUSED', 'Firma rechazada'
+    FAILED = 'FAILED', 'Envio fallido'
+    CANCELLED = 'CANCELLED', 'Cancelado'
+
+
+class EstadoEventoWebhookFirmaEducativa(models.TextChoices):
+    RECEIVED = 'RECEIVED', 'Recibido'
+    PROCESSED = 'PROCESSED', 'Procesado'
+    IGNORED = 'IGNORED', 'Ignorado'
+    RETRYABLE_ERROR = 'RETRYABLE_ERROR', 'Fallo recuperable'
 
 
 class EstadoVersionTerminos(models.TextChoices):

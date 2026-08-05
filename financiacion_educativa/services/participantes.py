@@ -260,6 +260,20 @@ def registrar_o_actualizar_participante(
             _asignar_rol(solicitud, participante, rol, actor=actor)
         campos_modificados.append('roles')
 
+    es_responsable_contractual = RolParticipante.PRINCIPAL_DEBTOR in roles
+    if participante.responsable_contractual != es_responsable_contractual:
+        participante.responsable_contractual = es_responsable_contractual
+        participante.actualizado_por = actor
+        participante.full_clean()
+        participante.save(
+            update_fields=[
+                'responsable_contractual',
+                'actualizado_por',
+                'actualizado_en',
+            ]
+        )
+        campos_modificados.append('responsable_contractual')
+
     if creado or campos_modificados:
         EventoParticipanteFinanciacion.objects.create(
             participante=participante,

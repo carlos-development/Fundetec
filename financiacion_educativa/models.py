@@ -29,11 +29,16 @@ from .choices import (
     EstadoConfiguracionFinanciera,
     EstadoInvitacionContinuacion,
     EstadoIntentoEscaneoDocumento,
+    EstadoValidacionIADocumento,
     EstadoVersionTerminos,
+    EstadoArtefactoContractualEducativo,
+    EstadoProcesoFirmaEducativa,
+    EstadoEventoWebhookFirmaEducativa,
     MetodoCalculoFinanciero,
     MotivoRechazoDocumento,
     OrigenEntregaInvitacion,
     OrigenIntentoEscaneoDocumento,
+    OrigenValidacionIADocumento,
     OrigenCapturaDocumento,
     PoliticaCausacionInteres,
     PoliticaRedondeoFinanciero,
@@ -50,6 +55,7 @@ from .choices import (
     TipoConsentimiento,
     TipoDocumentoFinanciacion,
     TipoDocumentoIdentidad,
+    TipoArtefactoContractualEducativo,
     TIPOS_DOCUMENTO_IDENTIDAD_CAMARA,
 )
 from .storage import private_document_storage
@@ -71,6 +77,11 @@ def ruta_documento_privado(instance, _filename):
     nombre = instance.nombre_seguro or f'{uuid.uuid4().hex}{EXTENSION_DOCUMENTO_POR_MIME.get(instance.content_type, "")}'
     instance.nombre_seguro = nombre
     return f'documentos/{nombre[:2]}/{nombre}'
+
+
+def ruta_artefacto_contractual_privado(instance, _filename):
+    nombre = f'{uuid.uuid4().hex}.pdf'
+    return f'contratos/{instance.solicitud_id}/{instance.tipo.lower()}/{nombre}'
 
 
 class ModeloInmutableMixin:
@@ -1416,6 +1427,99 @@ class ReaperturaEscaneoDocumento(models.Model):
         return f'Reapertura {self.documento_id} - {self.creado_en:%Y-%m-%d %H:%M}'
 
 
+class ValidacionIADocumento(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    documento = models.ForeignKey(
+        DocumentoFinanciacion,
+        on_delete=models.PROTECT,
+        related_name='validaciones_ia',
+    )
+    numero = models.PositiveSmallIntegerField()
+    estado = models.CharField(
+        max_length=30,
+        choices=EstadoValidacionIADocumento.choices,
+        default=EstadoValidacionIADocumento.STARTED,
+    )
+    origen = models.CharField(
+        max_length=20,
+        choices=OrigenValidacionIADocumento.choices,
+    )
+    proveedor = models.CharField(max_length=60, blank=True)
+    modelo = models.CharField(max_length=80, blank=True)
+    version_esquema = models.CharField(max_length=30, default='1')
+    calidad = models.DecimalField(
+        max_digits=5,
+        decimal_places=4,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0), MaxValueValidator(1)],
+    )
+    legibilidad = models.DecimalField(
+        max_digits=5,
+        decimal_places=4,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0), MaxValueValidator(1)],
+    )
+    confianza = models.DecimalField(
+        max_digits=5,
+        decimal_places=4,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0), MaxValueValidator(1)],
+    )
+    corresponde_tipo = models.BooleanField(null=True, blank=True)
+    indicios_imagen_real = models.BooleanField(null=True, blank=True)
+    datos_consistentes = models.BooleanField(null=True, blank=True)
+    hallazgos = models.JSONField(default=list, blank=True)
+    codigo_error = models.CharField(max_length=60, blank=True)
+    solicitado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='validaciones_ia_documentales_solicitadas',
+    )
+    iniciado_en = models.DateTimeField(default=timezone.now, editable=False)
+    finalizado_en = models.DateTimeField(null=True, blank=True, editable=False)
+
+    class Meta:
+        ordering = ['documento', 'numero']
+        verbose_name = 'Validacion IA documental'
+        verbose_name_plural = 'Validaciones IA documentales'
+        permissions = [
+            (
+                'procesar_validacion_ia_documento',
+                'Puede procesar validaciones IA de documentos educativos',
+            ),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['documento', 'numero'],
+                name='uniq_validacion_ia_doc_num',
+            ),
+            models.UniqueConstraint(
+                fields=['documento'],
+                condition=models.Q(estado=EstadoValidacionIADocumento.STARTED),
+                name='uniq_validacion_ia_doc_activa',
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=['estado', 'iniciado_en'],
+                name='val_ia_doc_estado_fecha_idx',
+            ),
+        ]
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError(
+            'Las validaciones IA deben conservarse para auditoria.'
+        )
+
+    def __str__(self):
+        return f'{self.documento_id} - validacion IA {self.numero}'
+
+
 class EvidenciaMatricula(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     solicitud = models.OneToOneField(
@@ -1826,6 +1930,272 @@ class CuotaAmortizacionEducativa(ModeloInmutableMixin, models.Model):
 
     def __str__(self):
         return f'{self.fotografia_id} - cuota {self.numero}'
+
+
+class ArtefactoContractualEducativo(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    solicitud = models.ForeignKey(
+        SolicitudFinanciacionEducativa,
+        on_delete=models.PROTECT,
+        related_name='artefactos_contractuales',
+    )
+    fotografia_financiera = models.ForeignKey(
+        CondicionesFinancieras,
+        on_delete=models.PROTECT,
+        related_name='artefactos_contractuales',
+    )
+    tipo = models.CharField(
+        max_length=30,
+        choices=TipoArtefactoContractualEducativo.choices,
+    )
+    numero_version = models.PositiveIntegerField()
+    vigente = models.BooleanField(default=True)
+    estado = models.CharField(
+        max_length=30,
+        choices=EstadoArtefactoContractualEducativo.choices,
+        default=EstadoArtefactoContractualEducativo.GENERATED,
+    )
+    numero_documento = models.CharField(max_length=80)
+    version_plantilla = models.CharField(max_length=40)
+    archivo = models.FileField(
+        upload_to=ruta_artefacto_contractual_privado,
+        storage=private_document_storage,
+        max_length=500,
+    )
+    hash_sha256 = models.CharField(
+        max_length=64,
+        validators=[hash_sha256_validator],
+    )
+    tamano_bytes = models.PositiveBigIntegerField()
+    archivo_firmado = models.FileField(
+        upload_to=ruta_artefacto_contractual_privado,
+        storage=private_document_storage,
+        max_length=500,
+        null=True,
+        blank=True,
+    )
+    hash_firmado_sha256 = models.CharField(
+        max_length=64,
+        validators=[hash_sha256_validator],
+        blank=True,
+    )
+    tamano_firmado_bytes = models.PositiveBigIntegerField(
+        null=True,
+        blank=True,
+    )
+    firmado_en = models.DateTimeField(null=True, blank=True, editable=False)
+    generado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='artefactos_contractuales_educativos_generados',
+    )
+    generado_en = models.DateTimeField(default=timezone.now, editable=False)
+    actualizado_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['solicitud', 'tipo', '-numero_version']
+        verbose_name = 'Artefacto contractual educativo'
+        verbose_name_plural = 'Artefactos contractuales educativos'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['solicitud', 'tipo', 'numero_version'],
+                name='uniq_art_edu_sol_tipo_ver',
+            ),
+            models.UniqueConstraint(
+                fields=['solicitud', 'tipo'],
+                condition=models.Q(vigente=True),
+                name='uniq_art_edu_vigente_tipo',
+            ),
+            models.CheckConstraint(
+                condition=models.Q(tamano_bytes__gt=0),
+                name='art_edu_tamano_positivo',
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=['solicitud', 'tipo', 'estado'],
+                name='art_edu_sol_tipo_estado',
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        if not self.fotografia_financiera_id or not self.solicitud_id:
+            return
+        fotografia = self.fotografia_financiera
+        if fotografia.solicitud_id != self.solicitud_id:
+            raise ValidationError({
+                'fotografia_financiera': (
+                    'La fotografia financiera no pertenece a la solicitud.'
+                ),
+            })
+        if (
+            fotografia.es_legado
+            or not fotografia.activa
+            or not fotografia.bloqueada
+        ):
+            raise ValidationError({
+                'fotografia_financiera': (
+                    'El artefacto requiere condiciones vigentes y bloqueadas.'
+                ),
+            })
+        tiene_firmado = bool(
+            self.archivo_firmado
+            or self.hash_firmado_sha256
+            or self.tamano_firmado_bytes
+            or self.firmado_en
+        )
+        if self.estado == EstadoArtefactoContractualEducativo.SIGNED:
+            if self.tipo != TipoArtefactoContractualEducativo.PROMISSORY_NOTE:
+                raise ValidationError({
+                    'estado': 'Solo el pagare se completa mediante firma.',
+                })
+            if not all((
+                self.archivo_firmado,
+                self.hash_firmado_sha256,
+                self.tamano_firmado_bytes,
+                self.firmado_en,
+            )):
+                raise ValidationError({
+                    'archivo_firmado': (
+                        'Un artefacto firmado requiere archivo, hash, tamano y fecha.'
+                    ),
+                })
+        elif tiene_firmado:
+            raise ValidationError({
+                'archivo_firmado': (
+                    'La evidencia firmada solo corresponde al estado firmado.'
+                ),
+            })
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError('Los artefactos contractuales no pueden eliminarse.')
+
+    def __str__(self):
+        return f'{self.numero_documento} - {self.get_tipo_display()}'
+
+
+class ProcesoFirmaEducativa(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    solicitud = models.ForeignKey(
+        SolicitudFinanciacionEducativa,
+        on_delete=models.PROTECT,
+        related_name='procesos_firma',
+    )
+    artefacto = models.OneToOneField(
+        ArtefactoContractualEducativo,
+        on_delete=models.PROTECT,
+        related_name='proceso_firma',
+    )
+    proveedor = models.CharField(max_length=30, default='ZAPSIGN')
+    estado = models.CharField(
+        max_length=30,
+        choices=EstadoProcesoFirmaEducativa.choices,
+        default=EstadoProcesoFirmaEducativa.PENDING,
+    )
+    external_id = models.CharField(max_length=80, unique=True)
+    token_documento_externo = models.CharField(
+        max_length=160,
+        unique=True,
+        null=True,
+        blank=True,
+    )
+    destinatario_hmac = models.CharField(
+        max_length=64,
+        validators=[hash_sha256_validator],
+    )
+    intentos_envio = models.PositiveSmallIntegerField(default=0)
+    codigo_ultimo_error = models.CharField(max_length=60, blank=True)
+    envio_iniciado_en = models.DateTimeField(null=True, blank=True)
+    enviado_en = models.DateTimeField(null=True, blank=True)
+    firmado_en = models.DateTimeField(null=True, blank=True)
+    rechazado_en = models.DateTimeField(null=True, blank=True)
+    creado_en = models.DateTimeField(auto_now_add=True)
+    actualizado_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-creado_en']
+        verbose_name = 'Proceso de firma educativa'
+        verbose_name_plural = 'Procesos de firma educativa'
+        permissions = [
+            (
+                'gestionar_firma_educativa',
+                'Puede enviar y recuperar firmas educativas',
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=['solicitud', 'estado'],
+                name='firma_edu_sol_estado',
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.artefacto_id and self.solicitud_id:
+            if self.artefacto.solicitud_id != self.solicitud_id:
+                raise ValidationError({
+                    'artefacto': 'El pagare no pertenece a la solicitud.',
+                })
+            if (
+                self.artefacto.tipo
+                != TipoArtefactoContractualEducativo.PROMISSORY_NOTE
+            ):
+                raise ValidationError({
+                    'artefacto': 'Solo un pagare puede enviarse a firma.',
+                })
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError('Los procesos de firma no pueden eliminarse.')
+
+    def __str__(self):
+        return f'{self.external_id} - {self.get_estado_display()}'
+
+
+class EventoWebhookFirmaEducativa(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    payload_hash = models.CharField(
+        max_length=64,
+        unique=True,
+        validators=[hash_sha256_validator],
+    )
+    tipo_evento = models.CharField(max_length=50)
+    proceso = models.ForeignKey(
+        ProcesoFirmaEducativa,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='eventos_webhook',
+    )
+    estado = models.CharField(
+        max_length=30,
+        choices=EstadoEventoWebhookFirmaEducativa.choices,
+        default=EstadoEventoWebhookFirmaEducativa.RECEIVED,
+    )
+    codigo_resultado = models.CharField(max_length=60, blank=True)
+    intentos = models.PositiveSmallIntegerField(default=0)
+    recibido_en = models.DateTimeField(auto_now_add=True)
+    procesado_en = models.DateTimeField(null=True, blank=True)
+    actualizado_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-recibido_en']
+        verbose_name = 'Evento de webhook de firma educativa'
+        verbose_name_plural = 'Eventos de webhook de firma educativa'
+        indexes = [
+            models.Index(
+                fields=['tipo_evento', 'estado'],
+                name='evt_firma_edu_tipo_estado',
+            ),
+        ]
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError('Los eventos de firma no pueden eliminarse.')
+
+    def __str__(self):
+        return f'{self.tipo_evento} - {self.get_estado_display()}'
 
 
 class HistorialEstadoSolicitud(ModeloInmutableMixin, models.Model):

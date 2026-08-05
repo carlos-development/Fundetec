@@ -21,6 +21,240 @@
     --edu-content: 1240px;
 }
 
+/* Simulador educativo: herramienta autenticada y no persistente. */
+.edu-simulator-band {
+    min-height: calc(100vh - 160px);
+    padding: 48px 0 64px;
+    background: #eef4f7;
+}
+
+.edu-simulator-shell {
+    width: min(calc(100% - 40px), 1120px);
+    margin: 0 auto;
+}
+
+.edu-simulator-heading {
+    max-width: 720px;
+    margin-bottom: 28px;
+}
+
+.edu-simulator-heading h1 {
+    margin: 8px 0 10px;
+    color: var(--edu-night);
+    font-size: clamp(2rem, 4vw, 3rem);
+    line-height: 1.08;
+}
+
+.edu-simulator-heading > p:last-child {
+    margin: 0;
+    color: var(--edu-muted);
+    font-size: 1.05rem;
+}
+
+.edu-simulator-layout {
+    display: grid;
+    grid-template-columns: minmax(280px, 0.78fr) minmax(420px, 1.22fr);
+    gap: 28px;
+    align-items: start;
+}
+
+.edu-simulator-controls,
+.edu-simulator-results {
+    padding: 28px;
+    background: var(--edu-white);
+    border: 1px solid var(--edu-line);
+    border-radius: var(--edu-radius);
+    box-shadow: var(--edu-shadow);
+}
+
+.edu-simulator-controls {
+    display: grid;
+    gap: 24px;
+}
+
+.edu-simulator-request {
+    display: grid;
+    gap: 3px;
+    padding-bottom: 18px;
+    border-bottom: 1px solid var(--edu-line);
+}
+
+.edu-simulator-request span,
+.edu-simulator-policy span {
+    color: var(--edu-muted);
+    font-size: 0.84rem;
+}
+
+.edu-simulator-request strong {
+    color: var(--edu-night);
+    font-size: 1.08rem;
+}
+
+.edu-money-input {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: center;
+    overflow: hidden;
+    border: 1px solid #bdcbd4;
+    border-radius: 6px;
+    background: var(--edu-white);
+}
+
+.edu-money-input:focus-within {
+    border-color: var(--edu-cyan-dark);
+    box-shadow: 0 0 0 3px rgba(40, 170, 225, 0.16);
+}
+
+.edu-money-input span {
+    padding-left: 14px;
+    color: var(--edu-muted);
+    font-weight: 700;
+}
+
+.edu-money-input input {
+    border: 0 !important;
+    box-shadow: none !important;
+}
+
+.edu-simulator-controls .edu-field > input {
+    width: 100%;
+}
+
+.edu-simulator-policy {
+    display: flex;
+    gap: 12px;
+    padding: 14px;
+    background: #edf8fc;
+    border-left: 3px solid var(--edu-cyan);
+}
+
+.edu-simulator-policy i {
+    color: var(--edu-cyan-dark);
+    font-size: 1.25rem;
+}
+
+.edu-simulator-policy div {
+    display: grid;
+    gap: 2px;
+}
+
+.edu-simulator-status {
+    min-height: 1.3rem;
+    margin: 0;
+    color: var(--edu-muted);
+    font-size: 0.84rem;
+}
+
+.edu-simulator-results-heading,
+.edu-finance-simulator-link {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+}
+
+.edu-simulator-results-heading h2 {
+    margin: 2px 0 0;
+    color: var(--edu-night);
+    font-size: 1.35rem;
+}
+
+.edu-simulator-breakdown {
+    margin: 24px 0;
+}
+
+.edu-simulator-breakdown > div {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 24px;
+    padding: 11px 0;
+    border-bottom: 1px solid #edf1f4;
+}
+
+.edu-simulator-breakdown dt {
+    color: var(--edu-muted);
+}
+
+.edu-simulator-breakdown dd {
+    margin: 0;
+    color: var(--edu-night);
+    font-weight: 600;
+    text-align: right;
+}
+
+.edu-simulator-breakdown .is-subtotal {
+    margin-top: 4px;
+    border-top: 2px solid var(--edu-yellow);
+}
+
+.edu-simulator-breakdown .is-installment {
+    margin-top: 8px;
+    padding: 16px;
+    color: var(--edu-white);
+    background: var(--edu-night);
+    border: 0;
+    border-radius: 6px;
+}
+
+.edu-simulator-breakdown .is-installment dt,
+.edu-simulator-breakdown .is-installment dd {
+    color: var(--edu-white);
+    font-size: 1.08rem;
+}
+
+.edu-simulator-disclaimer {
+    color: var(--edu-muted);
+    font-size: 0.82rem;
+}
+
+.edu-finance-simulator-link {
+    margin-bottom: 20px;
+    padding: 18px;
+    background: #edf8fc;
+    border-left: 3px solid var(--edu-cyan);
+}
+
+.edu-finance-simulator-link div {
+    display: grid;
+    gap: 2px;
+}
+
+.edu-finance-simulator-link span {
+    color: var(--edu-muted);
+    font-size: 0.86rem;
+}
+
+@media (max-width: 820px) {
+    .edu-simulator-layout {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 560px) {
+    .edu-simulator-band {
+        padding: 28px 0 44px;
+    }
+
+    .edu-simulator-shell {
+        width: min(calc(100% - 24px), 1120px);
+    }
+
+    .edu-simulator-controls,
+    .edu-simulator-results {
+        padding: 20px;
+    }
+
+    .edu-simulator-results-heading,
+    .edu-finance-simulator-link {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .edu-simulator-breakdown > div {
+        gap: 12px;
+    }
+}
+
 * {
     box-sizing: border-box;
     letter-spacing: 0;

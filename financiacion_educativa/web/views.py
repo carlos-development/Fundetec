@@ -16,6 +16,7 @@ from django.views.decorators.debug import sensitive_post_parameters
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
 from financiacion_educativa.choices import (
+    EstadoArtefactoContractualEducativo,
     EstadoEnlaceCapturaMovil,
     EstadoEntregaCapturaMovil,
     EstadoSolicitudFinanciacion,
@@ -24,8 +25,10 @@ from financiacion_educativa.choices import (
     RolParticipante,
     TipoDocumentoFinanciacion,
     TipoEventoSeguridadFinanciacion,
+    TipoArtefactoContractualEducativo,
 )
 from financiacion_educativa.models import (
+    ArtefactoContractualEducativo,
     CondicionesFinancieras,
     DocumentoFinanciacion,
     EnlaceCapturaMovil,
@@ -85,22 +88,21 @@ from financiacion_educativa.services.proyecciones_financieras import (
     proyectar_abono_capital,
     proyectar_pago_total,
 )
-from financiacion_educativa.services.reglas_financieras import (
-    crear_fotografia_condiciones_financieras,
+from financiacion_educativa.services.simulacion import (
+    simular_financiacion_educativa,
 )
 from financiacion_educativa.services.configuracion_financiera import (
     ConfiguracionFinancieraAmbigua,
     ConfiguracionFinancieraNoDisponible,
-    seleccionar_configuracion_vigente,
 )
 from .forms import (
     AccesoFinanciacionForm,
     EstudianteFinanciacionForm,
     DocumentoFinanciacionForm,
     EvidenciaMatriculaForm,
-    CrearFotografiaFinancieraForm,
     RegistroFinanciacionForm,
     ReemplazoDocumentoForm,
+    SimulacionFinanciacionEducativaForm,
     TutorFinanciacionForm,
     ProyeccionAbonoForm,
     ProyeccionPagoTotalForm,
@@ -524,6 +526,9 @@ def documentacion_view(request, solicitud_id):
         EstadoSolicitudFinanciacion.PENDING_MANUAL_REVIEW,
         EstadoSolicitudFinanciacion.CORRECTION_REQUIRED,
         EstadoSolicitudFinanciacion.APPROVED,
+        EstadoSolicitudFinanciacion.PENDING_PROMISSORY_NOTE,
+        EstadoSolicitudFinanciacion.PENDING_SIGNATURE,
+        EstadoSolicitudFinanciacion.ACTIVE,
         EstadoSolicitudFinanciacion.REJECTED,
     }:
         raise Http404
@@ -571,6 +576,11 @@ def documentacion_view(request, solicitud_id):
             ],
             'documental_editable': _estado_documental_editable(solicitud),
             'ultima_decision': ultima_decision,
+            'artefactos_contractuales': (
+                solicitud.artefactos_contractuales.filter(
+                    vigente=True,
+                ).order_by('tipo')
+            ),
         },
     )
 
@@ -1178,6 +1188,9 @@ def ficha_matricula_view(request, solicitud_id):
         EstadoSolicitudFinanciacion.PENDING_MANUAL_REVIEW,
         EstadoSolicitudFinanciacion.CORRECTION_REQUIRED,
         EstadoSolicitudFinanciacion.APPROVED,
+        EstadoSolicitudFinanciacion.PENDING_PROMISSORY_NOTE,
+        EstadoSolicitudFinanciacion.PENDING_SIGNATURE,
+        EstadoSolicitudFinanciacion.ACTIVE,
         EstadoSolicitudFinanciacion.REJECTED,
     }:
         raise Http404
@@ -1188,9 +1201,85 @@ def ficha_matricula_view(request, solicitud_id):
             {
                 'solicitud': solicitud,
                 'mapeo_ficha': construir_mapeo_ficha_matricula(solicitud),
+                'ficha_generada': (
+                    ArtefactoContractualEducativo.objects.filter(
+                        solicitud=solicitud,
+                        tipo=(
+                            TipoArtefactoContractualEducativo.ENROLLMENT_FORM
+                        ),
+                        vigente=True,
+                    ).first()
+                ),
             },
         )
     )
+
+
+@never_cache
+@login_required(login_url='/financiacion-educativa/acceso/')
+@require_GET
+def descargar_artefacto_contractual_view(
+    request,
+    solicitud_id,
+    artefacto_id,
+):
+    solicitud = _solicitud_del_usuario(
+        request,
+        solicitud_id,
+        permitir_revisor=True,
+    )
+    artefacto = get_object_or_404(
+        ArtefactoContractualEducativo,
+        pk=artefacto_id,
+        solicitud=solicitud,
+        vigente=True,
+    )
+    if not artefacto.archivo:
+        raise Http404
+    respuesta = FileResponse(
+        artefacto.archivo.open('rb'),
+        as_attachment=True,
+        filename=f'{artefacto.numero_documento}.pdf',
+        content_type='application/pdf',
+    )
+    respuesta['X-Content-Type-Options'] = 'nosniff'
+    respuesta['Cross-Origin-Resource-Policy'] = 'same-origin'
+    respuesta['Referrer-Policy'] = 'no-referrer'
+    return respuesta
+
+
+@never_cache
+@login_required(login_url='/financiacion-educativa/acceso/')
+@require_GET
+def descargar_artefacto_firmado_view(
+    request,
+    solicitud_id,
+    artefacto_id,
+):
+    solicitud = _solicitud_del_usuario(
+        request,
+        solicitud_id,
+        permitir_revisor=True,
+    )
+    artefacto = get_object_or_404(
+        ArtefactoContractualEducativo,
+        pk=artefacto_id,
+        solicitud=solicitud,
+        vigente=True,
+        estado=EstadoArtefactoContractualEducativo.SIGNED,
+    )
+    if not artefacto.archivo_firmado:
+        raise Http404
+    respuesta = FileResponse(
+        artefacto.archivo_firmado.open('rb'),
+        as_attachment=True,
+        filename=f'{artefacto.numero_documento}-firmado.pdf',
+        content_type='application/pdf',
+    )
+    respuesta['X-Content-Type-Options'] = 'nosniff'
+    respuesta['Cross-Origin-Resource-Policy'] = 'same-origin'
+    respuesta['Referrer-Policy'] = 'no-referrer'
+    return respuesta
 
 
 @never_cache
@@ -1223,7 +1312,11 @@ def completar_documentacion_view(request, solicitud_id):
         messages.success(
             request,
             (
-                'Expediente enviado a revision correctamente.'
+                (
+                    'Expediente recibido. La validacion automatica fue iniciada.'
+                    if settings.FINANCIACION_EDUCATIVA_AUTOMATION_ENABLED
+                    else 'Expediente enviado a revision correctamente.'
+                )
                 if resultado.estado
                 == EstadoSolicitudFinanciacion.PENDING_MANUAL_REVIEW
                 else 'El expediente ya habia sido enviado a revision.'
@@ -1248,87 +1341,154 @@ def _contexto_financiero(solicitud, **extra):
     return {
         'solicitud': solicitud,
         'fotografia': fotografia,
-        'crear_form': CrearFotografiaFinancieraForm(),
         'abono_form': ProyeccionAbonoForm(),
         'pago_total_form': ProyeccionPagoTotalForm(solicitud=solicitud),
         **extra,
     }
 
 
+def _serializar_simulacion(simulacion):
+    resultado = simulacion.resultado
+    configuracion = simulacion.configuracion
+    return {
+        'monto_solicitado': format(resultado.monto_solicitado, 'f'),
+        'plazo_meses': resultado.plazo_meses,
+        'valor_originacion': format(resultado.valor_originacion, 'f'),
+        'valor_iva_originacion': format(resultado.valor_iva_originacion, 'f'),
+        'valor_fondo_garantias': format(
+            resultado.valor_fondo_garantias,
+            'f',
+        ),
+        'valor_seguro_vida': format(resultado.valor_seguro_vida, 'f'),
+        'capital_total_financiado': format(
+            resultado.capital_total_financiado,
+            'f',
+        ),
+        'intereses_totales': format(resultado.intereses_totales, 'f'),
+        'cuota_informativa': format(resultado.cuota_informativa, 'f'),
+        'total_proyectado': format(resultado.total_proyectado, 'f'),
+        'moneda': configuracion.moneda,
+        'codigo_configuracion': configuracion.codigo,
+        'version_configuracion': configuracion.version,
+        'tasa_interes_mensual': format(
+            configuracion.tasa_interes_mensual,
+            'f',
+        ),
+        'porcentaje_originacion': format(
+            configuracion.porcentaje_originacion,
+            'f',
+        ),
+        'porcentaje_iva_originacion': format(
+            configuracion.porcentaje_iva_originacion,
+            'f',
+        ),
+        'porcentaje_fondo_garantias': format(
+            configuracion.porcentaje_fondo_garantias,
+            'f',
+        ),
+        'porcentaje_seguro_vida': format(
+            configuracion.porcentaje_seguro_vida,
+            'f',
+        ),
+        'proveedor_fondo_garantias': configuracion.proveedor_fondo_garantias,
+        'proveedor_seguro_vida': configuracion.proveedor_seguro_vida,
+        'metodo_calculo': configuracion.metodo_calculo,
+    }
+
+
 @never_cache
 @login_required(login_url='/financiacion-educativa/acceso/')
-@require_http_methods(['GET', 'POST'])
-def finanzas_view(request, solicitud_id):
+@require_GET
+def simulador_view(request, solicitud_id):
     solicitud = _solicitud_del_usuario(request, solicitud_id)
-    fotografia = _fotografia_activa(solicitud)
-    crear_form = CrearFotografiaFinancieraForm(request.POST or None)
+    datos_solicitud = {
+        'monto_solicitado': solicitud.valor_plan,
+        'plazo_meses': solicitud.plazo_meses,
+    }
+    form = SimulacionFinanciacionEducativaForm(initial=datos_solicitud)
+    validacion_inicial = SimulacionFinanciacionEducativaForm(datos_solicitud)
+    simulacion = None
     error = ''
-    configuracion_disponible = True
-    if not fotografia:
+    if not validacion_inicial.is_valid():
+        error = 'Los datos institucionales no estan dentro del rango del simulador.'
+    else:
         try:
-            seleccionar_configuracion_vigente(
-                fecha_aplicacion=timezone.localdate(),
+            simulacion = simular_financiacion_educativa(
+                monto_solicitado=validacion_inicial.cleaned_data['monto_solicitado'],
+                plazo_meses=validacion_inicial.cleaned_data['plazo_meses'],
             )
         except ConfiguracionFinancieraNoDisponible:
-            configuracion_disponible = False
-            error = (
-                'No hay una politica financiera activa para la fecha de hoy. '
-                'Solicita a un administrador que configure la financiacion educativa.'
-            )
+            error = 'No hay una politica financiera educativa activa.'
         except ConfiguracionFinancieraAmbigua:
-            configuracion_disponible = False
-            error = (
-                'La configuracion financiera requiere revision administrativa '
-                'antes de calcular el plan.'
-            )
-    if request.method == 'POST':
-        if fotografia:
-            return redirect(
-                'financiacion_educativa_web:finanzas',
-                solicitud_id=solicitud.pk,
-            )
-        if crear_form.is_valid():
-            try:
-                crear_fotografia_condiciones_financieras(
-                    solicitud,
-                    fecha_inicio_plan=crear_form.cleaned_data['fecha_inicio_plan'],
-                    actor=request.user,
-                )
-            except ConfiguracionFinancieraNoDisponible:
-                configuracion_disponible = False
-                error = (
-                    'No hay una politica financiera activa para la fecha de hoy. '
-                    'Solicita a un administrador que configure la financiacion educativa.'
-                )
-            except ConfiguracionFinancieraAmbigua:
-                configuracion_disponible = False
-                error = (
-                    'La configuracion financiera requiere revision administrativa '
-                    'antes de calcular el plan.'
-                )
-            except ValidationError:
-                logger.exception(
-                    'Fallo controlado al calcular financiacion educativa.'
-                )
-                error = (
-                    'No fue posible calcular el plan con los datos actuales. '
-                    'Revisa la fecha e intenta nuevamente.'
-                )
-            else:
-                return redirect(
-                    'financiacion_educativa_web:finanzas',
-                    solicitud_id=solicitud.pk,
-                )
-    contexto = _contexto_financiero(
-        solicitud,
-        crear_form=crear_form,
-        error=error,
-        configuracion_disponible=configuracion_disponible,
+            error = 'La politica financiera educativa requiere revision.'
+        except ValidationError:
+            logger.exception('No fue posible generar la simulacion educativa inicial.')
+            error = 'No fue posible simular con los datos actuales.'
+    return render(
+        request,
+        'financiacion_educativa/simulador.html',
+        {
+            'solicitud': solicitud,
+            'form': form,
+            'simulacion': simulacion,
+            'error': error,
+        },
     )
+
+
+@never_cache
+@sensitive_post_parameters('monto_solicitado')
+@login_required(login_url='/financiacion-educativa/acceso/')
+@require_POST
+def calcular_simulacion_view(request, solicitud_id):
+    _solicitud_del_usuario(request, solicitud_id)
+    form = SimulacionFinanciacionEducativaForm(request.POST)
+    if not form.is_valid():
+        return JsonResponse(
+            {
+                'ok': False,
+                'error': 'Revisa el monto y el plazo indicados.',
+                'fields': {
+                    campo: [str(mensaje) for mensaje in errores]
+                    for campo, errores in form.errors.items()
+                },
+            },
+            status=400,
+        )
+    try:
+        simulacion = simular_financiacion_educativa(
+            monto_solicitado=form.cleaned_data['monto_solicitado'],
+            plazo_meses=form.cleaned_data['plazo_meses'],
+        )
+    except (ConfiguracionFinancieraNoDisponible, ConfiguracionFinancieraAmbigua):
+        return JsonResponse(
+            {
+                'ok': False,
+                'error': 'La politica financiera educativa no esta disponible.',
+            },
+            status=503,
+        )
+    except ValidationError:
+        logger.exception('Fallo controlado al simular financiacion educativa.')
+        return JsonResponse(
+            {
+                'ok': False,
+                'error': 'No fue posible calcular el escenario solicitado.',
+            },
+            status=400,
+        )
+    return JsonResponse({'ok': True, 'simulation': _serializar_simulacion(simulacion)})
+
+
+@never_cache
+@login_required(login_url='/financiacion-educativa/acceso/')
+@require_GET
+def finanzas_view(request, solicitud_id):
+    solicitud = _solicitud_del_usuario(request, solicitud_id)
     return render(
         request,
         'financiacion_educativa/finanzas.html',
-        contexto,
+        _contexto_financiero(solicitud),
     )
 
 

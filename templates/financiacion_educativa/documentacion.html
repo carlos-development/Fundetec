@@ -221,7 +221,10 @@
                 <section class="edu-section-block" aria-labelledby="finance-review-title">
                     <div class="edu-section-title">
                         <h2 id="finance-review-title">Financiaci&oacute;n</h2>
-                        <a class="edu-button-secondary" href="{% url 'financiacion_educativa_web:finanzas' solicitud.id %}">Consultar financiaci&oacute;n</a>
+                        <div class="edu-inline-actions">
+                            <a class="edu-button-secondary" href="{% url 'financiacion_educativa_web:simulador' solicitud.id %}">Simular cuota</a>
+                            <a class="edu-button-secondary" href="{% url 'financiacion_educativa_web:finanzas' solicitud.id %}">Consultar financiaci&oacute;n</a>
+                        </div>
                     </div>
                     {% if fotografia %}
                         <dl class="edu-finance-compact">
@@ -234,6 +237,31 @@
                         <div class="edu-empty">La consulta financiera a&uacute;n no ha sido generada.</div>
                     {% endif %}
                 </section>
+
+                {% if artefactos_contractuales %}
+                <section class="edu-section-block" aria-labelledby="contracts-title">
+                    <div class="edu-section-title">
+                        <h2 id="contracts-title">Documentos contractuales</h2>
+                    </div>
+                    {% for artefacto in artefactos_contractuales %}
+                        <div class="edu-document-row">
+                            <div>
+                                <strong class="edu-document-name">{{ artefacto.get_tipo_display }}</strong>
+                                <span class="edu-document-meta">{{ artefacto.numero_documento }} &middot; {{ artefacto.get_estado_display }}</span>
+                            </div>
+                            <div class="edu-inline-actions">
+                                <a class="edu-button-secondary" href="{% url 'financiacion_educativa_web:artefacto-descargar' solicitud.id artefacto.id %}">Descargar</a>
+                                {% if artefacto.archivo_firmado %}
+                                    <a class="edu-button" href="{% url 'financiacion_educativa_web:artefacto-firmado-descargar' solicitud.id artefacto.id %}">Descargar firmado</a>
+                                {% endif %}
+                            </div>
+                        </div>
+                    {% endfor %}
+                    {% if solicitud.estado == "PENDING_SIGNATURE" %}
+                        <div class="alert-info" role="status">El pagar&eacute; fue enviado al correo del responsable contractual y est&aacute; pendiente de firma.</div>
+                    {% endif %}
+                </section>
+                {% endif %}
 
                 <section id="enviar-revision" class="edu-section-block">
                     {% if documental_editable %}

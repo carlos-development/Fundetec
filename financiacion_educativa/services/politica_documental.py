@@ -1,5 +1,8 @@
 from dataclasses import dataclass
 
+from django.conf import settings
+from django.core.exceptions import ValidationError
+
 from financiacion_educativa.choices import (
     EstadoEscaneoDocumento,
     EstadoEvidenciaMatricula,
@@ -21,6 +24,15 @@ CARAS_IDENTIFICACION_POR_TIPO = {
     TipoDocumentoIdentidad.OTHER: ('frente',),
 }
 
+TIPOS_DOCUMENTO_CON_VALIDACION_VISUAL = frozenset({
+    TipoDocumentoFinanciacion.STUDENT_ID_FRONT,
+    TipoDocumentoFinanciacion.STUDENT_ID_BACK,
+    TipoDocumentoFinanciacion.GUARDIAN_ID_FRONT,
+    TipoDocumentoFinanciacion.GUARDIAN_ID_BACK,
+    TipoDocumentoFinanciacion.DEBTOR_IDENTIFICATION,
+    TipoDocumentoFinanciacion.INCOME_CERTIFICATE,
+})
+
 
 @dataclass(frozen=True)
 class RequisitoDocumentoPolitica:
@@ -38,6 +50,14 @@ def caras_identificacion_requeridas(tipo_documento):
         tipo_documento,
         ('frente',),
     )
+
+
+def documento_requiere_validacion_visual(documento):
+    if documento.tipo in TIPOS_DOCUMENTO_CON_VALIDACION_VISUAL:
+        return True
+    if documento.tipo == TipoDocumentoFinanciacion.ENROLLMENT_EVIDENCE:
+        return documento.content_type != 'application/pdf'
+    return True
 
 
 def _documento_activo(documentos, *, tipo, participante=None):
@@ -177,7 +197,14 @@ def requisito_listo_para_envio(requisito):
     if requisito.documento is None:
         return not requisito.obligatorio
     if requisito.tipo == TipoDocumentoFinanciacion.ENROLLMENT_EVIDENCE:
-        return requisito_listo_para_aprobacion(requisito)
+        if (
+            requisito.evidencia_matricula
+            and requisito.evidencia_matricula.estado
+            == EstadoEvidenciaMatricula.REJECTED
+        ):
+            return False
+        if not settings.FINANCIACION_EDUCATIVA_AUTOMATION_ENABLED:
+            return requisito_listo_para_aprobacion(requisito)
     return (
         requisito.documento.estado_escaneo != EstadoEscaneoDocumento.BLOCKED
         and requisito.documento.estado_validacion
@@ -204,3 +231,26 @@ def requisito_listo_para_aprobacion(requisito):
             == EstadoEvidenciaMatricula.ACCEPTED
         )
     return True
+
+
+def validar_expediente_para_aprobacion(solicitud):
+    politica = construir_politica_documental(solicitud)
+    faltantes = [
+        requisito.codigo
+        for requisito in politica
+        if requisito.obligatorio and requisito.documento is None
+    ]
+    if faltantes:
+        raise ValidationError(
+            'El expediente no contiene todos los documentos obligatorios.'
+        )
+    no_resueltos = [
+        requisito.codigo
+        for requisito in politica
+        if not requisito_listo_para_aprobacion(requisito)
+    ]
+    if no_resueltos:
+        raise ValidationError(
+            'Todos los documentos aportados deben estar seguros y aceptados.'
+        )
+    return politica

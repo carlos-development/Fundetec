@@ -4,6 +4,11 @@ from drf_spectacular.utils import (
     OpenApiResponse,
     extend_schema,
 )
+import hmac
+import json
+
+from django.conf import settings
+
 from rest_framework import status
 from rest_framework.exceptions import ValidationError
 from rest_framework.generics import get_object_or_404
@@ -22,6 +27,9 @@ from financiacion_educativa.services.orquestacion import (
 from financiacion_educativa.services.solicitudes import DatosSolicitudFinanciacion
 from financiacion_educativa.services.estado_publico import (
     obtener_resultado_publico,
+)
+from financiacion_educativa.services.firma_zapsign import (
+    procesar_webhook_firma,
 )
 from instituciones.authentication import InstitutionApiKeyAuthentication
 
@@ -493,3 +501,64 @@ class SolicitudDetalleAPIView(InstitutionalAPIView):
             **_respuesta_creacion(request, solicitud),
             'updated_at': solicitud.actualizada_en,
         })
+
+
+@extend_schema(exclude=True)
+class ZapSignEducationalWebhookAPIView(APIView):
+    authentication_classes = ()
+    permission_classes = ()
+
+    def post(self, request):
+        secreto_esperado = str(
+            settings.FINANCIACION_EDUCATIVA_ZAPSIGN_WEBHOOK_SECRET
+        )
+        if not secreto_esperado:
+            return Response(
+                {'status': 'unavailable'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        header = str(
+            settings.FINANCIACION_EDUCATIVA_ZAPSIGN_WEBHOOK_HEADER
+        ).strip()
+        recibido = request.headers.get(header, '')
+        if header.lower() == 'authorization' and recibido.lower().startswith(
+            'bearer '
+        ):
+            recibido = recibido[7:]
+        if not hmac.compare_digest(recibido, secreto_esperado):
+            return Response(
+                {'status': 'unauthorized'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+        raw_body = request.body
+        if not raw_body or len(raw_body) > 262144:
+            return Response(
+                {'status': 'invalid'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            payload = json.loads(raw_body.decode('utf-8'))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return Response(
+                {'status': 'invalid'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not isinstance(payload, dict):
+            return Response(
+                {'status': 'invalid'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            resultado = procesar_webhook_firma(
+                payload=payload,
+                raw_body=raw_body,
+            )
+        except Exception:
+            return Response(
+                {'status': 'retry'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        return Response(
+            {'status': resultado.estado},
+            status=status.HTTP_200_OK,
+        )

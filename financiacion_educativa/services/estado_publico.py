@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 
 from financiacion_educativa.choices import (
+    EstadoArtefactoContractualEducativo,
+    EstadoProcesoFirmaEducativa,
     EstadoPublicoSolicitud,
     EstadoSolicitudFinanciacion,
     TipoDecisionRevisionEducativa,
@@ -64,15 +66,24 @@ def obtener_resultado_publico(solicitud):
         '-creada_en',
         '-id',
     ).first()
+    firma = solicitud.procesos_firma.select_related(
+        'artefacto__fotografia_financiera'
+    ).filter(
+        estado=EstadoProcesoFirmaEducativa.SIGNED,
+        artefacto__vigente=True,
+        artefacto__estado=EstadoArtefactoContractualEducativo.SIGNED,
+        artefacto__fotografia_financiera__activa=True,
+        artefacto__fotografia_financiera__bloqueada=True,
+        artefacto__fotografia_financiera__es_legado=False,
+    ).order_by('-firmado_en').first()
     aprobada = bool(
         estado == EstadoPublicoSolicitud.APPROVED
-        and decision
-        and decision.tipo == TipoDecisionRevisionEducativa.APPROVED
-        and decision.fotografia_financiera_id
+        and firma
+        and firma.firmado_en
     )
     condiciones = None
     if aprobada:
-        fotografia = decision.fotografia_financiera
+        fotografia = firma.artefacto.fotografia_financiera
         condiciones = {
             'currency': fotografia.moneda,
             'requested_amount': format(fotografia.valor_financiado, '.2f'),
@@ -86,7 +97,7 @@ def obtener_resultado_publico(solicitud):
     return ResultadoPublicoSolicitud(
         estado=estado,
         curso_autorizado=aprobada,
-        autorizacion_efectiva_en=decision.creada_en if aprobada else None,
+        autorizacion_efectiva_en=firma.firmado_en if aprobada else None,
         motivo_decision=(
             decision.motivo
             if decision

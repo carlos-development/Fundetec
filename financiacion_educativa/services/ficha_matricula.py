@@ -38,6 +38,10 @@ def _participante_por_rol(solicitud, rol):
 def construir_mapeo_ficha_matricula(solicitud):
     estudiante = _participante_por_rol(solicitud, RolParticipante.STUDENT)
     tutor = _participante_por_rol(solicitud, RolParticipante.GUARDIAN)
+    responsable = _participante_por_rol(
+        solicitud,
+        RolParticipante.PRINCIPAL_DEBTOR,
+    )
     try:
         evidencia = solicitud.evidencia_matricula
     except EvidenciaMatricula.DoesNotExist:
@@ -186,34 +190,30 @@ def construir_mapeo_ficha_matricula(solicitud):
             _campo('Direccion', '', '', faltante='Direccion del acudiente'),
         ]
     mapeo.update({
-        'Informacion academica': [
-            _campo('Titulo alcanzado', '', '', faltante='Titulo alcanzado'),
-            _campo('Nivel academico', '', '', faltante='Nivel academico'),
-            _campo('Ultimo nivel aprobado', '', '', faltante='Ultimo nivel aprobado'),
-            _campo('Municipio', '', '', faltante='Municipio de estudio'),
-            _campo('Ultimo ano', '', '', faltante='Ultimo ano cursado'),
-            _campo('Institucion', '', '', faltante='Institucion anterior'),
-            _campo('Fecha terminacion', '', '', faltante='Fecha de terminacion'),
-            _campo('Fecha ingreso', '', '', faltante='Fecha de ingreso'),
-        ],
-        'Informacion laboral': [
-            _campo('Empresa', '', '', faltante='Empresa'),
-            _campo('Telefono', '', '', faltante='Telefono laboral'),
-            _campo('Cargo', '', '', faltante='Cargo'),
-            _campo('Municipio', '', '', faltante='Municipio laboral'),
-        ],
-        'Retiro y firmas': [
-            _campo('Motivo', '', '', faltante='Motivo de retiro'),
-            _campo('Fecha', '', '', faltante='Fecha de retiro'),
-            _campo('Firma rector', '', '', faltante='Firma del rector'),
-            _campo('Firma acudiente', '', '', faltante='Firma del acudiente'),
-            _campo('Firma padre/madre', '', '', faltante='Firma de padre o madre'),
-            _campo('Firma estudiante', '', '', faltante='Firma del estudiante'),
+        'Responsable contractual': [
             _campo(
-                'Firma secretaria/director',
-                '',
-                '',
-                faltante='Firma de secretaria o director',
+                'Nombre completo',
+                responsable.nombre_completo if responsable else '',
+                'Expediente contractual',
+                faltante='Responsable contractual',
+            ),
+            _campo(
+                'Identificacion',
+                responsable.numero_documento if responsable else '',
+                'Expediente contractual',
+                faltante='Identificacion del responsable',
+            ),
+            _campo(
+                'Correo',
+                responsable.correo if responsable else '',
+                'Expediente contractual',
+                faltante='Correo del responsable',
+            ),
+            _campo(
+                'Celular',
+                responsable.telefono if responsable else '',
+                'Expediente contractual',
+                faltante='Celular del responsable',
             ),
         ],
     })

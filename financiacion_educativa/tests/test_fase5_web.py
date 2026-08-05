@@ -8,6 +8,9 @@ from django.urls import reverse
 
 from financiacion_educativa.models import CondicionesFinancieras
 from financiacion_educativa.models import ConfiguracionFinancieraEducativa
+from financiacion_educativa.services.reglas_financieras import (
+    crear_fotografia_condiciones_financieras,
+)
 from financiacion_educativa.tests.factories import (
     crear_configuracion_financiera,
     crear_solicitud,
@@ -36,18 +39,22 @@ class InterfazFinancieraEducativaTests(TestCase):
             kwargs={'solicitud_id': self.solicitud.pk},
         )
 
+    def _crear_fotografia(self):
+        return crear_fotografia_condiciones_financieras(
+            self.solicitud,
+            fecha_inicio_plan=date(2026, 7, 31),
+            actor=self.usuario,
+        )
+
     def test_resumen_requiere_sesion_y_propiedad(self):
         self.assertEqual(self.client.get(self.url).status_code, 302)
         self.client.force_login(self.otro)
         self.assertEqual(self.client.get(self.url).status_code, 404)
 
-    def test_usuario_crea_fotografia_explicita_y_ve_plan_cop(self):
+    def test_usuario_ve_fotografia_contractual_existente_y_plan_cop(self):
+        self._crear_fotografia()
         self.client.force_login(self.usuario)
-        respuesta = self.client.post(
-            self.url,
-            {'fecha_inicio_plan': '2026-07-31'},
-            follow=True,
-        )
+        respuesta = self.client.get(self.url)
 
         self.assertEqual(respuesta.status_code, 200)
         self.assertContains(respuesta, '$1.142.711')
@@ -60,7 +67,7 @@ class InterfazFinancieraEducativaTests(TestCase):
         self.assertNotContains(respuesta, '10,000000 %')
         self.assertEqual(CondicionesFinancieras.objects.filter(activa=True).count(), 1)
 
-    def test_ausencia_real_de_configuracion_muestra_accion_administrativa(self):
+    def test_usuario_no_puede_crear_condiciones_desde_la_pantalla(self):
         ConfiguracionFinancieraEducativa.objects.all().delete()
         self.client.force_login(self.usuario)
 
@@ -70,18 +77,19 @@ class InterfazFinancieraEducativaTests(TestCase):
             {'fecha_inicio_plan': '2026-07-31'},
         )
 
-        self.assertContains(
-            respuesta,
-            'No hay una politica financiera activa',
-        )
-        self.assertContains(post, 'No hay una politica financiera activa')
+        self.assertContains(respuesta, 'Condiciones definitivas pendientes')
+        self.assertEqual(post.status_code, 405)
         self.assertFalse(CondicionesFinancieras.objects.exists())
 
     def test_comando_activa_politica_visible_sin_reiniciar_servidor(self):
         ConfiguracionFinancieraEducativa.objects.all().delete()
         self.client.force_login(self.usuario)
-        sin_politica = self.client.get(self.url)
-        self.assertContains(sin_politica, 'No hay una politica financiera activa')
+        simulator_url = reverse(
+            'financiacion_educativa_web:simulador',
+            kwargs={'solicitud_id': self.solicitud.pk},
+        )
+        sin_politica = self.client.get(simulator_url)
+        self.assertContains(sin_politica, 'No hay una politica financiera educativa activa')
 
         call_command(
             'configurar_politica_financiera_educativa',
@@ -89,22 +97,17 @@ class InterfazFinancieraEducativaTests(TestCase):
             activate=True,
             stdout=StringIO(),
         )
-        con_politica = self.client.get(self.url)
+        con_politica = self.client.get(simulator_url)
 
         self.assertNotContains(
             con_politica,
-            'No hay una politica financiera activa',
+            'No hay una politica financiera educativa activa',
         )
-        creada = self.client.post(
-            self.url,
-            {'fecha_inicio_plan': '2026-07-31'},
-        )
-        self.assertEqual(creada.status_code, 302)
-        self.assertTrue(CondicionesFinancieras.objects.filter(activa=True).exists())
+        self.assertFalse(CondicionesFinancieras.objects.exists())
 
     def test_proyeccion_web_no_registra_pago(self):
         self.client.force_login(self.usuario)
-        self.client.post(self.url, {'fecha_inicio_plan': '2026-07-31'})
+        self._crear_fotografia()
         fotografia = CondicionesFinancieras.objects.get(activa=True)
         url = reverse(
             'financiacion_educativa_web:proyectar-abono',
@@ -127,18 +130,17 @@ class InterfazFinancieraEducativaTests(TestCase):
         self.assertEqual(CondicionesFinancieras.objects.count(), 1)
         self.assertEqual(fotografia.cuotas.count(), 3)
 
-    def test_formularios_financieros_exigen_csrf(self):
-        cliente = Client(enforce_csrf_checks=True)
-        cliente.force_login(self.usuario)
-        respuesta = cliente.post(
+    def test_resumen_financiero_no_admite_post(self):
+        self.client.force_login(self.usuario)
+        respuesta = self.client.post(
             self.url,
-            {'fecha_inicio_plan': date(2026, 7, 31).isoformat()},
+            {'fecha_inicio_plan': '2026-07-31'},
         )
-        self.assertEqual(respuesta.status_code, 403)
+        self.assertEqual(respuesta.status_code, 405)
 
     def test_proyecciones_rechazan_get_csrf_e_idor(self):
         self.client.force_login(self.usuario)
-        self.client.post(self.url, {'fecha_inicio_plan': '2026-07-31'})
+        self._crear_fotografia()
         url = reverse(
             'financiacion_educativa_web:proyectar-abono',
             kwargs={'solicitud_id': self.solicitud.pk},
@@ -173,7 +175,7 @@ class InterfazFinancieraEducativaTests(TestCase):
 
     def test_proyeccion_web_rechaza_valor_sin_abono_real_a_capital(self):
         self.client.force_login(self.usuario)
-        self.client.post(self.url, {'fecha_inicio_plan': '2026-07-31'})
+        self._crear_fotografia()
         respuesta = self.client.post(
             reverse(
                 'financiacion_educativa_web:proyectar-abono',

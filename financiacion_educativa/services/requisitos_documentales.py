@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import transaction
 
@@ -14,6 +15,9 @@ from financiacion_educativa.models import EvidenciaMatricula, SolicitudFinanciac
 from financiacion_educativa.services.estados import transicionar_solicitud
 from financiacion_educativa.services.participantes import (
     solicitud_requiere_tutor,
+)
+from financiacion_educativa.services.orquestacion_automatica import (
+    programar_orquestacion_automatica,
 )
 from financiacion_educativa.services.politica_documental import (
     construir_politica_documental,
@@ -210,6 +214,7 @@ def completar_fase_documental(*, solicitud, actor):
     if not actor or not actor.is_authenticated or solicitud.usuario_id != actor.pk:
         raise ValidationError('La solicitud no esta disponible.')
     if solicitud.estado == EstadoSolicitudFinanciacion.PENDING_MANUAL_REVIEW:
+        programar_orquestacion_automatica(solicitud_id=solicitud.pk)
         return solicitud
     if solicitud.estado not in {
         EstadoSolicitudFinanciacion.PENDING_DOCUMENT,
@@ -226,10 +231,15 @@ def completar_fase_documental(*, solicitud, actor):
         raise ValidationError({
             'requisitos': 'Aun existen requisitos documentales pendientes.',
         })
-    return transicionar_solicitud(
+    solicitud = transicionar_solicitud(
         solicitud=solicitud,
         nuevo_estado=EstadoSolicitudFinanciacion.PENDING_MANUAL_REVIEW,
         actor=actor,
-        motivo='Fase documental completada; pendiente de revision de identidad.',
-        metadata={'requisitos_completados': True},
+        motivo='Fase documental completada; inicia validacion del expediente.',
+        metadata={
+            'requisitos_completados': True,
+            'automation_enabled': settings.FINANCIACION_EDUCATIVA_AUTOMATION_ENABLED,
+        },
     )
+    programar_orquestacion_automatica(solicitud_id=solicitud.pk)
+    return solicitud

@@ -2,12 +2,14 @@ from django import forms
 from django.contrib import admin, messages
 from django.core.exceptions import ValidationError
 from django.core.exceptions import PermissionDenied
+from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404, redirect
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils import timezone
 
 from .models import (
+    ArtefactoContractualEducativo,
     ConfiguracionFinancieraEducativa,
     CondicionesFinancieras,
     Consentimiento,
@@ -26,11 +28,14 @@ from .models import (
     IntentoEscaneoDocumento,
     InvitacionContinuacionSolicitud,
     ParticipanteFinanciacion,
+    ProcesoFirmaEducativa,
+    EventoWebhookFirmaEducativa,
     ReaperturaEscaneoDocumento,
     RegistroIdempotenciaSolicitud,
     RolParticipanteFinanciacion,
     SolicitudFinanciacionEducativa,
     VersionTerminosFinanciacion,
+    ValidacionIADocumento,
 )
 from .choices import (
     EstadoConfiguracionFinanciera,
@@ -51,6 +56,11 @@ from .services.configuracion_financiera import (
 )
 from .services.documentos import revisar_documento
 from .services.escaneo_documentos import procesar_escaneo_documento
+from .services.validacion_documental_ia import procesar_validacion_documental_ia
+from .services.firma_zapsign import (
+    FirmaEducativaError,
+    enviar_pagare_educativo,
+)
 from .services.matricula import revisar_evidencia_matricula
 from .services.terminos import publicar_version_terminos, retirar_version_terminos
 from .services.orquestacion import (
@@ -228,7 +238,13 @@ class SolicitudFinanciacionEducativaAdmin(admin.ModelAdmin):
             'form': form,
             'documentos': solicitud.documentos.filter(
                 activo=True
-            ).select_related('participante'),
+            ).select_related('participante').prefetch_related(
+                Prefetch(
+                    'validaciones_ia',
+                    queryset=ValidacionIADocumento.objects.order_by('-numero'),
+                    to_attr='validaciones_ia_recientes',
+                )
+            ),
             'fotografia': fotografia,
             'estado_revisable': (
                 solicitud.estado
@@ -692,6 +708,7 @@ class DocumentoFinanciacionAdmin(admin.ModelAdmin):
     fields = readonly_fields
     actions = (
         'solicitar_escaneo_seleccionados',
+        'validar_con_ia_seleccionados',
         'aceptar_seleccionados',
         'rechazar_tipo_incorrecto',
     )
@@ -707,6 +724,10 @@ class DocumentoFinanciacionAdmin(admin.ModelAdmin):
         ):
             actions.pop('aceptar_seleccionados', None)
             actions.pop('rechazar_tipo_incorrecto', None)
+        if not request.user.has_perm(
+            'financiacion_educativa.procesar_validacion_ia_documento'
+        ):
+            actions.pop('validar_con_ia_seleccionados', None)
         return actions
 
     @admin.action(description='Solicitar escaneo antivirus')
@@ -730,6 +751,28 @@ class DocumentoFinanciacionAdmin(admin.ModelAdmin):
             self.message_user(
                 request,
                 'No procesados: ' + '; '.join(incidencias),
+                level=messages.WARNING,
+            )
+
+    @admin.action(description='Validar imagenes seguras con IA')
+    def validar_con_ia_seleccionados(self, request, queryset):
+        procesados = 0
+        incidencias = []
+        for documento in queryset:
+            resultado = procesar_validacion_documental_ia(
+                documento=documento,
+                actor=request.user,
+            )
+            procesados += int(resultado.procesado)
+            if resultado.codigo_error or not resultado.procesado:
+                incidencias.append(
+                    f'{documento.pk}: {resultado.codigo_error or resultado.estado}'
+                )
+        self.message_user(request, f'Validaciones IA procesadas: {procesados}.')
+        if incidencias:
+            self.message_user(
+                request,
+                'No concluyentes: ' + '; '.join(incidencias),
                 level=messages.WARNING,
             )
 
@@ -876,6 +919,36 @@ class IntentoEscaneoDocumentoAdmin(admin.ModelAdmin):
         return False
 
 
+@admin.register(ValidacionIADocumento)
+class ValidacionIADocumentoAdmin(admin.ModelAdmin):
+    list_display = (
+        'documento',
+        'numero',
+        'estado',
+        'origen',
+        'proveedor',
+        'modelo',
+        'confianza',
+        'codigo_error',
+        'iniciado_en',
+        'finalizado_en',
+    )
+    list_filter = ('estado', 'origen', 'proveedor', 'iniciado_en')
+    search_fields = ('documento__solicitud__referencia_externa',)
+    readonly_fields = tuple(
+        field.name for field in ValidacionIADocumento._meta.fields
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
 @admin.register(ReaperturaEscaneoDocumento)
 class ReaperturaEscaneoDocumentoAdmin(admin.ModelAdmin):
     list_display = (
@@ -888,6 +961,113 @@ class ReaperturaEscaneoDocumentoAdmin(admin.ModelAdmin):
     search_fields = ('documento__solicitud__referencia_externa',)
     readonly_fields = tuple(
         field.name for field in ReaperturaEscaneoDocumento._meta.fields
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(ArtefactoContractualEducativo)
+class ArtefactoContractualEducativoAdmin(admin.ModelAdmin):
+    list_display = (
+        'numero_documento',
+        'solicitud',
+        'tipo',
+        'numero_version',
+        'estado',
+        'vigente',
+        'generado_en',
+    )
+    list_filter = ('tipo', 'estado', 'vigente', 'generado_en')
+    search_fields = (
+        'numero_documento',
+        'solicitud__referencia_externa',
+    )
+    readonly_fields = tuple(
+        field.name for field in ArtefactoContractualEducativo._meta.fields
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(ProcesoFirmaEducativa)
+class ProcesoFirmaEducativaAdmin(admin.ModelAdmin):
+    list_display = (
+        'external_id',
+        'solicitud',
+        'estado',
+        'intentos_envio',
+        'enviado_en',
+        'firmado_en',
+    )
+    list_filter = ('estado', 'proveedor', 'creado_en')
+    search_fields = ('external_id', 'solicitud__referencia_externa')
+    exclude = ('token_documento_externo',)
+    readonly_fields = tuple(
+        field.name
+        for field in ProcesoFirmaEducativa._meta.fields
+        if field.name != 'token_documento_externo'
+    )
+    actions = ('enviar_pagares_seleccionados',)
+
+    @admin.action(description='Enviar pagares educativos seleccionados')
+    def enviar_pagares_seleccionados(self, request, queryset):
+        if not request.user.has_perm(
+            'financiacion_educativa.gestionar_firma_educativa'
+        ):
+            raise PermissionDenied
+        enviados = 0
+        fallidos = 0
+        for proceso in queryset:
+            try:
+                enviar_pagare_educativo(proceso=proceso)
+            except (FirmaEducativaError, ValidationError):
+                fallidos += 1
+            else:
+                enviados += 1
+        self.message_user(
+            request,
+            f'Enviados: {enviados}. Fallidos: {fallidos}.',
+            level=messages.WARNING if fallidos else messages.SUCCESS,
+        )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return request.user.is_superuser or request.user.has_perm(
+            'financiacion_educativa.gestionar_firma_educativa'
+        )
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(EventoWebhookFirmaEducativa)
+class EventoWebhookFirmaEducativaAdmin(admin.ModelAdmin):
+    list_display = (
+        'tipo_evento',
+        'estado',
+        'codigo_resultado',
+        'proceso',
+        'recibido_en',
+    )
+    list_filter = ('tipo_evento', 'estado', 'recibido_en')
+    readonly_fields = tuple(
+        field.name for field in EventoWebhookFirmaEducativa._meta.fields
     )
 
     def has_add_permission(self, request):

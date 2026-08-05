@@ -249,23 +249,11 @@ class FlujoIntegralFinanciacionEducativaTests(APITestCase):
             aceptar=True,
         )
 
-        finanzas = self.client.post(
+        finanzas = self.client.get(
             reverse(
                 'financiacion_educativa_web:finanzas',
                 kwargs={'solicitud_id': solicitud.pk},
             ),
-            {'fecha_inicio_plan': date(2026, 7, 31).isoformat()},
-            follow=True,
-        )
-        proyeccion = self.client.post(
-            reverse(
-                'financiacion_educativa_web:proyectar-abono',
-                kwargs={'solicitud_id': solicitud.pk},
-            ),
-            {
-                'valor_pago': '500000',
-                'fecha_efectiva': '2026-08-15',
-            },
         )
         envio = self.client.post(
             reverse(
@@ -292,12 +280,13 @@ class FlujoIntegralFinanciacionEducativaTests(APITestCase):
         solicitud.refresh_from_db()
         self.assertEqual(creacion.status_code, status.HTTP_202_ACCEPTED)
         self.assertEqual(finanzas.status_code, status.HTTP_200_OK)
-        self.assertContains(finanzas, 'Plan de amortizaci&oacute;n')
+        self.assertContains(finanzas, 'Condiciones definitivas pendientes')
         self.assertEqual(previsualizacion.status_code, status.HTTP_200_OK)
         self.assertEqual(previsualizacion['X-Frame-Options'], 'SAMEORIGIN')
         previsualizacion.close()
-        self.assertContains(proyeccion, 'Cuotas pendientes despu')
-        self.assertContains(proyeccion, 'no registra ningun pago')
+        self.assertFalse(
+            CondicionesFinancieras.objects.filter(solicitud=solicitud).exists()
+        )
         self.assertFalse(
             solicitud.roles_participantes.filter(
                 rol=RolParticipante.GUARDIAN
@@ -488,13 +477,11 @@ class FlujoIntegralFinanciacionEducativaTests(APITestCase):
                 },
             )
         )
-        finanzas = self.client.post(
+        finanzas = self.client.get(
             reverse(
                 'financiacion_educativa_web:finanzas',
                 kwargs={'solicitud_id': solicitud.pk},
             ),
-            {'fecha_inicio_plan': date(2026, 7, 31).isoformat()},
-            follow=True,
         )
         envio = self.client.post(
             reverse(
@@ -515,13 +502,13 @@ class FlujoIntegralFinanciacionEducativaTests(APITestCase):
         self.assertEqual(creacion.status_code, status.HTTP_202_ACCEPTED)
         self.assertEqual(previsualizacion.status_code, status.HTTP_200_OK)
         previsualizacion.close()
-        self.assertContains(finanzas, 'Plan de amortizaci&oacute;n')
+        self.assertContains(finanzas, 'Condiciones definitivas pendientes')
         self.assertEqual(
             CondicionesFinancieras.objects.filter(
                 solicitud=solicitud,
                 activa=True,
             ).count(),
-            1,
+            0,
         )
         self.assertContains(envio, 'Expediente enviado')
         self.assertEqual(

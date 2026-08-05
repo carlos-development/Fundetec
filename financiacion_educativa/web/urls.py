@@ -106,9 +106,35 @@ urlpatterns = [
         name='ficha-matricula',
     ),
     path(
+        (
+            'solicitudes/<uuid:solicitud_id>/artefactos/'
+            '<uuid:artefacto_id>/descargar/'
+        ),
+        views.descargar_artefacto_contractual_view,
+        name='artefacto-descargar',
+    ),
+    path(
+        (
+            'solicitudes/<uuid:solicitud_id>/artefactos/'
+            '<uuid:artefacto_id>/firmado/descargar/'
+        ),
+        views.descargar_artefacto_firmado_view,
+        name='artefacto-firmado-descargar',
+    ),
+    path(
         'solicitudes/<uuid:solicitud_id>/documentacion/completar/',
         views.completar_documentacion_view,
         name='documentacion-completar',
+    ),
+    path(
+        'solicitudes/<uuid:solicitud_id>/simulador/',
+        views.simulador_view,
+        name='simulador',
+    ),
+    path(
+        'solicitudes/<uuid:solicitud_id>/simulador/calcular/',
+        views.calcular_simulacion_view,
+        name='simulador-calcular',
     ),
     path(
         'solicitudes/<uuid:solicitud_id>/finanzas/',

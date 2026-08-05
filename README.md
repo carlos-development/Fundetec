@@ -13,9 +13,15 @@ publica activa es Aprobado - financiacion educativa:
 - expediente de estudiante adulto o menor con tutor;
 - documentos y evidencia academica;
 - condiciones y proyecciones financieras educativas;
-- envio a revision manual.
+- simulador educativo autenticado y no persistente;
+- validacion documental asistida por IA, con salida conservadora a revision;
+- revision administrativa, condiciones contractuales y PDFs versionados;
+- firma educativa aislada con webhook autenticado e idempotente.
 
-Pagare, firma, pagos, OCR y panel operativo integral no estan disponibles aun.
+El backend de IA y la integracion educativa con ZapSign permanecen deshabilitados
+por defecto: requieren configuracion independiente y validacion operacional antes
+de usarse fuera de pruebas. Pagos, OCR y panel operativo integral no estan
+disponibles aun.
 La referencia tecnica vigente del dominio es
 `financiacion_educativa/README.md`. Para operar localmente y conectar un aliado:
 

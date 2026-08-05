@@ -11,8 +11,15 @@
                 <div class="edu-page-heading">
                     <p class="edu-eyebrow">Ficha de matr&iacute;cula</p>
                     <h1>Informaci&oacute;n disponible</h1>
-                    <p>La ficha se preparar&aacute; con los datos recibidos y confirmados. No generamos un PDF definitivo porque el formato suministrado es plano y a&uacute;n faltan reglas para sus campos y firmas.</p>
+                    <p>La ficha se construye exclusivamente con los datos recibidos y confirmados. Los campos ausentes permanecen pendientes.</p>
                 </div>
+
+                {% if ficha_generada %}
+                    <div class="alert-success" role="status">
+                        La ficha contractual {{ ficha_generada.numero_documento }} est&aacute; disponible.
+                        <a href="{% url 'financiacion_educativa_web:artefacto-descargar' solicitud.id ficha_generada.id %}">Descargar PDF</a>
+                    </div>
+                {% endif %}
 
                 <div class="alert-info" role="status">
                     Los datos pendientes no se completan con suposiciones. La fecha de creaci&oacute;n de la solicitud tampoco se interpreta como fecha de matr&iacute;cula.

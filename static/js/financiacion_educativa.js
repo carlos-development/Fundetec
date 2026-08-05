@@ -366,6 +366,93 @@ document.addEventListener('DOMContentLoaded', function () {
         setSide(side);
     }
 
+    const simulator = document.querySelector('[data-education-simulator]');
+    if (simulator) {
+        const form = simulator.querySelector('[data-simulator-form]');
+        const amount = form.querySelector('[name="monto_solicitado"]');
+        const term = form.querySelector('[name="plazo_meses"]');
+        const error = simulator.querySelector('[data-simulator-error]');
+        const status = simulator.querySelector('[data-simulator-status]');
+        const results = simulator.querySelector('.edu-simulator-results');
+        const version = simulator.querySelector('[data-simulator-version]');
+        const csrf = form.querySelector('[name="csrfmiddlewaretoken"]').value;
+        const cop = new Intl.NumberFormat('es-CO', {
+            style: 'currency',
+            currency: 'COP',
+            maximumFractionDigits: 0
+        });
+        let timer = null;
+        let activeRequest = null;
+
+        function percent(value) {
+            return String(value).replace(/\.0+$/, '').replace('.', ',');
+        }
+
+        function showSimulation(data) {
+            simulator.querySelectorAll('[data-simulator-result]').forEach(function (node) {
+                const value = data[node.dataset.simulatorResult];
+                node.textContent = cop.format(Number(value));
+            });
+            simulator.querySelectorAll('[data-simulator-rate]').forEach(function (node) {
+                const key = node.dataset.simulatorRate;
+                const suffix = key === 'tasa_interes_mensual' ? ' % mensual' : ' %';
+                node.textContent = '(' + percent(data[key]) + suffix + ')';
+            });
+            simulator.querySelectorAll('[data-simulator-provider]').forEach(function (node) {
+                node.textContent = data[node.dataset.simulatorProvider];
+            });
+            version.textContent = data.codigo_configuracion + ' v' + data.version_configuracion;
+        }
+
+        async function calculate() {
+            if (!amount.checkValidity() || !term.checkValidity()) {
+                error.textContent = 'Revisa el monto y el plazo indicados.';
+                error.hidden = false;
+                return;
+            }
+            if (activeRequest) activeRequest.abort();
+            activeRequest = new AbortController();
+            results.setAttribute('aria-busy', 'true');
+            status.textContent = 'Actualizando resultado...';
+            error.hidden = true;
+            const data = new FormData(form);
+            try {
+                const response = await fetch(simulator.dataset.calculateUrl, {
+                    method: 'POST',
+                    body: data,
+                    credentials: 'same-origin',
+                    headers: {'X-CSRFToken': csrf},
+                    signal: activeRequest.signal
+                });
+                const payload = await response.json();
+                if (!response.ok || !payload.ok) {
+                    throw new Error(payload.error || 'No fue posible actualizar la simulacion.');
+                }
+                showSimulation(payload.simulation);
+                status.textContent = 'Resultado actualizado.';
+            } catch (requestError) {
+                if (requestError.name === 'AbortError') return;
+                error.textContent = requestError.message || 'No fue posible actualizar la simulacion.';
+                error.hidden = false;
+                status.textContent = '';
+            } finally {
+                results.setAttribute('aria-busy', 'false');
+            }
+        }
+
+        function scheduleCalculation() {
+            window.clearTimeout(timer);
+            timer = window.setTimeout(calculate, 300);
+        }
+
+        amount.addEventListener('input', scheduleCalculation);
+        term.addEventListener('input', scheduleCalculation);
+        form.addEventListener('submit', function (event) {
+            event.preventDefault();
+            calculate();
+        });
+    }
+
     const scrollTarget = document.querySelector('[data-scroll-on-load]');
     if (scrollTarget) {
         window.requestAnimationFrame(function () {

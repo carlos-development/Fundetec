@@ -128,17 +128,16 @@
                         </div>
                     </section>
                 {% else %}
+                    <div class="edu-finance-simulator-link">
+                        <div>
+                            <strong>Explora un escenario antes de continuar</strong>
+                            <span>El simulador es informativo y no cambia los datos de tu solicitud.</span>
+                        </div>
+                        <a class="edu-button-secondary" href="{% url 'financiacion_educativa_web:simulador' solicitud.id %}">Abrir simulador</a>
+                    </div>
                     <section class="edu-section-block">
-                        <div class="edu-section-title"><h2>Generar informaci&oacute;n financiera</h2></div>
-                        <p>Se aplicar&aacute; la configuraci&oacute;n educativa vigente al monto y plazo recibidos de la instituci&oacute;n.</p>
-                        <form class="edu-form" method="post">
-                            {% csrf_token %}
-                            {{ crear_form.as_p }}
-                            <button class="edu-button" type="submit" {% if not configuracion_disponible %}disabled{% endif %}>Consultar financiaci&oacute;n</button>
-                        </form>
-                        {% if not configuracion_disponible and request.user.is_staff %}
-                            <p class="edu-field-help">Configura y activa EDU_STANDARD desde Administraci&oacute;n &gt; Configuraciones financieras educativas.</p>
-                        {% endif %}
+                        <div class="edu-section-title"><h2>Condiciones definitivas pendientes</h2></div>
+                        <p>La fotograf&iacute;a financiera contractual se crear&aacute; con el monto y plazo institucionales cuando el expediente sea aprobado. Ning&uacute;n escenario del simulador se guarda o se convierte en obligaci&oacute;n.</p>
                     </section>
                 {% endif %}
 

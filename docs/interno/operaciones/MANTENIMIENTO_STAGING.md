@@ -311,3 +311,54 @@ staging_manage test \
 
 En SQLite esa prueba se reporta como `SKIPPED`; ese resultado no demuestra la
 concurrencia de produccion.
+
+## Orquestacion educativa automatica
+
+El recorrido automatico permanece desactivado hasta completar las pruebas de
+ClamAV, IA documental y ZapSign sandbox:
+
+```text
+FINANCIACION_EDUCATIVA_AUTOMATION_ENABLED=false
+```
+
+Antes de cambiarlo a `true`, deben estar configuradas y validadas las variables
+de `.env.example` para:
+
+- ClamAV: backend, destino, timeouts y limites de intentos;
+- IA: backend OpenAI, modelo, timeout, umbrales y `OPENAI_API_KEY`;
+- firma: backend educativo, URL sandbox, token, secreto/header de webhook,
+  timeout, intentos, modo de autenticacion y HMAC de destinatario;
+- contrato: `FINANCIACION_EDUCATIVA_ACREEDOR_RAZON_SOCIAL`.
+
+`staging_manage check` rechaza activar la orquestacion con IA o firma
+deshabilitadas o sin acreedor. La activacion debe probarse primero con una
+solicitud QA y correo desviado. El callback posterior al commit se ejecuta en
+el proceso web; no es una cola asincrona.
+
+La identificacion capturada, la identificacion adicional del responsable y el
+certificado de ingresos requieren validacion visual concluyente. La captura de
+identidad solo admite JPEG o PNG. Si uno de los demas documentos cuyo contenido
+debe validarse llega en PDF y el backend no soporta ese formato, queda en
+revision manual con el motivo persistido; no se convierte ni acepta en silencio.
+
+El soporte de matricula es opcional y sus datos se registran por separado. Un
+soporte PDF estructuralmente valido puede aceptarse por politica deterministica
+solo despues de un escaneo ClamAV limpio y con los datos de matricula completos;
+la decision y su motivo quedan en `resultado_procesamiento` y no se registra
+como validacion IA. Las imagenes de matricula siguen requiriendo validacion IA.
+Baja confianza, posible imagen no real, inconsistencia o fallo tecnico conserva
+la solicitud en revision manual. Ninguno de esos casos produce rechazo
+automatico.
+
+Un fallo temporal deja intentos y estados recuperables. Reanudar sin editar la
+base ni repetir pasos manuales:
+
+```bash
+staging_manage procesar_orquestacion_educativa --help
+staging_manage procesar_orquestacion_educativa \
+  --solicitud-id UUID_SOLICITUD --limit 1
+```
+
+Los comandos de escaneo, IA y firma individuales se conservan para diagnostico
+puntual. No son parte obligatoria del recorrido exitoso cuando la automatizacion
+esta activa.

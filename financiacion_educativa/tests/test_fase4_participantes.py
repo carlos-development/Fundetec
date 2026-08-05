@@ -112,9 +112,10 @@ class ParticipantesFase4Tests(TestCase):
             set(actualizado.roles.values_list('rol', flat=True)),
             {RolParticipante.STUDENT, RolParticipante.PRINCIPAL_DEBTOR},
         )
+        self.assertTrue(actualizado.responsable_contractual)
         self.assertEqual(EventoParticipanteFinanciacion.objects.count(), 2)
         campos = EventoParticipanteFinanciacion.objects.latest('creado_en').campos_modificados
-        self.assertEqual(campos, ['roles'])
+        self.assertEqual(campos, ['responsable_contractual', 'roles'])
 
     def test_rechaza_estudiante_y_tutor_en_la_misma_persona(self):
         with self.assertRaises(ValidationError):

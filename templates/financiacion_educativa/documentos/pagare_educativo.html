@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <title>Pagare educativo {{ numero_documento }}</title>
+    <style>
+        @page { size: Letter; margin: 18mm; }
+        body { color: #172033; font: 10.5pt Arial, sans-serif; line-height: 1.45; }
+        h1 { color: #0b4da2; font-size: 19pt; margin: 0 0 4mm; text-align: center; }
+        h2 { color: #0b4da2; font-size: 12pt; margin: 6mm 0 2mm; }
+        p { margin: 0 0 3mm; text-align: justify; }
+        table { border-collapse: collapse; margin: 3mm 0 5mm; width: 100%; }
+        th, td { border: 1px solid #cad3df; padding: 2.5mm; text-align: left; vertical-align: top; }
+        th { background: #eef4fb; width: 24%; }
+        .brand { color: #0b4da2; font-size: 16pt; font-weight: 700; }
+        .number { color: #49566a; text-align: center; }
+        .signature { margin-top: 18mm; width: 70%; }
+        .signature-line { border-top: 1px solid #172033; padding-top: 2mm; }
+        .fine { color: #5e6878; font-size: 8.5pt; }
+    </style>
+</head>
+<body>
+    <div class="brand">Aprobado</div>
+    <h1>PAGARE DE FINANCIACION EDUCATIVA</h1>
+    <p class="number">No. {{ numero_documento }}</p>
+
+    <h2>Partes y finalidad</h2>
+    <p>
+        Yo, <strong>{{ responsable.nombre_completo }}</strong>, identificado con
+        <strong>{{ responsable.get_tipo_documento_display }} {{ responsable.numero_documento }}</strong>,
+        en calidad de responsable contractual, prometo pagar incondicionalmente a la orden de
+        <strong>{{ acreedor_razon_social }}</strong> las sumas descritas en este pagar&eacute; por la
+        financiaci&oacute;n del plan educativo de <strong>{{ estudiante.nombre_completo }}</strong>.
+    </p>
+    <table>
+        <tr><th>Instituci&oacute;n educativa</th><td>{{ solicitud.institucion.nombre_comercial }}</td></tr>
+        <tr><th>Programa</th><td>{{ solicitud.nombre_curso }}</td></tr>
+        <tr><th>Referencia</th><td>{{ solicitud.referencia_externa }}</td></tr>
+        <tr><th>Direcci&oacute;n</th><td>{{ solicitud.direccion }}</td></tr>
+        <tr><th>Correo y celular</th><td>{{ responsable.correo|default:solicitud.correo }} / {{ responsable.telefono|default:solicitud.celular }}</td></tr>
+    </table>
+
+    <h2>Condiciones financieras definitivas</h2>
+    <table>
+        <tr><th>Valor del plan</th><td>COP {{ fotografia.valor_financiado }}</td><th>Plazo</th><td>{{ fotografia.plazo_meses }} meses</td></tr>
+        <tr><th>Originaci&oacute;n</th><td>COP {{ fotografia.valor_comision }}</td><th>IVA originaci&oacute;n</th><td>COP {{ fotografia.valor_iva_comision }}</td></tr>
+        <tr><th>Figarant&iacute;as</th><td>COP {{ fotografia.valor_fondo_garantias }}</td><th>Seguro de vida</th><td>COP {{ fotografia.valor_seguro_vida }}</td></tr>
+        <tr><th>Capital financiado</th><td>COP {{ fotografia.capital_financiado }}</td><th>Tasa mensual</th><td>{{ fotografia.tasa_interes_mensual }} %</td></tr>
+        <tr><th>Cuota estimada</th><td>COP {{ fotografia.valor_cuota_estimada }}</td><th>Total proyectado</th><td>COP {{ fotografia.total_estimado }}</td></tr>
+        <tr><th>Primer vencimiento</th><td>{{ fotografia.fecha_primer_vencimiento|date:"Y-m-d" }}</td><th>&Uacute;ltimo vencimiento</th><td>{{ fotografia.fecha_ultimo_vencimiento|date:"Y-m-d" }}</td></tr>
+    </table>
+
+    <h2>Obligaci&oacute;n</h2>
+    <p>
+        El capital financiado incluye el valor del plan y los cargos discriminados. Esta operaci&oacute;n
+        financia el acceso al programa acad&eacute;mico y no representa una entrega de dinero al estudiante.
+        La obligaci&oacute;n se pagar&aacute; mediante cuotas mensuales conforme al plan de amortizaci&oacute;n asociado
+        a la fotograf&iacute;a financiera bloqueada de esta solicitud.
+    </p>
+    <p>
+        En caso de mora se causar&aacute;n los intereses permitidos por la normativa aplicable sobre los
+        valores vencidos. El acreedor podr&aacute; exigir el pago de las obligaciones vencidas y ejercer las
+        acciones legalmente disponibles conforme al plan de pagos de esta financiaci&oacute;n educativa.
+    </p>
+    <p>
+        Declaro que revis&eacute; la identificaci&oacute;n del estudiante, el programa, los cargos, el capital, el
+        plazo y la cuota incluidos en este documento. Acepto que la firma electr&oacute;nica utilizada por el
+        proveedor autorizado constituye manifestaci&oacute;n de voluntad y evidencia del otorgamiento.
+    </p>
+
+    <div class="signature">
+        <div class="signature-line">
+            <strong>{{ responsable.nombre_completo }}</strong><br>
+            {{ responsable.get_tipo_documento_display }} {{ responsable.numero_documento }}<br>
+            Responsable contractual y deudor principal
+        </div>
+    </div>
+    <p class="fine">
+        Plantilla {{ artefacto_version|default:"EDU-PAGARE-1.0" }}. Documento generado desde datos
+        verificados y condiciones financieras versionadas; no contiene una firma hasta que el proveedor
+        de firma confirme el proceso.
+    </p>
+</body>
+</html>

@@ -1,6 +1,10 @@
 from django.urls import path
 
-from .views import SolicitudDetalleAPIView, SolicitudListCreateAPIView
+from .views import (
+    SolicitudDetalleAPIView,
+    SolicitudListCreateAPIView,
+    ZapSignEducationalWebhookAPIView,
+)
 
 
 app_name = 'financiacion_educativa_api'
@@ -15,5 +19,10 @@ urlpatterns = [
         'solicitudes/<uuid:application_id>/',
         SolicitudDetalleAPIView.as_view(),
         name='solicitud-detalle',
+    ),
+    path(
+        'integraciones/zapsign/webhook/',
+        ZapSignEducationalWebhookAPIView.as_view(),
+        name='zapsign-webhook',
     ),
 ]
