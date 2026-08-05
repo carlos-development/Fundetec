@@ -6,6 +6,17 @@ from . import views
 app_name = 'financiacion_educativa_web'
 
 urlpatterns = [
+    path('simulador/', views.simulador_publico_view, name='simulador-publico'),
+    path(
+        'simulador/calcular/',
+        views.calcular_simulacion_publica_view,
+        name='simulador-publico-calcular',
+    ),
+    path(
+        'mis-solicitudes/continuar/',
+        views.reanudar_solicitudes_view,
+        name='reanudar-solicitudes',
+    ),
     path(
         'captura-movil/continuar/',
         views.captura_movil_continuar_view,
@@ -29,6 +40,11 @@ urlpatterns = [
         'solicitudes/<uuid:solicitud_id>/terminos/',
         views.terminos_view,
         name='terminos',
+    ),
+    path(
+        'solicitudes/<uuid:solicitud_id>/estado/',
+        views.estado_solicitud_view,
+        name='estado-solicitud',
     ),
     path(
         'solicitudes/<uuid:solicitud_id>/siguiente/',

@@ -1,0 +1,38 @@
+{% extends "financiacion_educativa/_base.html" %}
+
+{% block title %}Estado de solicitud | {{ education_brand.name|default:"Aprobado" }}{% endblock %}
+
+{% block content %}
+<section class="edu-page-band">
+    <div class="edu-page-shell edu-status-shell">
+        <header class="edu-page-heading">
+            <p class="edu-eyebrow">Estado de tu solicitud</p>
+            <h1>{{ destino.titulo }}</h1>
+            <p>{{ solicitud.nombre_curso }} &middot; {{ solicitud.institucion.nombre_comercial }}</p>
+        </header>
+
+        <section class="edu-status-panel">
+            <div class="edu-status-symbol" aria-hidden="true"><i class="bi bi-clock-history"></i></div>
+            <div>
+                <span class="edu-badge">{{ solicitud.get_estado_display }}</span>
+                {% if resultado_publico.motivo_decision %}
+                    <p>{{ resultado_publico.motivo_decision }}</p>
+                {% elif solicitud.estado == 'PENDING_SIGNATURE' %}
+                    <p>El pagar&eacute; vigente fue enviado al firmante. Cuando la firma sea confirmada, podr&aacute;s consultar las condiciones definitivas.</p>
+                {% elif solicitud.estado == 'PENDING_MANUAL_REVIEW' %}
+                    <p>El expediente est&aacute; en revisi&oacute;n. No necesitas volver a cargar documentos salvo que se solicite una correcci&oacute;n.</p>
+                {% elif solicitud.estado == 'PENDING_PROMISSORY_NOTE' %}
+                    <p>Estamos preparando los documentos contractuales de tu financiaci&oacute;n.</p>
+                {% elif solicitud.estado == 'PENDING_USER_REGISTRATION' %}
+                    <p>La asociaci&oacute;n inicial debe completarse desde una invitaci&oacute;n vigente enviada a tu correo.</p>
+                {% else %}
+                    <p>Consulta aqu&iacute; el resultado vigente de esta solicitud.</p>
+                {% endif %}
+            </div>
+        </section>
+        <a class="edu-inline-link" href="{% url 'financiacion_educativa_web:reanudar-solicitudes' %}">
+            <i class="bi bi-arrow-left" aria-hidden="true"></i> Volver a mis solicitudes
+        </a>
+    </div>
+</section>
+{% endblock %}

@@ -91,6 +91,16 @@ from financiacion_educativa.services.proyecciones_financieras import (
 from financiacion_educativa.services.simulacion import (
     simular_financiacion_educativa,
 )
+from financiacion_educativa.services.simulador_publico import (
+    limite_simulador_publico_excedido,
+)
+from financiacion_educativa.services.reanudacion import (
+    resolver_destino_reanudacion,
+    resolver_url_reanudacion,
+)
+from financiacion_educativa.services.estado_publico import (
+    obtener_resultado_publico,
+)
 from financiacion_educativa.services.configuracion_financiera import (
     ConfiguracionFinancieraAmbigua,
     ConfiguracionFinancieraNoDisponible,
@@ -103,6 +113,7 @@ from .forms import (
     RegistroFinanciacionForm,
     ReemplazoDocumentoForm,
     SimulacionFinanciacionEducativaForm,
+    SimulacionPublicaFinanciacionEducativaForm,
     TutorFinanciacionForm,
     ProyeccionAbonoForm,
     ProyeccionPagoTotalForm,
@@ -405,6 +416,7 @@ def _solicitud_del_usuario(request, solicitud_id, *, permitir_revisor=False):
 def _estado_documental_editable(solicitud):
     return solicitud.estado in {
         EstadoSolicitudFinanciacion.PENDING_DOCUMENT,
+        EstadoSolicitudFinanciacion.PENDING_GUARDIAN,
         EstadoSolicitudFinanciacion.CORRECTION_REQUIRED,
     }
 
@@ -523,6 +535,7 @@ def documentacion_view(request, solicitud_id):
     solicitud = _solicitud_del_usuario(request, solicitud_id)
     if solicitud.estado not in {
         EstadoSolicitudFinanciacion.PENDING_DOCUMENT,
+        EstadoSolicitudFinanciacion.PENDING_GUARDIAN,
         EstadoSolicitudFinanciacion.PENDING_MANUAL_REVIEW,
         EstadoSolicitudFinanciacion.CORRECTION_REQUIRED,
         EstadoSolicitudFinanciacion.APPROVED,
@@ -1393,7 +1406,131 @@ def _serializar_simulacion(simulacion):
         'proveedor_fondo_garantias': configuracion.proveedor_fondo_garantias,
         'proveedor_seguro_vida': configuracion.proveedor_seguro_vida,
         'metodo_calculo': configuracion.metodo_calculo,
+        'metodo_calculo_nombre': configuracion.get_metodo_calculo_display(),
+        'plan': [
+            {
+                'numero': cuota.numero,
+                'fecha_vencimiento': cuota.fecha_vencimiento.isoformat(),
+                'saldo_inicial': format(cuota.saldo_inicial, 'f'),
+                'interes': format(cuota.interes, 'f'),
+                'capital': format(cuota.capital, 'f'),
+                'valor_cuota': format(cuota.valor_cuota, 'f'),
+                'saldo_final': format(cuota.saldo_final, 'f'),
+            }
+            for cuota in resultado.plan
+        ],
     }
+
+
+def _simulacion_desde_formulario(form):
+    return simular_financiacion_educativa(
+        monto_solicitado=form.cleaned_data['monto_solicitado'],
+        plazo_meses=form.cleaned_data['plazo_meses'],
+    )
+
+
+def _respuesta_calculo_simulacion(form):
+    if not form.is_valid():
+        return JsonResponse(
+            {
+                'ok': False,
+                'error': 'Revisa el monto y el plazo indicados.',
+                'fields': {
+                    campo: [str(mensaje) for mensaje in errores]
+                    for campo, errores in form.errors.items()
+                },
+            },
+            status=400,
+        )
+    try:
+        simulacion = _simulacion_desde_formulario(form)
+    except (ConfiguracionFinancieraNoDisponible, ConfiguracionFinancieraAmbigua):
+        return JsonResponse(
+            {
+                'ok': False,
+                'error': 'La politica financiera educativa no esta disponible.',
+            },
+            status=503,
+        )
+    except ValidationError:
+        logger.exception('Fallo controlado al simular financiacion educativa.')
+        return JsonResponse(
+            {
+                'ok': False,
+                'error': 'No fue posible calcular el escenario solicitado.',
+            },
+            status=400,
+        )
+    return JsonResponse(
+        {'ok': True, 'simulation': _serializar_simulacion(simulacion)}
+    )
+
+
+def _simulacion_inicial(form_class, datos):
+    validacion = form_class(datos)
+    if not validacion.is_valid():
+        return None, 'Los datos iniciales no estan dentro del rango del simulador.'
+    try:
+        return _simulacion_desde_formulario(validacion), ''
+    except ConfiguracionFinancieraNoDisponible:
+        return None, 'No hay una politica financiera educativa activa.'
+    except ConfiguracionFinancieraAmbigua:
+        return None, 'La politica financiera educativa requiere revision.'
+    except ValidationError:
+        logger.exception('No fue posible generar la simulacion educativa inicial.')
+        return None, 'No fue posible simular con los datos actuales.'
+
+
+@never_cache
+@require_GET
+def simulador_publico_view(request):
+    datos = {
+        'monto_solicitado': (
+            settings.FINANCIACION_EDUCATIVA_PUBLIC_SIMULATOR_INITIAL_AMOUNT
+        ),
+        'plazo_meses': (
+            settings.FINANCIACION_EDUCATIVA_PUBLIC_SIMULATOR_INITIAL_TERM_MONTHS
+        ),
+    }
+    form = SimulacionPublicaFinanciacionEducativaForm(initial=datos)
+    simulacion, error = _simulacion_inicial(
+        SimulacionPublicaFinanciacionEducativaForm,
+        datos,
+    )
+    return render(
+        request,
+        'financiacion_educativa/simulador.html',
+        {
+            'form': form,
+            'simulacion': simulacion,
+            'error': error,
+            'simulador_publico': True,
+        },
+    )
+
+
+@never_cache
+@sensitive_post_parameters('monto_solicitado')
+@require_POST
+def calcular_simulacion_publica_view(request):
+    if limite_simulador_publico_excedido(request):
+        response = JsonResponse(
+            {
+                'ok': False,
+                'error': (
+                    'Se alcanzo el limite temporal de simulaciones. '
+                    'Intenta de nuevo en un momento.'
+                ),
+            },
+            status=429,
+        )
+        response['Retry-After'] = str(
+            settings.FINANCIACION_EDUCATIVA_PUBLIC_SIMULATOR_RATE_LIMIT_WINDOW_SECONDS
+        )
+        return response
+    return _respuesta_calculo_simulacion(
+        SimulacionPublicaFinanciacionEducativaForm(request.POST)
+    )
 
 
 @never_cache
@@ -1406,24 +1543,12 @@ def simulador_view(request, solicitud_id):
         'plazo_meses': solicitud.plazo_meses,
     }
     form = SimulacionFinanciacionEducativaForm(initial=datos_solicitud)
-    validacion_inicial = SimulacionFinanciacionEducativaForm(datos_solicitud)
-    simulacion = None
-    error = ''
-    if not validacion_inicial.is_valid():
+    simulacion, error = _simulacion_inicial(
+        SimulacionFinanciacionEducativaForm,
+        datos_solicitud,
+    )
+    if error.startswith('Los datos iniciales'):
         error = 'Los datos institucionales no estan dentro del rango del simulador.'
-    else:
-        try:
-            simulacion = simular_financiacion_educativa(
-                monto_solicitado=validacion_inicial.cleaned_data['monto_solicitado'],
-                plazo_meses=validacion_inicial.cleaned_data['plazo_meses'],
-            )
-        except ConfiguracionFinancieraNoDisponible:
-            error = 'No hay una politica financiera educativa activa.'
-        except ConfiguracionFinancieraAmbigua:
-            error = 'La politica financiera educativa requiere revision.'
-        except ValidationError:
-            logger.exception('No fue posible generar la simulacion educativa inicial.')
-            error = 'No fue posible simular con los datos actuales.'
     return render(
         request,
         'financiacion_educativa/simulador.html',
@@ -1442,42 +1567,61 @@ def simulador_view(request, solicitud_id):
 @require_POST
 def calcular_simulacion_view(request, solicitud_id):
     _solicitud_del_usuario(request, solicitud_id)
-    form = SimulacionFinanciacionEducativaForm(request.POST)
-    if not form.is_valid():
-        return JsonResponse(
-            {
-                'ok': False,
-                'error': 'Revisa el monto y el plazo indicados.',
-                'fields': {
-                    campo: [str(mensaje) for mensaje in errores]
-                    for campo, errores in form.errors.items()
-                },
-            },
-            status=400,
-        )
-    try:
-        simulacion = simular_financiacion_educativa(
-            monto_solicitado=form.cleaned_data['monto_solicitado'],
-            plazo_meses=form.cleaned_data['plazo_meses'],
-        )
-    except (ConfiguracionFinancieraNoDisponible, ConfiguracionFinancieraAmbigua):
-        return JsonResponse(
-            {
-                'ok': False,
-                'error': 'La politica financiera educativa no esta disponible.',
-            },
-            status=503,
-        )
-    except ValidationError:
-        logger.exception('Fallo controlado al simular financiacion educativa.')
-        return JsonResponse(
-            {
-                'ok': False,
-                'error': 'No fue posible calcular el escenario solicitado.',
-            },
-            status=400,
-        )
-    return JsonResponse({'ok': True, 'simulation': _serializar_simulacion(simulacion)})
+    return _respuesta_calculo_simulacion(
+        SimulacionFinanciacionEducativaForm(request.POST)
+    )
+
+
+@never_cache
+@login_required
+@require_GET
+def reanudar_solicitudes_view(request):
+    solicitudes = list(
+        SolicitudFinanciacionEducativa.objects.filter(
+            usuario=request.user,
+        ).select_related('institucion')
+    )
+    activas = [
+        solicitud
+        for solicitud in solicitudes
+        if resolver_destino_reanudacion(solicitud).inconclusa
+    ]
+    if len(activas) == 1:
+        return redirect(resolver_url_reanudacion(activas[0]))
+
+    candidatas = activas or solicitudes
+    if len(candidatas) == 1:
+        return redirect(resolver_url_reanudacion(candidatas[0]))
+
+    opciones = [
+        {
+            'solicitud': solicitud,
+            'destino': resolver_destino_reanudacion(solicitud),
+            'url': resolver_url_reanudacion(solicitud),
+        }
+        for solicitud in candidatas
+    ]
+    return render(
+        request,
+        'financiacion_educativa/mis_solicitudes.html',
+        {'opciones': opciones},
+    )
+
+
+@never_cache
+@login_required
+@require_GET
+def estado_solicitud_view(request, solicitud_id):
+    solicitud = _solicitud_del_usuario(request, solicitud_id)
+    return render(
+        request,
+        'financiacion_educativa/estado_solicitud.html',
+        {
+            'solicitud': solicitud,
+            'destino': resolver_destino_reanudacion(solicitud),
+            'resultado_publico': obtener_resultado_publico(solicitud),
+        },
+    )
 
 
 @never_cache

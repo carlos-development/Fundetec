@@ -5,6 +5,7 @@
 {% block body_class %}edu-landing-page{% endblock %}
 
 {% block content %}
+{% url 'financiacion_educativa_web:reanudar-solicitudes' as resume_url %}
 <section class="edu-hero" aria-labelledby="hero-title">
     <div class="edu-hero-media">
         <picture>
@@ -25,10 +26,11 @@
             <p class="edu-hero-lead">
                 Revisa la informaci&oacute;n enviada por tu instituci&oacute;n y contin&uacute;a tu solicitud en l&iacute;nea.
             </p>
-            <a class="edu-button" href="{% url 'account_login' %}">
+            <a class="edu-button" href="{% if request.user.is_authenticated %}{{ resume_url }}{% else %}{% url 'account_login' %}?next={{ resume_url|urlencode }}{% endif %}">
                 Continuar mi solicitud
                 <i class="bi bi-arrow-right" aria-hidden="true"></i>
             </a>
+            <a class="edu-inline-link" href="{% url 'financiacion_educativa_web:simulador-publico' %}">Simular mi financiaci&oacute;n</a>
         </div>
     </div>
 </section>

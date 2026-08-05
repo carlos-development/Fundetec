@@ -401,6 +401,30 @@ document.addEventListener('DOMContentLoaded', function () {
             simulator.querySelectorAll('[data-simulator-provider]').forEach(function (node) {
                 node.textContent = data[node.dataset.simulatorProvider];
             });
+            const method = simulator.querySelector('[data-simulator-method]');
+            if (method) method.textContent = data.metodo_calculo_nombre;
+            const plan = document.querySelector('[data-simulator-plan]');
+            if (plan) {
+                plan.replaceChildren();
+                data.plan.forEach(function (payment) {
+                    const row = document.createElement('tr');
+                    const date = new Date(payment.fecha_vencimiento + 'T00:00:00');
+                    [
+                        payment.numero,
+                        date.toLocaleDateString('es-CO'),
+                        cop.format(Number(payment.saldo_inicial)),
+                        cop.format(Number(payment.interes)),
+                        cop.format(Number(payment.capital)),
+                        cop.format(Number(payment.valor_cuota)),
+                        cop.format(Number(payment.saldo_final))
+                    ].forEach(function (value) {
+                        const cell = document.createElement('td');
+                        cell.textContent = value;
+                        row.appendChild(cell);
+                    });
+                    plan.appendChild(row);
+                });
+            }
             version.textContent = data.codigo_configuracion + ' v' + data.version_configuracion;
         }
 

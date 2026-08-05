@@ -1,3 +1,6 @@
+from unittest.mock import Mock, patch
+from urllib.parse import quote
+
 from django.contrib.auth import get_user_model
 from django.core import mail
 from django.test import TestCase, override_settings
@@ -48,6 +51,98 @@ class PublicEducationBrandTests(TestCase):
         self.assertContains(response, 'css/financiacion_educativa.css')
         self.assertNotContains(response, 'FUNDETEC')
         self.assertNotContains(response, 'Libranza')
+
+    def test_landing_navbar_y_footer_enlazan_simulador_publico(self):
+        response = self.client.get(reverse('home'))
+        simulator_url = reverse(
+            'financiacion_educativa_web:simulador-publico'
+        )
+
+        self.assertContains(response, simulator_url, count=4)
+        self.assertContains(response, 'Simular mi financiaci&oacute;n')
+
+    def test_continuar_usa_reanudador_o_login_con_next_interno(self):
+        resume_url = reverse(
+            'financiacion_educativa_web:reanudar-solicitudes'
+        )
+        anonymous = self.client.get(reverse('home'))
+        self.assertContains(
+            anonymous,
+            f'{reverse("account_login")}?next={resume_url}',
+        )
+
+        user = get_user_model().objects.create_user(
+            username='continuar@example.com',
+            email='continuar@example.com',
+            password='Clave-Continuar-2026',
+        )
+        self.client.force_login(user)
+        authenticated = self.client.get(reverse('home'))
+        self.assertContains(authenticated, f'href="{resume_url}"')
+
+    def test_login_local_preserva_next_y_rechaza_destino_externo(self):
+        password = 'Clave-Next-2026'
+        user = get_user_model().objects.create_user(
+            username='next@example.com',
+            email='next@example.com',
+            password=password,
+        )
+        resume_url = reverse(
+            'financiacion_educativa_web:reanudar-solicitudes'
+        )
+        login_url = f'{reverse("account_login")}?next={resume_url}'
+
+        response = self.client.post(
+            login_url,
+            {'login': user.email, 'password': password, 'next': resume_url},
+        )
+        self.assertRedirects(
+            response,
+            resume_url,
+            fetch_redirect_response=False,
+        )
+
+        self.client.logout()
+        external = self.client.post(
+            f'{reverse("account_login")}?next=https://evil.example/path',
+            {
+                'login': user.email,
+                'password': password,
+                'next': 'https://evil.example/path',
+            },
+        )
+        self.assertEqual(external.status_code, 302)
+        self.assertFalse(external.url.startswith('https://evil.example'))
+
+    def test_google_login_recibe_el_next_del_reanudador(self):
+        resume_url = reverse(
+            'financiacion_educativa_web:reanudar-solicitudes'
+        )
+        provider = Mock(
+            id='google',
+            name='Google',
+            uses_apps=True,
+        )
+        provider.app.settings = {}
+        provider.get_login_url.return_value = (
+            '/accounts/google/login/?process=login&amp;next='
+            f'{quote(resume_url, safe="")}'
+        )
+        with patch(
+            'usuarios.adapter.CustomSocialAccountAdapter.list_providers',
+            return_value=[provider],
+        ):
+            response = self.client.get(
+                f'{reverse("account_login")}?next={resume_url}'
+            )
+
+        self.assertContains(response, '/accounts/google/login/')
+        self.assertContains(response, f'next={quote(resume_url, safe="")}')
+        provider.get_login_url.assert_called_once()
+        self.assertEqual(
+            provider.get_login_url.call_args.kwargs['next'],
+            resume_url,
+        )
 
     def test_logout_action_is_only_visible_for_authenticated_users(self):
         anonymous_response = self.client.get(reverse('home'))

@@ -1,4 +1,5 @@
 {% load static %}
+{% url 'financiacion_educativa_web:reanudar-solicitudes' as resume_url %}
 <header class="edu-navbar" data-education-navbar>
     <div class="edu-navbar-inner">
         <a class="edu-navbar-logo" href="{% url 'home' %}" aria-label="Aprobado, inicio">
@@ -7,6 +8,7 @@
 
         <nav class="edu-navbar-links" aria-label="Navegaci&oacute;n principal">
             <a href="{% url 'home' %}">Inicio</a>
+            <a href="{% url 'financiacion_educativa_web:simulador-publico' %}">Simulador</a>
             <a href="{% url 'politica_privacidad' %}">Privacidad</a>
             <span class="edu-navbar-security"><span aria-hidden="true">&#10003;</span> Sitio seguro</span>
         </nav>
@@ -21,6 +23,7 @@
                     </button>
                     <div class="edu-user-dropdown" data-user-menu>
                         <span class="edu-user-email">{{ request.user.email }}</span>
+                        <a href="{{ resume_url }}">Mis solicitudes</a>
                         <form method="post" action="{% url 'account_logout' %}">
                             {% csrf_token %}
                             <button type="submit">
@@ -31,7 +34,7 @@
                     </div>
                 </div>
             {% else %}
-                <a class="edu-navbar-cta" href="{% url 'account_login' %}">Iniciar sesi&oacute;n</a>
+                <a class="edu-navbar-cta" href="{% url 'account_login' %}?next={{ resume_url|urlencode }}">Iniciar sesi&oacute;n</a>
             {% endif %}
             <button class="edu-menu-toggle" type="button" aria-label="Abrir men&uacute;" aria-expanded="false" data-menu-toggle>
                 <span aria-hidden="true">&#9776;</span>
@@ -41,14 +44,16 @@
 
     <div class="edu-mobile-menu" data-mobile-menu>
         <a href="{% url 'home' %}">Inicio</a>
+        <a href="{% url 'financiacion_educativa_web:simulador-publico' %}">Simulador</a>
         <a href="{% url 'politica_privacidad' %}">Privacidad</a>
         {% if request.user.is_authenticated %}
+            <a href="{{ resume_url }}">Mis solicitudes</a>
             <form method="post" action="{% url 'account_logout' %}">
                 {% csrf_token %}
                 <button type="submit"><i class="bi bi-box-arrow-right" aria-hidden="true"></i> Cerrar sesi&oacute;n</button>
             </form>
         {% else %}
-            <a class="edu-mobile-login" href="{% url 'account_login' %}">Iniciar sesi&oacute;n</a>
+            <a class="edu-mobile-login" href="{% url 'account_login' %}?next={{ resume_url|urlencode }}">Iniciar sesi&oacute;n</a>
         {% endif %}
     </div>
 </header>

@@ -1,4 +1,5 @@
 from django import forms
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 from django.utils import timezone
@@ -319,6 +320,71 @@ class SimulacionFinanciacionEducativaForm(forms.Form):
         ),
         help_text='El simulador admite plazos de 1 a 120 meses.',
     )
+
+
+class SimulacionPublicaFinanciacionEducativaForm(forms.Form):
+    monto_solicitado = forms.DecimalField(
+        label='Monto a financiar',
+        max_digits=14,
+        decimal_places=2,
+        widget=forms.NumberInput(
+            attrs={
+                'inputmode': 'decimal',
+                'step': '50000',
+                'autocomplete': 'off',
+            }
+        ),
+    )
+    plazo_meses = forms.IntegerField(
+        label='Plazo en meses',
+        widget=forms.NumberInput(
+            attrs={
+                'inputmode': 'numeric',
+                'step': '1',
+                'autocomplete': 'off',
+            }
+        ),
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        min_amount = settings.FINANCIACION_EDUCATIVA_PUBLIC_SIMULATOR_MIN_AMOUNT
+        max_amount = settings.FINANCIACION_EDUCATIVA_PUBLIC_SIMULATOR_MAX_AMOUNT
+        min_term = settings.FINANCIACION_EDUCATIVA_PUBLIC_SIMULATOR_MIN_TERM_MONTHS
+        max_term = settings.FINANCIACION_EDUCATIVA_PUBLIC_SIMULATOR_MAX_TERM_MONTHS
+        self.fields['monto_solicitado'].min_value = min_amount
+        self.fields['monto_solicitado'].max_value = max_amount
+        self.fields['monto_solicitado'].widget.attrs.update(
+            {'min': str(min_amount), 'max': str(max_amount)}
+        )
+        self.fields['plazo_meses'].min_value = min_term
+        self.fields['plazo_meses'].max_value = max_term
+        self.fields['plazo_meses'].widget.attrs.update(
+            {'min': str(min_term), 'max': str(max_term)}
+        )
+        self.fields['plazo_meses'].help_text = (
+            f'Elige un plazo entre {min_term} y {max_term} meses.'
+        )
+
+    def clean_monto_solicitado(self):
+        amount = self.cleaned_data['monto_solicitado']
+        minimum = settings.FINANCIACION_EDUCATIVA_PUBLIC_SIMULATOR_MIN_AMOUNT
+        maximum = settings.FINANCIACION_EDUCATIVA_PUBLIC_SIMULATOR_MAX_AMOUNT
+        if amount < minimum or amount > maximum:
+            raise forms.ValidationError(
+                f'El monto debe estar entre ${minimum:,} y ${maximum:,} COP.'
+            )
+        return amount
+
+    def clean_plazo_meses(self):
+        term = self.cleaned_data['plazo_meses']
+        minimum = settings.FINANCIACION_EDUCATIVA_PUBLIC_SIMULATOR_MIN_TERM_MONTHS
+        maximum = settings.FINANCIACION_EDUCATIVA_PUBLIC_SIMULATOR_MAX_TERM_MONTHS
+        if term < minimum or term > maximum:
+            raise forms.ValidationError(
+                f'El plazo debe estar entre {minimum} y {maximum} meses.'
+            )
+        return term
 
 
 class BaseProyeccionFinancieraForm(forms.Form):

@@ -1,3 +1,4 @@
+import ipaddress
 import math
 import re
 from decimal import Decimal, InvalidOperation
@@ -31,6 +32,67 @@ DISABLED_EDUCATIONAL_SIGNATURE_BACKEND = (
 
 def _error(message, identifier):
     return Error(message, id=f'financiacion_educativa.{identifier}')
+
+
+@register()
+def check_public_simulator_configuration(app_configs, **kwargs):
+    errors = []
+    values = {}
+    for name, identifier in (
+        ('FINANCIACION_EDUCATIVA_PUBLIC_SIMULATOR_MIN_AMOUNT', 'E070'),
+        ('FINANCIACION_EDUCATIVA_PUBLIC_SIMULATOR_MAX_AMOUNT', 'E071'),
+        ('FINANCIACION_EDUCATIVA_PUBLIC_SIMULATOR_INITIAL_AMOUNT', 'E072'),
+        ('FINANCIACION_EDUCATIVA_PUBLIC_SIMULATOR_MIN_TERM_MONTHS', 'E073'),
+        ('FINANCIACION_EDUCATIVA_PUBLIC_SIMULATOR_MAX_TERM_MONTHS', 'E074'),
+        ('FINANCIACION_EDUCATIVA_PUBLIC_SIMULATOR_INITIAL_TERM_MONTHS', 'E075'),
+        ('FINANCIACION_EDUCATIVA_PUBLIC_SIMULATOR_RATE_LIMIT_REQUESTS', 'E076'),
+        (
+            'FINANCIACION_EDUCATIVA_PUBLIC_SIMULATOR_RATE_LIMIT_WINDOW_SECONDS',
+            'E077',
+        ),
+    ):
+        value = getattr(settings, name, None)
+        values[name] = value
+        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+            errors.append(_error(f'{name} debe ser un entero positivo.', identifier))
+
+    if not errors:
+        if values['FINANCIACION_EDUCATIVA_PUBLIC_SIMULATOR_MIN_AMOUNT'] > values[
+            'FINANCIACION_EDUCATIVA_PUBLIC_SIMULATOR_MAX_AMOUNT'
+        ]:
+            errors.append(_error('El rango de monto del simulador no es valido.', 'E078'))
+        if not (
+            values['FINANCIACION_EDUCATIVA_PUBLIC_SIMULATOR_MIN_AMOUNT']
+            <= values['FINANCIACION_EDUCATIVA_PUBLIC_SIMULATOR_INITIAL_AMOUNT']
+            <= values['FINANCIACION_EDUCATIVA_PUBLIC_SIMULATOR_MAX_AMOUNT']
+        ):
+            errors.append(_error('El monto inicial debe estar dentro del rango.', 'E079'))
+        if values['FINANCIACION_EDUCATIVA_PUBLIC_SIMULATOR_MIN_TERM_MONTHS'] > values[
+            'FINANCIACION_EDUCATIVA_PUBLIC_SIMULATOR_MAX_TERM_MONTHS'
+        ]:
+            errors.append(_error('El rango de plazo del simulador no es valido.', 'E080'))
+        if not (
+            values['FINANCIACION_EDUCATIVA_PUBLIC_SIMULATOR_MIN_TERM_MONTHS']
+            <= values['FINANCIACION_EDUCATIVA_PUBLIC_SIMULATOR_INITIAL_TERM_MONTHS']
+            <= values['FINANCIACION_EDUCATIVA_PUBLIC_SIMULATOR_MAX_TERM_MONTHS']
+        ):
+            errors.append(_error('El plazo inicial debe estar dentro del rango.', 'E081'))
+
+    proxies = getattr(
+        settings,
+        'FINANCIACION_EDUCATIVA_PUBLIC_SIMULATOR_TRUSTED_PROXY_IPS',
+        (),
+    )
+    if not isinstance(proxies, (list, tuple)):
+        errors.append(_error('Los proxies del simulador deben ser una lista.', 'E082'))
+    else:
+        for proxy in proxies:
+            try:
+                ipaddress.ip_address(proxy)
+            except ValueError:
+                errors.append(_error('Existe un proxy del simulador invalido.', 'E083'))
+                break
+    return errors
 
 
 @register()

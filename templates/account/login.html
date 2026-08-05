@@ -1,11 +1,11 @@
 {% extends "financiacion_educativa/_base.html" %}
 {% load static socialaccount %}
-{% get_providers as socialaccount_providers %}
 
 {% block title %}Contin&uacute;a tu financiaci&oacute;n | Aprobado{% endblock %}
 {% block body_class %}edu-auth-page{% endblock %}
 
 {% block content %}
+{% get_providers as socialaccount_providers %}
 <section class="edu-auth-main">
     <div class="edu-auth-panel">
         <img class="edu-auth-logo" src="{% static education_brand.logo_inverse|default:'images/logo.png' %}" alt="Aprobado">
@@ -41,7 +41,7 @@
         {% for provider in socialaccount_providers %}
             {% if provider.id == "google" %}
                 <div class="edu-auth-divider">o contin&uacute;a con</div>
-                <a href="{% provider_login_url provider.id %}" class="edu-button-secondary edu-button-wide">
+                <a href="{% provider_login_url provider process='login' next=redirect_field_value %}" class="edu-button-secondary edu-button-wide">
                     <i class="bi bi-google" aria-hidden="true"></i> Continuar con Google
                 </a>
             {% endif %}

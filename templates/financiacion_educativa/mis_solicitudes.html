@@ -1,0 +1,40 @@
+{% extends "financiacion_educativa/_base.html" %}
+{% load financiacion_format %}
+
+{% block title %}Mis solicitudes | {{ education_brand.name|default:"Aprobado" }}{% endblock %}
+
+{% block content %}
+<section class="edu-page-band">
+    <div class="edu-page-shell edu-resume-shell">
+        <header class="edu-page-heading">
+            <p class="edu-eyebrow">Financiaci&oacute;n educativa</p>
+            <h1>Mis solicitudes</h1>
+            <p>Consulta o contin&uacute;a una solicitud asociada a tu cuenta.</p>
+        </header>
+
+        {% if opciones %}
+            <div class="edu-request-list">
+                {% for opcion in opciones %}
+                    <article class="edu-request-row">
+                        <div>
+                            <span class="edu-request-label">{{ opcion.solicitud.institucion.nombre_comercial }}</span>
+                            <h2>{{ opcion.solicitud.nombre_curso }}</h2>
+                            <p>{{ opcion.solicitud.valor_plan|cop }} &middot; {{ opcion.solicitud.plazo_meses }} meses</p>
+                        </div>
+                        <div class="edu-request-action">
+                            <span class="edu-badge">{{ opcion.destino.titulo }}</span>
+                            <a class="edu-button-secondary" href="{{ opcion.url }}">{{ opcion.destino.accion }}</a>
+                        </div>
+                    </article>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="edu-empty">
+                <h2>No tienes solicitudes asociadas</h2>
+                <p>Las solicitudes nuevas se vinculan a tu cuenta desde la invitaci&oacute;n enviada por la instituci&oacute;n.</p>
+                <a class="edu-button-secondary" href="{% url 'home' %}">Volver al inicio</a>
+            </div>
+        {% endif %}
+    </div>
+</section>
+{% endblock %}
