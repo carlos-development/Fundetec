@@ -149,7 +149,10 @@ def obtener_backend_escaneo():
 
 
 def _validar_permiso_escaneo(actor, origen):
-    if origen == OrigenIntentoEscaneoDocumento.COMMAND and actor is None:
+    if origen in {
+        OrigenIntentoEscaneoDocumento.COMMAND,
+        OrigenIntentoEscaneoDocumento.AUTOMATIC,
+    } and actor is None:
         return
     if (
         not actor

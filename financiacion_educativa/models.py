@@ -1446,7 +1446,7 @@ class ValidacionIADocumento(models.Model):
     )
     proveedor = models.CharField(max_length=60, blank=True)
     modelo = models.CharField(max_length=80, blank=True)
-    version_esquema = models.CharField(max_length=30, default='1')
+    version_esquema = models.CharField(max_length=30, default='2')
     calidad = models.DecimalField(
         max_digits=5,
         decimal_places=4,
@@ -1472,6 +1472,7 @@ class ValidacionIADocumento(models.Model):
     indicios_imagen_real = models.BooleanField(null=True, blank=True)
     datos_consistentes = models.BooleanField(null=True, blank=True)
     hallazgos = models.JSONField(default=list, blank=True)
+    resultado_estructurado = models.JSONField(default=dict, blank=True)
     codigo_error = models.CharField(max_length=60, blank=True)
     solicitado_por = models.ForeignKey(
         settings.AUTH_USER_MODEL,

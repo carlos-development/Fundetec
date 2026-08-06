@@ -205,12 +205,11 @@ periodo, sede, jornada y `fecha_matricula`. No duplica el programa: se conserva
 
 ## Fecha de matricula y firma
 
-`fecha_matricula` permanece nula durante las fases disponibles. La API rechaza
-un valor no nulo, las vistas no la escriben y el campo no es editable en el
-admin. El dominio educativo aun no implementa pagare ni firma; esa fase debera
-registrar la fecha local de una firma confirmada mediante un servicio
-transaccional e idempotente. Abrir un documento o una firma fallida no debe
-invocar ese punto de integracion.
+`fecha_matricula` permanece nula hasta que el webhook autenticado confirma la
+firma del pagare vigente. La API rechaza un valor inicial no nulo, las vistas no
+la escriben y el campo no es editable en el admin. El servicio de firma registra
+la fecha local de manera transaccional e idempotente; abrir el documento, un
+envio fallido o un evento ajeno no la modifican.
 
 ## Estudiante, persona relacionada y tutor
 
@@ -238,20 +237,40 @@ Despues mantiene dos decisiones independientes:
 - `estado_escaneo`: pendiente, seguro o bloqueado por un escaner externo;
 - `estado_validacion`: pendiente, aceptado o rechazado por revision.
 
-No hay OCR o IA integrados en `financiacion_educativa`. Las integraciones
-historicas de otros dominios no se reutilizan y ningun archivo se declara
-validado automaticamente.
+El dominio dispone de puertos independientes para ClamAV e IA visual. Ambos
+estan deshabilitados por defecto y se habilitan por ambiente. ClamAV procesa
+todos los archivos. La IA solo recibe JPEG/PNG seguros y persiste por intento
+calidad, legibilidad, confianza, correspondencia de tipo, consistencia y un
+resultado estructurado versionado. Para identificaciones exige ademas documento
+de identidad, documento colombiano, lado correcto, campos visibles y ausencia
+de desenfoque, oscuridad, reflejo, recorte u obstruccion grave. El resultado
+estructurado conserva tipo, numero y nombres visibles con longitud y caracteres
+controlados para que un revisor autorizado pueda contrastarlos; esos datos no
+se incluyen en logs ni eventos.
 
-`POST .../documentacion/completar/` comprueba propiedad, CSRF, terminos
-vigentes aceptados, estudiante, tutor cuando aplica, posible deudor,
-documentos y evidencia academica. Para entrar a revision manual exige soportes
-activos, aportados y sin un bloqueo o rechazo ya conocido. No exige que la
-revision manual ya los haya aceptado, porque eso haria circular el flujo. Si
-hay pendientes conserva
-`PENDING_DOCUMENT` y muestra enlaces de correccion. Si todo esta completo usa
-el servicio de estados para pasar una sola vez a `PENDING_MANUAL_REVIEW`.
-Este envio no aprueba identidad, vinculo ni matricula: el escaneo y la decision
-administrativa siguen siendo posteriores e independientes.
+La IA valida contenido y calidad visual; no prueba autenticidad fisica ni
+liveness. Una contradiccion visual concluyente, como un objeto que no es una
+identificacion o el lado incorrecto, solicita una nueva captura. Baja confianza,
+posible imagen no real, inconsistencia o fallo tecnico pasa a revision manual y
+nunca equivale a aprobacion. Los PDF que requieren inspeccion de contenido
+tambien pasan explicitamente a revision manual si el backend no los soporta.
+La aprobacion visual no cambia las banderas `identidad_verificada` ni
+`relacion_verificada`; estas quedan reservadas para una verificacion fuerte o
+una decision humana que realmente pueda respaldarlas.
+
+Al guardar cada documento, una llamada explicita a `transaction.on_commit`
+programa escaneo e IA cuando la automatizacion esta activa. No hay una signal
+oculta ni se requiere ejecutar comandos en el recorrido normal. Los intentos y
+veredictos quedan auditados; los comandos se conservan para recuperacion.
+
+`POST .../documentacion/completar/` comprueba propiedad, CSRF, terminos,
+participantes y la politica documental unica. Cuando todos los soportes son
+concluyentes, la orquestacion bloquea una sola fotografia financiera activa,
+genera el pagare desde `templates/pagares/pagare_v2.0.html`, genera la ficha
+`FO-AD-005 V2`, prepara un unico firmante y envia el pagare mediante el puerto
+educativo de ZapSign. La solicitud queda `PENDING_SIGNATURE`; solo un webhook
+valido para el pagare vigente puede llevarla a `APPROVED`, autorizar el curso y
+publicar `financial_terms`.
 
 La identificacion del estudiante y, cuando aplica, del tutor se obtiene en dos
 evidencias separadas: frente y reverso. En escritorio solo se ofrece enviar un
@@ -272,10 +291,10 @@ controles tecnicos adicionales y revision humana.
 
 El certificado de ingresos es una carga privada obligatoria en PDF, JPEG o
 PNG. Corresponde al estudiante deudor cuando es adulto y al tutor deudor cuando
-el estudiante es menor. Se conserva pendiente hasta el escaneo tecnico y la
-revision administrativa; no genera score ni una decision automatica de
-solvencia. Los criterios administrativos de aceptacion deben definirse en la
-fase de revision manual.
+el estudiante es menor. Siempre requiere escaneo tecnico. Una imagen puede
+recibir validacion visual automatica; un PDF, una respuesta incierta o un fallo
+tecnico requiere revision manual explicita. Su aceptacion solo comprueba el
+soporte documental: no genera score ni una decision de solvencia.
 
 Los PDF, JPEG y PNG se pueden previsualizar desde un visor modal. El endpoint
 privado comprueba sesion, propiedad de la solicitud, pertenencia del documento,
@@ -348,10 +367,11 @@ precondiciones del servicio. La vista protegida `Revisar expediente` exige el
 permiso explicito de revision y permite aprobar, rechazar o solicitar
 correcciones con motivo y requisitos controlados.
 
-La decision queda inmutable con responsable y fecha. Aprobar exige documentos
-seguros y aceptados, evidencia de matricula aceptada y fotografia financiera
-activa; la fotografia se bloquea y el estado publico pasa a `APPROVED` con
-`course_authorized=true`. Rechazo y correccion exponen solo un codigo
+La decision manual queda inmutable con responsable y fecha. Se usa solo cuando
+la automatizacion no obtiene una conclusion suficiente. Aprobar el expediente
+exige la misma politica documental que el recorrido automatico; despues genera
+la fotografia y los artefactos, pero el estado final sigue reservado para la
+firma. Rechazo y correccion exponen solo un codigo
 controlado y el mensaje para el solicitante. La observacion interna no sale por
 API ni por la interfaz del solicitante. Una correccion solo se considera
 resuelta cuando cada dato o documento señalado se actualiza despues de la
@@ -367,8 +387,43 @@ una entrega auditable con HMAC del destinatario, intentos y codigo seguro de
 fallo. El correo no forma parte de la transaccion contractual: un fallo de
 entrega no revierte ni cambia la decision.
 
-No existe una accion interna para producir el resultado de un antivirus: ese
-dato llega por el puerto de escaneo previsto.
+El backend real de antivirus y el adaptador OpenAI se seleccionan por settings.
+Los dobles incluidos en `tests` estan bloqueados fuera del modo explicito de
+pruebas.
+
+## Artefactos contractuales
+
+El pagare educativo reutiliza `templates/pagares/pagare_v2.0.html` como fuente
+visual y conserva las clausulas generales del formato existente. Los apartados
+que no tienen equivalente educativo aprobado fallan de forma cerrada y se
+inyectan exclusivamente desde configuracion juridica versionada:
+
+- `FINANCIACION_EDUCATIVA_PAGARE_VERSION_JURIDICA`;
+- `FINANCIACION_EDUCATIVA_PAGARE_CLAUSULA_OBLIGACION`;
+- `FINANCIACION_EDUCATIVA_PAGARE_CLAUSULA_CARTA_INSTRUCCIONES`;
+- `FINANCIACION_EDUCATIVA_PAGARE_CLAUSULA_INCUMPLIMIENTO`.
+
+No existen textos predeterminados para esas variables. El modo educativo
+elimina variables de libranza, pagaduria, nomina y desembolso, y toma firmante,
+valores y fechas exclusivamente de la solicitud y su fotografia financiera
+activa y bloqueada. La version juridica forma parte de `version_plantilla`; la
+version y el hash del PDF quedan persistidos y un artefacto enviado no se
+modifica.
+
+La ficha usa como fuente `FO-AD-005 V2`, identificada por el hash documentado
+en `services/ficha_matricula.py`. El PDF recibido es plano, no contiene
+AcroForm y trae datos personales de ejemplo incrustados; superponer campos lo
+dejaria con PII residual. Por eso se aplica la tercera estrategia permitida:
+una reproduccion de una pagina con la misma estructura de secciones. El mapeo
+usa solo datos reales y deja en blanco telefono alterno, municipios,
+renovacion, ocupacion y demas valores no disponibles.
+
+Antes de una firma real deben aprobarse juridicamente los tres textos
+configurables, su version, la representacion del menor y los datos legales del
+acreedor. La prueba
+automatica valida estructura, fuente, ausencia de PII de la muestra, una sola
+pagina, version, hash e idempotencia; la comparacion visual final debe aprobarse
+con el area propietaria del formato.
 
 ## Documentacion y ejemplos
 

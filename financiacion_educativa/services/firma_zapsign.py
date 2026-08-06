@@ -1,6 +1,7 @@
 import base64
 import hashlib
 import hmac
+import json
 from dataclasses import dataclass
 from datetime import timedelta
 from urllib.parse import urlparse
@@ -37,6 +38,11 @@ MAX_UNSIGNED_PDF_BYTES = 10 * 1024 * 1024
 class FirmaEducativaError(Exception):
     codigo = 'SIGNATURE_PROVIDER_ERROR'
 
+    def __init__(self, mensaje, *, codigo=None):
+        if codigo:
+            self.codigo = str(codigo)[:60]
+        super().__init__(mensaje)
+
 
 class FirmaEducativaDeshabilitada(FirmaEducativaError):
     codigo = 'SIGNATURE_BACKEND_DISABLED'
@@ -48,6 +54,10 @@ class FirmaEducativaRespuestaInvalida(FirmaEducativaError):
 
 class FirmaEducativaEnvioAmbiguo(FirmaEducativaError):
     codigo = 'SIGNATURE_SEND_AMBIGUOUS'
+
+
+class FirmaEducativaRechazoPermanente(FirmaEducativaError):
+    codigo = 'SIGNATURE_REQUEST_REJECTED'
 
 
 @dataclass(frozen=True)
@@ -140,17 +150,17 @@ class ZapSignEducationalSignatureBackend:
                     'require_selfie_photo': (
                         settings.FINANCIACION_EDUCATIVA_ZAPSIGN_REQUIRE_SELFIE
                     ),
-                    'require_document': True,
-                    'require_document_data': {
-                        'document_country': 'co',
-                        'document_type': tipo_documento,
-                        'document_number': firmante.numero_documento,
-                    },
                     'lock_name': True,
                     'lock_email': True,
                 },
             ],
         }
+        if settings.FINANCIACION_EDUCATIVA_ZAPSIGN_REQUIRE_SELFIE:
+            payload['signers'][0]['selfie_validation_type'] = (
+                settings.FINANCIACION_EDUCATIVA_ZAPSIGN_SELFIE_VALIDATION_TYPE
+            )
+        if tipo_documento == 'national_id':
+            payload['signers'][0]['qualification'] = 'Deudor principal'
         try:
             respuesta = requests.post(
                 f'{self.base_url}/docs/',
@@ -160,15 +170,29 @@ class ZapSignEducationalSignatureBackend:
             )
             respuesta.raise_for_status()
             datos = respuesta.json()
-        except (requests.RequestException, ValueError) as exc:
+        except requests.HTTPError as exc:
+            estado_http = getattr(exc.response, 'status_code', 0) or 0
+            if 400 <= estado_http < 500 and estado_http != 429:
+                raise FirmaEducativaRechazoPermanente(
+                    'ZapSign rechazo la configuracion del documento.',
+                    codigo=f'SIGNATURE_HTTP_{estado_http}',
+                ) from exc
             raise FirmaEducativaEnvioAmbiguo(
                 'El envio requiere conciliacion antes de reintentarse.'
+            ) from exc
+        except requests.RequestException as exc:
+            raise FirmaEducativaEnvioAmbiguo(
+                'El envio requiere conciliacion antes de reintentarse.'
+            ) from exc
+        except ValueError as exc:
+            raise FirmaEducativaEnvioAmbiguo(
+                'La respuesta requiere conciliacion antes de reintentarse.'
             ) from exc
         token = str(datos.get('token') or '').strip()
         estado = str(datos.get('status') or 'pending').strip().lower()
         if not token or len(token) > 160:
-            raise FirmaEducativaRespuestaInvalida(
-                'El proveedor no devolvio un identificador valido.'
+            raise FirmaEducativaEnvioAmbiguo(
+                'El proveedor no devolvio un identificador conciliable.'
             )
         return ResultadoEnvioFirma(
             token_documento=token,
@@ -210,9 +234,30 @@ class ZapSignEducationalSignatureBackend:
                 'El proveedor devolvio una ubicacion de archivo no permitida.'
             )
         try:
-            respuesta = requests.get(url, timeout=self.timeout)
+            respuesta = requests.get(
+                url,
+                timeout=self.timeout,
+                stream=True,
+                allow_redirects=False,
+            )
             respuesta.raise_for_status()
-            pdf = respuesta.content
+            try:
+                partes = []
+                total = 0
+                for parte in respuesta.iter_content(chunk_size=64 * 1024):
+                    if not parte:
+                        continue
+                    total += len(parte)
+                    if total > MAX_SIGNED_PDF_BYTES:
+                        raise FirmaEducativaRespuestaInvalida(
+                            'El archivo firmado supera el tamano permitido.'
+                        )
+                    partes.append(parte)
+                pdf = b''.join(partes)
+            finally:
+                respuesta.close()
+        except FirmaEducativaRespuestaInvalida:
+            raise
         except requests.RequestException as exc:
             raise FirmaEducativaError(
                 'No fue posible descargar el documento firmado.'
@@ -220,7 +265,6 @@ class ZapSignEducationalSignatureBackend:
         if (
             not pdf.startswith(b'%PDF')
             or not pdf
-            or len(pdf) > MAX_SIGNED_PDF_BYTES
         ):
             raise FirmaEducativaRespuestaInvalida(
                 'El archivo firmado no es un PDF valido.'
@@ -304,7 +348,11 @@ def _marcar_fallo_envio(proceso_id, codigo):
             )
 
 
-def enviar_pagare_educativo(*, proceso):
+def enviar_pagare_educativo(
+    *,
+    proceso,
+    permitir_reintento_permanente=False,
+):
     backend = _backend()
     ahora = timezone.now()
     with transaction.atomic():
@@ -324,6 +372,14 @@ def enviar_pagare_educativo(*, proceso):
         ):
             raise ValidationError(
                 'El envio ambiguo requiere conciliacion antes de reintentarse.'
+            )
+        if (
+            proceso.estado == EstadoProcesoFirmaEducativa.FAILED
+            and proceso.codigo_ultimo_error.startswith('SIGNATURE_HTTP_')
+            and not permitir_reintento_permanente
+        ):
+            raise ValidationError(
+                'El rechazo permanente requiere correccion y confirmacion operativa.'
             )
         if proceso.estado == EstadoProcesoFirmaEducativa.SENDING:
             limite = ahora - timedelta(
@@ -612,10 +668,120 @@ def _registrar_rechazo(*, evento, proceso):
         )
 
 
+def _registrar_interrupcion(*, evento, proceso, estado_proceso, codigo):
+    with transaction.atomic():
+        evento = EventoWebhookFirmaEducativa.objects.select_for_update().get(
+            pk=evento.pk
+        )
+        proceso = ProcesoFirmaEducativa.objects.select_for_update().select_related(
+            'artefacto',
+            'solicitud',
+        ).get(pk=proceso.pk)
+        if proceso.estado in {
+            EstadoProcesoFirmaEducativa.SIGNED,
+            EstadoProcesoFirmaEducativa.REFUSED,
+            EstadoProcesoFirmaEducativa.CANCELLED,
+            EstadoProcesoFirmaEducativa.EXPIRED,
+        }:
+            _marcar_evento(
+                evento,
+                estado=EstadoEventoWebhookFirmaEducativa.IGNORED,
+                codigo='PROCESS_ALREADY_FINAL',
+                proceso=proceso,
+            )
+            return
+        if (
+            proceso.estado != EstadoProcesoFirmaEducativa.SENT
+            or proceso.solicitud.estado
+            != EstadoSolicitudFinanciacion.PENDING_SIGNATURE
+        ):
+            raise ValidationError('El proceso no admite esta interrupcion.')
+        proceso.estado = estado_proceso
+        proceso.codigo_ultimo_error = codigo
+        proceso.save(
+            update_fields=['estado', 'codigo_ultimo_error', 'actualizado_en']
+        )
+        artefacto = proceso.artefacto
+        artefacto.estado = EstadoArtefactoContractualEducativo.CANCELLED
+        artefacto.vigente = False
+        artefacto.full_clean()
+        artefacto.save(update_fields=['estado', 'vigente', 'actualizado_en'])
+        transicionar_solicitud(
+            solicitud=proceso.solicitud,
+            nuevo_estado=EstadoSolicitudFinanciacion.PENDING_PROMISSORY_NOTE,
+            motivo='El proceso externo de firma dejo de estar vigente.',
+            metadata={
+                'signature_process_id': str(proceso.pk),
+                'webhook_event_id': str(evento.pk),
+                'reason_code': codigo,
+            },
+        )
+        _marcar_evento(
+            evento,
+            estado=EstadoEventoWebhookFirmaEducativa.PROCESSED,
+            codigo=codigo,
+            proceso=proceso,
+        )
+
+
+def _registrar_fallo_autenticacion(*, evento, proceso):
+    with transaction.atomic():
+        evento = EventoWebhookFirmaEducativa.objects.select_for_update().get(
+            pk=evento.pk
+        )
+        proceso = ProcesoFirmaEducativa.objects.select_for_update().select_related(
+            'solicitud'
+        ).get(pk=proceso.pk)
+        if proceso.estado != EstadoProcesoFirmaEducativa.SENT:
+            _marcar_evento(
+                evento,
+                estado=EstadoEventoWebhookFirmaEducativa.IGNORED,
+                codigo='PROCESS_NOT_PENDING_SIGNATURE',
+                proceso=proceso,
+            )
+            return
+        proceso.estado = EstadoProcesoFirmaEducativa.FAILED
+        proceso.codigo_ultimo_error = 'SIGNER_AUTHENTICATION_FAILED'
+        proceso.save(
+            update_fields=['estado', 'codigo_ultimo_error', 'actualizado_en']
+        )
+        _marcar_evento(
+            evento,
+            estado=EstadoEventoWebhookFirmaEducativa.PROCESSED,
+            codigo='SIGNER_AUTHENTICATION_FAILED',
+            proceso=proceso,
+        )
+
+
+def _huella_evento_webhook(payload):
+    identificador_proveedor = str(payload.get('event_id') or '').strip()
+    token = str(payload.get('token') or '').strip()
+    if identificador_proveedor:
+        identidad = {
+            'provider_event_id': identificador_proveedor,
+        }
+    elif token:
+        identidad = {
+            'event_type': str(payload.get('event_type') or '').strip().lower(),
+            'token': token,
+            'external_id': str(payload.get('external_id') or '').strip(),
+            'status': str(payload.get('status') or '').strip().lower(),
+        }
+    else:
+        identidad = payload
+    canonico = json.dumps(
+        identidad,
+        ensure_ascii=True,
+        sort_keys=True,
+        separators=(',', ':'),
+    ).encode('utf-8')
+    return hashlib.sha256(canonico).hexdigest()
+
+
 def procesar_webhook_firma(*, payload, raw_body):
     tipo_evento = str(payload.get('event_type') or '').strip().lower()
     token = str(payload.get('token') or '').strip()
-    payload_hash = hashlib.sha256(raw_body).hexdigest()
+    payload_hash = _huella_evento_webhook(payload)
     evento, creado = _obtener_o_crear_evento(
         payload_hash=payload_hash,
         tipo_evento=tipo_evento or 'unknown',
@@ -632,6 +798,16 @@ def procesar_webhook_firma(*, payload, raw_body):
             codigo='MISSING_DOCUMENT_TOKEN',
         )
         return ResultadoWebhookFirma(estado='ignored', codigo='MISSING_DOCUMENT_TOKEN')
+    if len(tipo_evento) > 50 or len(token) > 160:
+        _marcar_evento(
+            evento,
+            estado=EstadoEventoWebhookFirmaEducativa.IGNORED,
+            codigo='INVALID_EVENT_IDENTIFIERS',
+        )
+        return ResultadoWebhookFirma(
+            estado='ignored',
+            codigo='INVALID_EVENT_IDENTIFIERS',
+        )
     proceso = ProcesoFirmaEducativa.objects.filter(
         token_documento_externo=token
     ).first()
@@ -693,6 +869,43 @@ def procesar_webhook_firma(*, payload, raw_body):
                 solicitud_id=proceso.solicitud_id
             )
         return ResultadoWebhookFirma(estado='processed', codigo='REFUSAL_RECORDED')
+
+    if tipo_evento in {'doc_deleted', 'doc_cancelled'}:
+        _registrar_interrupcion(
+            evento=evento,
+            proceso=proceso,
+            estado_proceso=EstadoProcesoFirmaEducativa.CANCELLED,
+            codigo='SIGNATURE_CANCELLED',
+        )
+        return ResultadoWebhookFirma(estado='processed', codigo='SIGNATURE_CANCELLED')
+
+    if tipo_evento == 'doc_expired':
+        _registrar_interrupcion(
+            evento=evento,
+            proceso=proceso,
+            estado_proceso=EstadoProcesoFirmaEducativa.EXPIRED,
+            codigo='SIGNATURE_EXPIRED',
+        )
+        return ResultadoWebhookFirma(estado='processed', codigo='SIGNATURE_EXPIRED')
+
+    if tipo_evento == 'signer_authentication_failed':
+        _registrar_fallo_autenticacion(evento=evento, proceso=proceso)
+        return ResultadoWebhookFirma(
+            estado='processed',
+            codigo='SIGNER_AUTHENTICATION_FAILED',
+        )
+
+    if tipo_evento == 'doc_created':
+        _marcar_evento(
+            evento,
+            estado=EstadoEventoWebhookFirmaEducativa.PROCESSED,
+            codigo='DOCUMENT_CREATED_CONFIRMED',
+            proceso=proceso,
+        )
+        return ResultadoWebhookFirma(
+            estado='processed',
+            codigo='DOCUMENT_CREATED_CONFIRMED',
+        )
 
     _marcar_evento(
         evento,

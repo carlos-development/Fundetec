@@ -1,10 +1,12 @@
 from datetime import date, timedelta
 from decimal import Decimal
-from io import StringIO
+from io import BytesIO, StringIO
 import json
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 from unittest.mock import patch
+
+from PIL import Image
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
@@ -44,8 +46,15 @@ from financiacion_educativa.tests.ai_validation_backends import (
     BackendIAConcluyente,
     BackendIAError,
     BackendIAInconsistente,
+    BackendIAIlegible,
+    BackendIALadoIncorrecto,
+    BackendIANoEsDocumento,
+    BackendIAPasaporteConcluyente,
 )
-from financiacion_educativa.tests.factories import crear_solicitud
+from financiacion_educativa.tests.factories import (
+    crear_solicitud,
+    imagen_jpeg_prueba,
+)
 from financiacion_educativa.tests.scan_helpers import (
     conceder_permisos_documentales,
     registrar_resultado_escaneo,
@@ -58,9 +67,15 @@ TEST_AI_BACKEND = (
 
 
 def imagen_jpeg(nombre='documento.jpg', marca=b'documento-prueba'):
+    return imagen_jpeg_prueba(nombre, marca.decode('utf-8', errors='ignore'))
+
+
+def imagen_jpeg_dimensiones(nombre, dimensiones):
+    salida = BytesIO()
+    Image.new('RGB', dimensiones, (30, 80, 130)).save(salida, format='JPEG')
     return SimpleUploadedFile(
         nombre,
-        b'\xff\xd8\xff' + marca + b'\xff\xd9',
+        salida.getvalue(),
         content_type='image/jpeg',
     )
 
@@ -120,18 +135,30 @@ class ValidacionDocumentalIATests(TestCase):
             roles={RolParticipante.STUDENT, RolParticipante.PRINCIPAL_DEBTOR},
         )
 
-    def documento(self, marca=b'documento-prueba'):
+    def documento(
+        self,
+        marca=b'documento-prueba',
+        tipo=TipoDocumentoFinanciacion.OTHER_EDUCATIONAL,
+    ):
         return registrar_documento(
             solicitud=self.solicitud,
             participante=self.participante,
-            tipo=TipoDocumentoFinanciacion.OTHER_EDUCATIONAL,
-            origen_captura=OrigenCapturaDocumento.USER_UPLOAD,
+            tipo=tipo,
+            origen_captura=(
+                OrigenCapturaDocumento.CAMERA
+                if tipo == TipoDocumentoFinanciacion.STUDENT_ID_FRONT
+                else OrigenCapturaDocumento.USER_UPLOAD
+            ),
             archivo=imagen_jpeg(marca=marca),
             actor=self.usuario,
         )
 
-    def documento_seguro(self, marca=b'documento-prueba'):
-        documento = self.documento(marca)
+    def documento_seguro(
+        self,
+        marca=b'documento-prueba',
+        tipo=TipoDocumentoFinanciacion.OTHER_EDUCATIONAL,
+    ):
+        documento = self.documento(marca, tipo)
         registrar_resultado_escaneo(
             documento=documento,
             actor=self.operador,
@@ -234,6 +261,151 @@ class ValidacionDocumentalIATests(TestCase):
         )
         self.assertNotIn('documento-prueba', str(documento.resultado_procesamiento))
 
+    def test_contenido_ajeno_y_lado_incorrecto_se_rechazan_concluyentemente(self):
+        for indice, backend, hallazgo in (
+            (1, BackendIANoEsDocumento(), 'NOT_IDENTITY_DOCUMENT'),
+            (2, BackendIALadoIncorrecto(), 'SIDE_MISMATCH'),
+        ):
+            with self.subTest(hallazgo=hallazgo):
+                documento = self.documento_seguro(
+                    f'rechazo-{indice}'.encode(),
+                    TipoDocumentoFinanciacion.STUDENT_ID_FRONT,
+                )
+                resultado = procesar_validacion_documental_ia(
+                    documento=documento,
+                    actor=self.operador,
+                    backend=backend,
+                )
+                documento.refresh_from_db()
+                validacion = documento.validaciones_ia.get()
+                self.assertEqual(
+                    resultado.estado,
+                    EstadoValidacionIADocumento.AUTO_REJECTED,
+                )
+                self.assertEqual(
+                    documento.estado_validacion,
+                    EstadoValidacionDocumento.REJECTED,
+                )
+                self.assertIn(hallazgo, validacion.hallazgos)
+                self.assertEqual(
+                    validacion.resultado_estructurado['decision'],
+                    'REJECTED',
+                )
+                documento.activo = False
+                documento.save(update_fields=['activo', 'actualizado_en'])
+
+    def test_imagen_ilegible_no_se_rechaza_automaticamente(self):
+        documento = self.documento_seguro(b'ilegible')
+
+        resultado = procesar_validacion_documental_ia(
+            documento=documento,
+            actor=self.operador,
+            backend=BackendIAIlegible(),
+        )
+
+        documento.refresh_from_db()
+        self.assertEqual(resultado.estado, EstadoValidacionIADocumento.MANUAL_REVIEW)
+        self.assertEqual(documento.estado_validacion, EstadoValidacionDocumento.PENDING)
+
+    def test_hallazgo_de_identidad_no_rechaza_otro_tipo_documental(self):
+        documento = self.documento_seguro(
+            b'ingresos-no-identidad',
+            TipoDocumentoFinanciacion.INCOME_CERTIFICATE,
+        )
+
+        resultado = procesar_validacion_documental_ia(
+            documento=documento,
+            actor=self.operador,
+            backend=BackendIANoEsDocumento(),
+        )
+
+        documento.refresh_from_db()
+        self.assertEqual(resultado.estado, EstadoValidacionIADocumento.MANUAL_REVIEW)
+        self.assertEqual(documento.estado_validacion, EstadoValidacionDocumento.PENDING)
+
+    def test_pasaporte_no_exige_clasificacion_como_documento_colombiano(self):
+        self.participante.tipo_documento = TipoDocumentoIdentidad.PASSPORT
+        self.participante.numero_documento = 'PA123456'
+        self.participante.save(
+            update_fields=['tipo_documento', 'numero_documento', 'actualizado_en']
+        )
+        documento = self.documento_seguro(
+            b'pasaporte-frente',
+            TipoDocumentoFinanciacion.STUDENT_ID_FRONT,
+        )
+
+        resultado = procesar_validacion_documental_ia(
+            documento=documento,
+            actor=self.operador,
+            backend=BackendIAPasaporteConcluyente(),
+        )
+
+        documento.refresh_from_db()
+        self.assertEqual(resultado.estado, EstadoValidacionIADocumento.AUTO_APPROVED)
+        self.assertEqual(documento.estado_validacion, EstadoValidacionDocumento.APPROVED)
+
+    def test_imagen_demasiado_pequena_se_rechaza_sin_llamar_proveedor(self):
+        documento = registrar_documento(
+            solicitud=self.solicitud,
+            participante=self.participante,
+            tipo=TipoDocumentoFinanciacion.STUDENT_ID_FRONT,
+            origen_captura=OrigenCapturaDocumento.CAMERA,
+            archivo=imagen_jpeg_dimensiones('pequena.jpg', (120, 80)),
+            actor=self.usuario,
+        )
+        registrar_resultado_escaneo(
+            documento=documento,
+            actor=self.operador,
+            estado=EstadoEscaneoDocumento.SAFE,
+        )
+        backend = BackendIAConcluyente()
+
+        with patch.object(backend, 'validar', wraps=backend.validar) as validar:
+            resultado = procesar_validacion_documental_ia(
+                documento=documento,
+                actor=self.operador,
+                backend=backend,
+            )
+
+        documento.refresh_from_db()
+        self.assertEqual(resultado.estado, EstadoValidacionIADocumento.AUTO_REJECTED)
+        self.assertEqual(documento.estado_validacion, EstadoValidacionDocumento.REJECTED)
+        self.assertEqual(validar.call_count, 0)
+        self.assertIn('IMAGE_TOO_SMALL', documento.validaciones_ia.get().hallazgos)
+
+    def test_imagen_malformada_se_rechaza_sin_llamar_proveedor(self):
+        documento = registrar_documento(
+            solicitud=self.solicitud,
+            participante=self.participante,
+            tipo=TipoDocumentoFinanciacion.STUDENT_ID_FRONT,
+            origen_captura=OrigenCapturaDocumento.CAMERA,
+            archivo=SimpleUploadedFile(
+                'malformada.jpg',
+                b'\xff\xd8\xffcontenido-no-decodificable\xff\xd9',
+                content_type='image/jpeg',
+            ),
+            actor=self.usuario,
+        )
+        registrar_resultado_escaneo(
+            documento=documento,
+            actor=self.operador,
+            estado=EstadoEscaneoDocumento.SAFE,
+        )
+        backend = BackendIAConcluyente()
+
+        with patch.object(backend, 'validar', wraps=backend.validar) as validar:
+            resultado = procesar_validacion_documental_ia(
+                documento=documento,
+                actor=self.operador,
+                backend=backend,
+            )
+
+        documento.refresh_from_db()
+        self.assertEqual(resultado.estado, EstadoValidacionIADocumento.AUTO_REJECTED)
+        self.assertEqual(documento.estado_validacion, EstadoValidacionDocumento.REJECTED)
+        self.assertEqual(validar.call_count, 0)
+        self.assertIn('MALFORMED_IMAGE', documento.validaciones_ia.get().hallazgos)
+
     def test_backend_deshabilitado_no_consume_intentos(self):
         documento = self.documento_seguro()
 
@@ -280,6 +452,7 @@ class ValidacionDocumentalIATests(TestCase):
 
     @override_settings(
         FINANCIACION_EDUCATIVA_DOCUMENT_AI_BACKEND=TEST_AI_BACKEND,
+        FINANCIACION_EDUCATIVA_DOCUMENT_AI_ENABLED=True,
         FINANCIACION_EDUCATIVA_ALLOW_TEST_AI_BACKENDS=True,
     )
     def test_comando_filtra_estrictamente_por_solicitud(self):
@@ -336,6 +509,20 @@ class AdaptadorOpenAIValidacionDocumentalTests(TestCase):
         'appears_real': True,
         'data_consistent': True,
         'finding_codes': [],
+        'decision': 'ACCEPTED',
+        'is_identity_document': True,
+        'is_colombian_document': True,
+        'side_matches': True,
+        'required_fields_visible': True,
+        'is_blurred': False,
+        'is_too_dark': False,
+        'has_glare': False,
+        'is_cropped': False,
+        'is_obstructed': False,
+        'reason_codes': [],
+        'visible_document_type': 'CC',
+        'visible_document_number': '1000123456',
+        'visible_names': ['ANA', 'PRUEBA'],
     }
 
     def test_normalizacion_exige_esquema_cerrado_y_puntajes_validos(self):
@@ -345,6 +532,9 @@ class AdaptadorOpenAIValidacionDocumentalTests(TestCase):
             modelo='modelo-controlado',
         )
         self.assertEqual(resultado.confianza, Decimal('0.9900'))
+        self.assertEqual(resultado.tipo_documento_visible, 'CC')
+        self.assertEqual(resultado.numero_documento_visible, '1000123456')
+        self.assertEqual(resultado.nombres_visibles, ('ANA', 'PRUEBA'))
 
         with self.assertRaises(ErrorValidacionDocumentalIA):
             normalizar_resultado_validacion(
@@ -353,6 +543,10 @@ class AdaptadorOpenAIValidacionDocumentalTests(TestCase):
         with self.assertRaises(ErrorValidacionDocumentalIA):
             normalizar_resultado_validacion(
                 {**self.payload, 'confidence': 1.1},
+            )
+        with self.assertRaises(ErrorValidacionDocumentalIA):
+            normalizar_resultado_validacion(
+                {**self.payload, 'visible_document_number': {'raw': '100'}},
             )
 
     @override_settings(

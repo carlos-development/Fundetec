@@ -54,6 +54,7 @@ from financiacion_educativa.tests.ai_validation_backends import (
 from financiacion_educativa.tests.factories import (
     crear_configuracion_financiera,
     crear_solicitud,
+    imagen_jpeg_prueba,
 )
 from financiacion_educativa.tests.signature_backends import (
     AmbiguousEducationalSignatureBackend,
@@ -75,6 +76,9 @@ AI_LOW_CONFIDENCE = (
 AI_NOT_REAL = (
     'financiacion_educativa.tests.ai_validation_backends.BackendIAImagenNoReal'
 )
+AI_NOT_IDENTITY = (
+    'financiacion_educativa.tests.ai_validation_backends.BackendIANoEsDocumento'
+)
 AI_FLAKY = (
     'financiacion_educativa.tests.ai_validation_backends.BackendIAFallaUnaVez'
 )
@@ -89,11 +93,7 @@ SIGNATURE_AMBIGUOUS = (
 
 
 def imagen(nombre):
-    return SimpleUploadedFile(
-        f'{nombre}.jpg',
-        b'\xff\xd8\xff' + nombre.encode('ascii') + b'\xff\xd9',
-        content_type='image/jpeg',
-    )
+    return imagen_jpeg_prueba(f'{nombre}.jpg', nombre)
 
 
 def pdf(nombre):
@@ -109,12 +109,24 @@ def pdf(nombre):
     FINANCIACION_EDUCATIVA_DOCUMENT_SCAN_BACKEND=SCAN_CLEAN,
     FINANCIACION_EDUCATIVA_ALLOW_TEST_SCAN_BACKENDS=True,
     FINANCIACION_EDUCATIVA_DOCUMENT_AI_BACKEND=AI_CONCLUSIVE,
+    FINANCIACION_EDUCATIVA_DOCUMENT_AI_ENABLED=True,
     FINANCIACION_EDUCATIVA_ALLOW_TEST_AI_BACKENDS=True,
     FINANCIACION_EDUCATIVA_ZAPSIGN_BACKEND=SIGNATURE,
     FINANCIACION_EDUCATIVA_ALLOW_TEST_SIGNATURE_BACKENDS=True,
     FINANCIACION_EDUCATIVA_ZAPSIGN_WEBHOOK_SECRET='automatic-webhook-secret',
     FINANCIACION_EDUCATIVA_SIGNATURE_RECIPIENT_HMAC_KEY='automatic-hmac-key',
     FINANCIACION_EDUCATIVA_ACREEDOR_RAZON_SOCIAL='ACREEDOR EDUCATIVO SAS',
+    FINANCIACION_EDUCATIVA_ACREEDOR_NIT='900000000-1',
+    FINANCIACION_EDUCATIVA_ACREEDOR_REPRESENTANTE_LEGAL='REPRESENTANTE PRUEBA',
+    FINANCIACION_EDUCATIVA_ACREEDOR_DOMICILIO='Bogota D.C.',
+    FINANCIACION_EDUCATIVA_PAGARE_VERSION_JURIDICA='1',
+    FINANCIACION_EDUCATIVA_PAGARE_CLAUSULA_OBLIGACION='OBLIGACION DE PRUEBA.',
+    FINANCIACION_EDUCATIVA_PAGARE_CLAUSULA_CARTA_INSTRUCCIONES=(
+        'CARTA DE INSTRUCCIONES DE PRUEBA.'
+    ),
+    FINANCIACION_EDUCATIVA_PAGARE_CLAUSULA_INCUMPLIMIENTO=(
+        'INCUMPLIMIENTO DE PRUEBA.'
+    ),
 )
 class OrquestacionAutomaticaTests(TestCase):
     def setUp(self):
@@ -446,6 +458,34 @@ class OrquestacionAutomaticaTests(TestCase):
                 'POSSIBLY_NOT_REAL' in validacion.hallazgos
                 for validacion in validaciones
             )
+        )
+        self.assertFalse(CondicionesFinancieras.objects.exists())
+
+    @override_settings(FINANCIACION_EDUCATIVA_DOCUMENT_AI_BACKEND=AI_NOT_IDENTITY)
+    def test_objeto_ajeno_a_identidad_exige_nueva_captura(self):
+        solicitud, _ = self._adulto_listo('AUTO-NO-IDENTIDAD')
+
+        resultado = ejecutar_orquestacion_automatica(solicitud_id=solicitud.pk)
+
+        solicitud.refresh_from_db()
+        self.assertEqual(resultado.codigo, 'DOCUMENT_CORRECTION_REQUIRED')
+        self.assertEqual(
+            solicitud.estado,
+            EstadoSolicitudFinanciacion.CORRECTION_REQUIRED,
+        )
+        self.assertTrue(
+            solicitud.documentos.filter(
+                tipo__in={
+                    TipoDocumentoFinanciacion.STUDENT_ID_FRONT,
+                    TipoDocumentoFinanciacion.STUDENT_ID_BACK,
+                },
+                estado_validacion=EstadoValidacionDocumento.REJECTED,
+            ).exists()
+        )
+        self.assertTrue(
+            ValidacionIADocumento.objects.filter(
+                estado=EstadoValidacionIADocumento.AUTO_REJECTED,
+            ).exists()
         )
         self.assertFalse(CondicionesFinancieras.objects.exists())
 

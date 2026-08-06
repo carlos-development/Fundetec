@@ -227,6 +227,11 @@ def registrar_documento(
     )
     documento.full_clean()
     documento.save()
+    from financiacion_educativa.services.orquestacion_automatica import (
+        programar_procesamiento_documento_automatico,
+    )
+
+    programar_procesamiento_documento_automatico(documento_id=documento.pk)
     return documento
 
 

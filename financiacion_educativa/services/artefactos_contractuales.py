@@ -1,5 +1,6 @@
 import hashlib
 from dataclasses import dataclass
+from pathlib import Path
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -19,12 +20,16 @@ from financiacion_educativa.models import (
     SolicitudFinanciacionEducativa,
 )
 from financiacion_educativa.services.ficha_matricula import (
+    construir_datos_ficha_matricula,
     construir_mapeo_ficha_matricula,
+)
+from financiacion_educativa.services.formato_contractual import (
+    formatear_cop,
+    numero_cop_a_letras,
 )
 
 
-VERSION_PLANTILLA_PAGARE = 'EDU-PAGARE-1.0'
-VERSION_PLANTILLA_FICHA = 'EDU-FICHA-1.0'
+VERSION_PLANTILLA_FICHA = 'FO-AD-005-V2-EDU-1'
 
 
 @dataclass(frozen=True)
@@ -57,24 +62,88 @@ def _estudiante(solicitud):
 
 
 def _contexto_base(solicitud, fotografia):
-    acreedor = str(
-        getattr(
-            settings,
-            'FINANCIACION_EDUCATIVA_ACREEDOR_RAZON_SOCIAL',
-            '',
-        )
-    ).strip()
-    if not acreedor:
+    datos_acreedor = {
+        'acreedor_razon_social': str(
+            settings.FINANCIACION_EDUCATIVA_ACREEDOR_RAZON_SOCIAL
+        ).strip(),
+        'acreedor_nit': str(
+            settings.FINANCIACION_EDUCATIVA_ACREEDOR_NIT
+        ).strip(),
+        'acreedor_representante': str(
+            settings.FINANCIACION_EDUCATIVA_ACREEDOR_REPRESENTANTE_LEGAL
+        ).strip(),
+        'acreedor_domicilio': str(
+            settings.FINANCIACION_EDUCATIVA_ACREEDOR_DOMICILIO
+        ).strip(),
+    }
+    if not all(datos_acreedor.values()):
         raise ValidationError(
-            'Configura la razon social del acreedor educativo antes de generar.'
+            'Configura todos los datos legales del acreedor educativo antes de generar.'
         )
+    textos_juridicos = {
+        'pagare_version_juridica': str(
+            settings.FINANCIACION_EDUCATIVA_PAGARE_VERSION_JURIDICA
+        ).strip(),
+        'pagare_clausula_obligacion': str(
+            settings.FINANCIACION_EDUCATIVA_PAGARE_CLAUSULA_OBLIGACION
+        ).strip(),
+        'pagare_clausula_carta_instrucciones': str(
+            settings.FINANCIACION_EDUCATIVA_PAGARE_CLAUSULA_CARTA_INSTRUCCIONES
+        ).strip(),
+        'pagare_clausula_incumplimiento': str(
+            settings.FINANCIACION_EDUCATIVA_PAGARE_CLAUSULA_INCUMPLIMIENTO
+        ).strip(),
+    }
+    if not all(textos_juridicos.values()):
+        raise ValidationError(
+            'Configura la version y las clausulas juridicas educativas aprobadas.'
+        )
+    if len(textos_juridicos['pagare_version_juridica']) > 18:
+        raise ValidationError('La version juridica del pagare es demasiado larga.')
+    responsable = _responsable_contractual(solicitud)
+    intereses = fotografia.total_estimado - fotografia.capital_financiado
+    otros_conceptos = fotografia.capital_financiado - fotografia.valor_financiado
     return {
         'solicitud': solicitud,
         'fotografia': fotografia,
-        'acreedor_razon_social': acreedor,
-        'responsable': _responsable_contractual(solicitud),
+        **datos_acreedor,
+        **textos_juridicos,
+        'responsable': responsable,
         'estudiante': _estudiante(solicitud),
         'generado_en': timezone.localtime(),
+        'modo_educativo': True,
+        'numero_pagare': '',
+        'deudor_nombres': responsable.nombre_completo,
+        'tipo_documento_deudor': responsable.get_tipo_documento_display(),
+        'cedula_deudor': responsable.numero_documento,
+        'direccion_deudor': solicitud.direccion,
+        'ciudad_domicilio_visible': datos_acreedor['acreedor_domicilio'],
+        'telefono_deudor': responsable.telefono or solicitud.celular,
+        'email_deudor': responsable.correo or solicitud.correo,
+        'beneficiario_razon_social': datos_acreedor['acreedor_razon_social'],
+        'beneficiario_nit': datos_acreedor['acreedor_nit'],
+        'beneficiario_representante_legal': datos_acreedor['acreedor_representante'],
+        'beneficiario_domicilio': datos_acreedor['acreedor_domicilio'],
+        'monto_numeros': formatear_cop(fotografia.capital_financiado),
+        'monto_letras': numero_cop_a_letras(fotografia.capital_financiado),
+        'tasa_interes': format(fotografia.tasa_interes_mensual, 'f'),
+        'plazo_cuotas': fotografia.plazo_meses,
+        'periodicidad': 'mensuales',
+        'valor_cuota': formatear_cop(fotografia.valor_cuota_estimada),
+        'fecha_primer_pago': fotografia.fecha_primer_vencimiento,
+        'fecha_ultimo_pago': fotografia.fecha_ultimo_vencimiento,
+        'modalidad_descuento': 'Plan de pagos de financiacion educativa',
+        'capital_valor': formatear_cop(fotografia.capital_financiado),
+        'intereses_valor': formatear_cop(intereses),
+        'otros_conceptos_valor': formatear_cop(otros_conceptos),
+        'ciudad_firma_visible': datos_acreedor['acreedor_domicilio'],
+        'fecha_firma_texto': '',
+        'membrete_url': (
+            Path(settings.BASE_DIR) / 'static' / 'images' / 'membrete_aprobado.jpg'
+        ).resolve().as_uri(),
+        'fundetec_logo_url': (
+            Path(settings.BASE_DIR) / 'static' / 'images' / 'fundetec-logo.png'
+        ).resolve().as_uri(),
     }
 
 
@@ -130,7 +199,11 @@ def _crear_artefacto(
     numero = _numero_documento(solicitud, tipo, version)
     pdf = _renderizar_pdf(
         plantilla,
-        {**contexto, 'numero_documento': numero},
+        {
+            **contexto,
+            'numero_documento': numero,
+            'numero_pagare': numero,
+        },
     )
     artefacto = ArtefactoContractualEducativo(
         solicitud=solicitud,
@@ -179,8 +252,10 @@ def generar_artefactos_contractuales(*, solicitud, actor=None):
             solicitud=solicitud,
             fotografia=fotografia,
             tipo=TipoArtefactoContractualEducativo.PROMISSORY_NOTE,
-            version_plantilla=VERSION_PLANTILLA_PAGARE,
-            plantilla='financiacion_educativa/documentos/pagare_educativo.html',
+            version_plantilla=(
+                f'PAGARE-2.0-EDU-{contexto["pagare_version_juridica"]}'
+            ),
+            plantilla='pagares/pagare_v2.0.html',
             contexto=contexto,
             actor=actor,
             archivos_creados=archivos_creados,
@@ -194,6 +269,7 @@ def generar_artefactos_contractuales(*, solicitud, actor=None):
             contexto={
                 **contexto,
                 'mapeo_ficha': construir_mapeo_ficha_matricula(solicitud),
+                'ficha': construir_datos_ficha_matricula(solicitud),
             },
             actor=actor,
             archivos_creados=archivos_creados,

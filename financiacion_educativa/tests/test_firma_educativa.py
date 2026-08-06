@@ -6,6 +6,7 @@ from tempfile import TemporaryDirectory
 
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
+from django.core.exceptions import ValidationError
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -62,6 +63,17 @@ BACKEND_PRUEBA = (
 @override_settings(
     FINANCIACION_EDUCATIVA_ACREEDOR_RAZON_SOCIAL=(
         'APROBADO SOLUCIONES DIGITALES S.A.S.'
+    ),
+    FINANCIACION_EDUCATIVA_ACREEDOR_NIT='900000000-1',
+    FINANCIACION_EDUCATIVA_ACREEDOR_REPRESENTANTE_LEGAL='REPRESENTANTE PRUEBA',
+    FINANCIACION_EDUCATIVA_ACREEDOR_DOMICILIO='Bogota D.C.',
+    FINANCIACION_EDUCATIVA_PAGARE_VERSION_JURIDICA='1',
+    FINANCIACION_EDUCATIVA_PAGARE_CLAUSULA_OBLIGACION='OBLIGACION DE PRUEBA.',
+    FINANCIACION_EDUCATIVA_PAGARE_CLAUSULA_CARTA_INSTRUCCIONES=(
+        'CARTA DE INSTRUCCIONES DE PRUEBA.'
+    ),
+    FINANCIACION_EDUCATIVA_PAGARE_CLAUSULA_INCUMPLIMIENTO=(
+        'INCUMPLIMIENTO DE PRUEBA.'
     ),
     FINANCIACION_EDUCATIVA_ZAPSIGN_BACKEND=BACKEND_PRUEBA,
     FINANCIACION_EDUCATIVA_ALLOW_TEST_SIGNATURE_BACKENDS=True,
@@ -224,6 +236,24 @@ class FirmaEducativaTests(TestCase):
         self.assertEqual(resultado.estado, 'APPROVED')
         self.assertEqual(resultado.condiciones_financieras['currency'], 'COP')
 
+    def test_webhook_equivalente_con_serializacion_distinta_es_replay(self):
+        self._enviar()
+        self.proceso.refresh_from_db()
+        payload = self._payload()
+
+        primera = self._post_webhook(payload)
+        segunda = self.client.post(
+            self.webhook_url,
+            data=json.dumps(payload, sort_keys=True, indent=2),
+            content_type='application/json',
+            HTTP_X_EDUCATIONAL_SIGNATURE_SECRET='webhook-test-secret',
+        )
+
+        self.assertEqual(primera.status_code, 200)
+        self.assertEqual(segunda.status_code, 200)
+        self.assertEqual(segunda.json()['status'], 'replayed')
+        self.assertEqual(EventoWebhookFirmaEducativa.objects.count(), 1)
+
     def test_webhook_rechaza_secreto_invalido_sin_registrar_payload(self):
         self._enviar()
         self.proceso.refresh_from_db()
@@ -362,10 +392,41 @@ class FirmaEducativaTests(TestCase):
         self.assertEqual(self.proceso.estado, EstadoProcesoFirmaEducativa.SENT)
         self.assertIn('Enviados: 1', salida.getvalue())
 
+    def test_rechazo_permanente_exige_confirmacion_operativa_para_reintentar(self):
+        self.proceso.estado = EstadoProcesoFirmaEducativa.FAILED
+        self.proceso.codigo_ultimo_error = 'SIGNATURE_HTTP_400'
+        self.proceso.save(update_fields=['estado', 'codigo_ultimo_error'])
+
+        with self.assertRaisesMessage(
+            ValidationError,
+            'El rechazo permanente requiere correccion y confirmacion operativa.',
+        ):
+            enviar_pagare_educativo(proceso=self.proceso)
+        self.assertEqual(RecordingEducationalSignatureBackend.submissions, [])
+
+        enviar_pagare_educativo(
+            proceso=self.proceso,
+            permitir_reintento_permanente=True,
+        )
+        self.proceso.refresh_from_db()
+        self.assertEqual(self.proceso.estado, EstadoProcesoFirmaEducativa.SENT)
+        self.assertEqual(len(RecordingEducationalSignatureBackend.submissions), 1)
+
 
 @override_settings(
     FINANCIACION_EDUCATIVA_ACREEDOR_RAZON_SOCIAL=(
         'APROBADO SOLUCIONES DIGITALES S.A.S.'
+    ),
+    FINANCIACION_EDUCATIVA_ACREEDOR_NIT='900000000-1',
+    FINANCIACION_EDUCATIVA_ACREEDOR_REPRESENTANTE_LEGAL='REPRESENTANTE PRUEBA',
+    FINANCIACION_EDUCATIVA_ACREEDOR_DOMICILIO='Bogota D.C.',
+    FINANCIACION_EDUCATIVA_PAGARE_VERSION_JURIDICA='1',
+    FINANCIACION_EDUCATIVA_PAGARE_CLAUSULA_OBLIGACION='OBLIGACION DE PRUEBA.',
+    FINANCIACION_EDUCATIVA_PAGARE_CLAUSULA_CARTA_INSTRUCCIONES=(
+        'CARTA DE INSTRUCCIONES DE PRUEBA.'
+    ),
+    FINANCIACION_EDUCATIVA_PAGARE_CLAUSULA_INCUMPLIMIENTO=(
+        'INCUMPLIMIENTO DE PRUEBA.'
     ),
     FINANCIACION_EDUCATIVA_ZAPSIGN_BACKEND=BACKEND_PRUEBA,
     FINANCIACION_EDUCATIVA_ALLOW_TEST_SIGNATURE_BACKENDS=True,

@@ -9,6 +9,7 @@ from financiacion_educativa.choices import (
     RelacionEstudiante,
     RolParticipante,
     TipoDocumentoIdentidad,
+    TipoEventoParticipante,
 )
 from financiacion_educativa.models import (
     CondicionesFinancieras,
@@ -114,7 +115,9 @@ class ParticipantesFase4Tests(TestCase):
         )
         self.assertTrue(actualizado.responsable_contractual)
         self.assertEqual(EventoParticipanteFinanciacion.objects.count(), 2)
-        campos = EventoParticipanteFinanciacion.objects.latest('creado_en').campos_modificados
+        campos = EventoParticipanteFinanciacion.objects.get(
+            tipo=TipoEventoParticipante.UPDATED,
+        ).campos_modificados
         self.assertEqual(campos, ['responsable_contractual', 'roles'])
 
     def test_rechaza_estudiante_y_tutor_en_la_misma_persona(self):

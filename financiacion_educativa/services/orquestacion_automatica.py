@@ -18,6 +18,7 @@ from financiacion_educativa.choices import (
     TipoDocumentoFinanciacion,
 )
 from financiacion_educativa.models import (
+    DocumentoFinanciacion,
     EvidenciaMatricula,
     ProcesoFirmaEducativa,
     SolicitudFinanciacionEducativa,
@@ -166,7 +167,7 @@ def _procesar_seguridad_e_ia(solicitud):
         if documento.estado_escaneo == EstadoEscaneoDocumento.PENDING_SECURITY_SCAN:
             procesar_escaneo_documento(
                 documento=documento,
-                origen=OrigenIntentoEscaneoDocumento.COMMAND,
+                origen=OrigenIntentoEscaneoDocumento.AUTOMATIC,
             )
 
     solicitud = SolicitudFinanciacionEducativa.objects.get(pk=solicitud.pk)
@@ -204,6 +205,68 @@ def _procesar_seguridad_e_ia(solicitud):
     return solicitud, True, 'DOCUMENTS_CONCLUSIVE'
 
 
+def procesar_documento_automaticamente(*, documento_id):
+    if not settings.FINANCIACION_EDUCATIVA_AUTOMATION_ENABLED:
+        return 'AUTOMATION_DISABLED'
+    documento = DocumentoFinanciacion.objects.select_related('solicitud').filter(
+        pk=documento_id,
+        activo=True,
+    ).first()
+    if not documento:
+        return 'DOCUMENT_NOT_AVAILABLE'
+    if documento.estado_escaneo == EstadoEscaneoDocumento.PENDING_SECURITY_SCAN:
+        procesar_escaneo_documento(
+            documento=documento,
+            origen=OrigenIntentoEscaneoDocumento.AUTOMATIC,
+        )
+    documento.refresh_from_db()
+    if documento.estado_escaneo != EstadoEscaneoDocumento.SAFE:
+        return 'SECURITY_REVIEW_REQUIRED'
+    if (
+        documento.estado_validacion == EstadoValidacionDocumento.PENDING
+        and documento_requiere_validacion_visual(documento)
+        and documento.content_type in TIPOS_IMAGEN
+    ):
+        procesar_validacion_documental_ia(
+            documento=documento,
+            origen=OrigenValidacionIADocumento.AUTOMATIC,
+        )
+    documento.refresh_from_db()
+    if (
+        documento.solicitud.estado
+        == EstadoSolicitudFinanciacion.PENDING_MANUAL_REVIEW
+    ):
+        ejecutar_orquestacion_automatica_segura(
+            solicitud_id=documento.solicitud_id
+        )
+    return 'DOCUMENT_PROCESSED'
+
+
+def procesar_documento_automaticamente_seguro(*, documento_id):
+    try:
+        return procesar_documento_automaticamente(documento_id=documento_id)
+    except Exception as error:
+        logger.error(
+            'Fallo controlado en procesamiento documental automatico: '
+            'documento=%s tipo=%s',
+            documento_id,
+            type(error).__name__,
+        )
+        return 'AUTOMATION_ERROR'
+
+
+def programar_procesamiento_documento_automatico(*, documento_id):
+    if not settings.FINANCIACION_EDUCATIVA_AUTOMATION_ENABLED:
+        return False
+    transaction.on_commit(
+        lambda: procesar_documento_automaticamente_seguro(
+            documento_id=documento_id
+        ),
+        robust=True,
+    )
+    return True
+
+
 def _aceptar_evidencia_matricula_concluyente(solicitud):
     evidencia = EvidenciaMatricula.objects.select_for_update().select_related(
         'documento_soporte'
@@ -234,6 +297,38 @@ def _aceptar_evidencia_matricula_concluyente(solicitud):
             'actualizada_en',
         ]
     )
+
+
+@transaction.atomic
+def _aplicar_correccion_por_rechazo_automatico(solicitud):
+    solicitud = SolicitudFinanciacionEducativa.objects.select_for_update().get(
+        pk=solicitud.pk
+    )
+    if solicitud.estado != EstadoSolicitudFinanciacion.PENDING_MANUAL_REVIEW:
+        return solicitud, False
+    rechazados = []
+    for documento in _documentos_del_expediente(solicitud):
+        ultima = _ultima_validacion_ia(documento)
+        if (
+            documento.estado_validacion == EstadoValidacionDocumento.REJECTED
+            and ultima
+            and ultima.estado == EstadoValidacionIADocumento.AUTO_REJECTED
+        ):
+            rechazados.append(documento.tipo)
+    if not rechazados:
+        return solicitud, False
+    solicitud = transicionar_solicitud(
+        solicitud=solicitud,
+        nuevo_estado=EstadoSolicitudFinanciacion.CORRECTION_REQUIRED,
+        motivo='La validacion visual concluyente requiere una nueva captura.',
+        metadata={
+            'automatic': True,
+            'reason_code': 'DOCUMENT_AUTO_REJECTED',
+            'document_types': sorted(set(rechazados)),
+            'course_authorized': False,
+        },
+    )
+    return solicitud, True
 
 
 @transaction.atomic
@@ -280,10 +375,6 @@ def _aprobar_expediente_concluyente(solicitud):
         },
     )
     generar_artefactos_contractuales(solicitud=solicitud)
-    solicitud.participantes.update(
-        identidad_verificada=True,
-        relacion_verificada=True,
-    )
     return solicitud
 
 
@@ -321,6 +412,11 @@ def ejecutar_orquestacion_automatica(*, solicitud_id):
 
     solicitud, concluyente, codigo = _procesar_seguridad_e_ia(solicitud)
     if not concluyente:
+        solicitud, requiere_correccion = _aplicar_correccion_por_rechazo_automatico(
+            solicitud
+        )
+        if requiere_correccion:
+            return _resultado(solicitud, 'DOCUMENT_CORRECTION_REQUIRED')
         return _resultado(solicitud, codigo)
     solicitud = _aprobar_expediente_concluyente(solicitud)
     return _continuar_firma(solicitud)

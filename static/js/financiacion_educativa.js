@@ -221,14 +221,31 @@ document.addEventListener('DOMContentLoaded', function () {
                 return;
             }
             try {
-                stream = await navigator.mediaDevices.getUserMedia({
+                const rearCamera = {
                     video: {
                         facingMode: { exact: 'environment' },
                         width: { ideal: 1920 },
                         height: { ideal: 1080 }
                     },
                     audio: false
-                });
+                };
+                try {
+                    stream = await navigator.mediaDevices.getUserMedia(rearCamera);
+                } catch (cameraError) {
+                    if (
+                        !cameraError
+                        || !['OverconstrainedError', 'ConstraintNotSatisfiedError']
+                            .includes(cameraError.name)
+                    ) throw cameraError;
+                    stream = await navigator.mediaDevices.getUserMedia({
+                        video: {
+                            facingMode: { ideal: 'environment' },
+                            width: { ideal: 1920 },
+                            height: { ideal: 1080 }
+                        },
+                        audio: false
+                    });
+                }
                 video.srcObject = stream;
                 video.hidden = false;
                 placeholder.hidden = true;

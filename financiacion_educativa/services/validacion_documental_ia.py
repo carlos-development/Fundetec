@@ -1,8 +1,12 @@
 import base64
 import json
 import re
+import unicodedata
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from io import BytesIO
+
+from PIL import Image, UnidentifiedImageError
 
 from django.conf import settings
 from django.core.exceptions import PermissionDenied
@@ -15,7 +19,10 @@ from financiacion_educativa.choices import (
     EstadoEscaneoDocumento,
     EstadoValidacionDocumento,
     EstadoValidacionIADocumento,
+    MotivoRechazoDocumento,
     OrigenValidacionIADocumento,
+    TipoDocumentoFinanciacion,
+    TipoDocumentoIdentidad,
 )
 from financiacion_educativa.models import (
     DocumentoFinanciacion,
@@ -24,13 +31,37 @@ from financiacion_educativa.models import (
 
 
 HALLAZGOS_PERMITIDOS = frozenset({
+    'NOT_IDENTITY_DOCUMENT',
+    'NOT_COLOMBIAN_ID',
+    'SIDE_MISMATCH',
+    'MALFORMED_IMAGE',
+    'IMAGE_TOO_SMALL',
     'LOW_QUALITY',
     'LOW_LEGIBILITY',
+    'BLURRED',
+    'TOO_DARK',
+    'GLARE',
+    'CROPPED',
+    'OBSTRUCTED',
+    'MISSING_VISIBLE_FIELDS',
     'TYPE_MISMATCH',
     'POSSIBLY_NOT_REAL',
     'DATA_MISMATCH',
     'INCONCLUSIVE',
 })
+DECISIONES_MODELO = frozenset({'ACCEPTED', 'REJECTED', 'MANUAL_REVIEW'})
+TIPOS_IDENTIDAD = frozenset({
+    TipoDocumentoFinanciacion.STUDENT_ID_FRONT,
+    TipoDocumentoFinanciacion.STUDENT_ID_BACK,
+    TipoDocumentoFinanciacion.GUARDIAN_ID_FRONT,
+    TipoDocumentoFinanciacion.GUARDIAN_ID_BACK,
+})
+LADO_IDENTIDAD = {
+    TipoDocumentoFinanciacion.STUDENT_ID_FRONT: 'front',
+    TipoDocumentoFinanciacion.STUDENT_ID_BACK: 'back',
+    TipoDocumentoFinanciacion.GUARDIAN_ID_FRONT: 'front',
+    TipoDocumentoFinanciacion.GUARDIAN_ID_BACK: 'back',
+}
 
 
 class ErrorValidacionDocumentalIA(Exception):
@@ -50,6 +81,20 @@ class ResultadoValidacionDocumentalIA:
     hallazgos: tuple[str, ...] = ()
     proveedor: str = ''
     modelo: str = ''
+    decision: str = ''
+    es_documento_identidad: bool | None = None
+    es_documento_colombiano: bool | None = None
+    lado_correcto: bool | None = None
+    campos_visibles: bool | None = None
+    borrosa: bool | None = None
+    oscura: bool | None = None
+    reflejos: bool | None = None
+    recortada: bool | None = None
+    obstruida: bool | None = None
+    razones: tuple[str, ...] = ()
+    tipo_documento_visible: str = ''
+    numero_documento_visible: str = ''
+    nombres_visibles: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -96,10 +141,14 @@ class OpenAIDocumentAIValidationBackend:
                             {
                                 'type': 'input_text',
                                 'text': (
-                                    'Evalua la imagen documental sin inferir datos no '
-                                    'visibles. Devuelve solo el esquema solicitado. Una '
-                                    'duda debe representarse con null, baja confianza o '
-                                    'INCONCLUSIVE; nunca inventes coincidencias.'
+                                    'Evalua solo evidencia visual. No afirmes autenticidad '
+                                    'fisica, presencia, liveness ni consultas oficiales. '
+                                    'Para identificaciones, comprueba si muestra una '
+                                    'identificacion colombiana y el lado solicitado. Para '
+                                    'otros tipos, evalua solo el tipo documental indicado. '
+                                    'No infieras datos no visibles. Una duda debe producir '
+                                    'MANUAL_REVIEW; usa '
+                                    'REJECTED solo para una contradiccion visual concluyente.'
                                 ),
                             },
                         ],
@@ -164,6 +213,20 @@ def _esquema_respuesta():
             'appears_real',
             'data_consistent',
             'finding_codes',
+            'decision',
+            'is_identity_document',
+            'is_colombian_document',
+            'side_matches',
+            'required_fields_visible',
+            'is_blurred',
+            'is_too_dark',
+            'has_glare',
+            'is_cropped',
+            'is_obstructed',
+            'reason_codes',
+            'visible_document_type',
+            'visible_document_number',
+            'visible_names',
         ],
         'properties': {
             'quality_score': {'type': 'number', 'minimum': 0, 'maximum': 1},
@@ -177,12 +240,42 @@ def _esquema_respuesta():
                 'items': {'type': 'string', 'enum': sorted(HALLAZGOS_PERMITIDOS)},
                 'uniqueItems': True,
             },
+            'decision': {'type': 'string', 'enum': sorted(DECISIONES_MODELO)},
+            'is_identity_document': {'type': ['boolean', 'null']},
+            'is_colombian_document': {'type': ['boolean', 'null']},
+            'side_matches': {'type': ['boolean', 'null']},
+            'required_fields_visible': {'type': ['boolean', 'null']},
+            'is_blurred': {'type': ['boolean', 'null']},
+            'is_too_dark': {'type': ['boolean', 'null']},
+            'has_glare': {'type': ['boolean', 'null']},
+            'is_cropped': {'type': ['boolean', 'null']},
+            'is_obstructed': {'type': ['boolean', 'null']},
+            'reason_codes': {
+                'type': 'array',
+                'items': {'type': 'string', 'enum': sorted(HALLAZGOS_PERMITIDOS)},
+                'uniqueItems': True,
+            },
+            'visible_document_type': {'type': ['string', 'null'], 'maxLength': 30},
+            'visible_document_number': {
+                'type': ['string', 'null'],
+                'maxLength': 40,
+            },
+            'visible_names': {
+                'type': 'array',
+                'items': {'type': 'string', 'maxLength': 100},
+                'maxItems': 8,
+            },
         },
     }
 
 
 def _texto_controlado(valor, limite):
     return re.sub(r'[^A-Za-z0-9._:\- ]+', '', str(valor or '')).strip()[:limite]
+
+
+def _dato_visible(valor, limite):
+    normalizado = unicodedata.normalize('NFKC', str(valor or ''))
+    return re.sub(r"[^\w .,'\-]", '', normalizado, flags=re.UNICODE).strip()[:limite]
 
 
 def _puntaje(valor, campo):
@@ -214,10 +307,51 @@ def normalizar_resultado_validacion(payload, *, proveedor='', modelo=''):
         'appears_real',
         'data_consistent',
         'finding_codes',
+        'decision',
+        'is_identity_document',
+        'is_colombian_document',
+        'side_matches',
+        'required_fields_visible',
+        'is_blurred',
+        'is_too_dark',
+        'has_glare',
+        'is_cropped',
+        'is_obstructed',
+        'reason_codes',
+        'visible_document_type',
+        'visible_document_number',
+        'visible_names',
     }
-    if set(payload) != required or not isinstance(payload['finding_codes'], list):
+    if (
+        set(payload) != required
+        or not isinstance(payload['finding_codes'], list)
+        or not isinstance(payload['reason_codes'], list)
+        or not isinstance(payload['visible_names'], list)
+        or len(payload['visible_names']) > 8
+        or (
+            payload['visible_document_type'] is not None
+            and (
+                not isinstance(payload['visible_document_type'], str)
+                or len(payload['visible_document_type']) > 30
+            )
+        )
+        or (
+            payload['visible_document_number'] is not None
+            and (
+                not isinstance(payload['visible_document_number'], str)
+                or len(payload['visible_document_number']) > 40
+            )
+        )
+        or any(
+            not isinstance(nombre, str) or len(nombre) > 100
+            for nombre in payload['visible_names']
+        )
+        or payload['decision'] not in DECISIONES_MODELO
+    ):
         raise ErrorValidacionDocumentalIA('INVALID_RESPONSE')
-    hallazgos = tuple(dict.fromkeys(payload['finding_codes']))
+    hallazgos = tuple(dict.fromkeys(
+        [*payload['finding_codes'], *payload['reason_codes']]
+    ))
     if any(code not in HALLAZGOS_PERMITIDOS for code in hallazgos):
         raise ErrorValidacionDocumentalIA('INVALID_RESPONSE')
     return ResultadoValidacionDocumentalIA(
@@ -230,6 +364,30 @@ def normalizar_resultado_validacion(payload, *, proveedor='', modelo=''):
         hallazgos=hallazgos,
         proveedor=_texto_controlado(proveedor, 60),
         modelo=_texto_controlado(modelo, 80),
+        decision=payload['decision'],
+        es_documento_identidad=_booleano_nullable(payload['is_identity_document']),
+        es_documento_colombiano=_booleano_nullable(payload['is_colombian_document']),
+        lado_correcto=_booleano_nullable(payload['side_matches']),
+        campos_visibles=_booleano_nullable(payload['required_fields_visible']),
+        borrosa=_booleano_nullable(payload['is_blurred']),
+        oscura=_booleano_nullable(payload['is_too_dark']),
+        reflejos=_booleano_nullable(payload['has_glare']),
+        recortada=_booleano_nullable(payload['is_cropped']),
+        obstruida=_booleano_nullable(payload['is_obstructed']),
+        razones=tuple(dict.fromkeys(payload['reason_codes'])),
+        tipo_documento_visible=_dato_visible(
+            payload['visible_document_type'],
+            30,
+        ),
+        numero_documento_visible=_dato_visible(
+            payload['visible_document_number'],
+            40,
+        ),
+        nombres_visibles=tuple(
+            _dato_visible(nombre, 100)
+            for nombre in payload['visible_names']
+            if _dato_visible(nombre, 100)
+        ),
     )
 
 
@@ -320,9 +478,65 @@ def _contexto_declarado(documento):
     }
 
 
-def _es_concluyente(resultado):
-    return bool(
-        resultado.confianza
+def _prevalidar_imagen(contenido):
+    try:
+        with Image.open(BytesIO(contenido)) as imagen:
+            formato = (imagen.format or '').upper()
+            ancho, alto = imagen.size
+            imagen.verify()
+        with Image.open(BytesIO(contenido)) as imagen:
+            imagen.load()
+    except (OSError, ValueError, UnidentifiedImageError):
+        return ResultadoValidacionDocumentalIA(
+            calidad=Decimal('0'),
+            legibilidad=Decimal('0'),
+            confianza=Decimal('1'),
+            corresponde_tipo=False,
+            indicios_imagen_real=False,
+            datos_consistentes=None,
+            hallazgos=('MALFORMED_IMAGE',),
+            proveedor='local-precheck',
+            modelo='pillow',
+            decision='REJECTED',
+            razones=('MALFORMED_IMAGE',),
+        )
+    if formato not in {'JPEG', 'PNG'}:
+        raise ErrorValidacionDocumentalIA('UNSUPPORTED_MEDIA_TYPE')
+    if (
+        ancho < settings.FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_WIDTH
+        or alto < settings.FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_HEIGHT
+    ):
+        return ResultadoValidacionDocumentalIA(
+            calidad=Decimal('0'),
+            legibilidad=Decimal('0'),
+            confianza=Decimal('1'),
+            corresponde_tipo=None,
+            indicios_imagen_real=None,
+            datos_consistentes=None,
+            hallazgos=('IMAGE_TOO_SMALL',),
+            proveedor='local-precheck',
+            modelo='pillow',
+            decision='REJECTED',
+            razones=('IMAGE_TOO_SMALL',),
+        )
+    return None
+
+
+def _decision_modelo(resultado):
+    if resultado.decision:
+        return resultado.decision
+    return 'ACCEPTED' if not resultado.hallazgos else 'MANUAL_REVIEW'
+
+
+def _es_concluyente(
+    resultado,
+    *,
+    requiere_identidad=False,
+    requiere_documento_colombiano=False,
+):
+    concluyente = bool(
+        _decision_modelo(resultado) == 'ACCEPTED'
+        and resultado.confianza
         >= Decimal(settings.FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_CONFIDENCE)
         and resultado.calidad
         >= Decimal(settings.FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_QUALITY)
@@ -333,6 +547,68 @@ def _es_concluyente(resultado):
         and resultado.datos_consistentes is True
         and not resultado.hallazgos
     )
+    if not concluyente or not requiere_identidad:
+        return concluyente
+    return bool(
+        resultado.es_documento_identidad is True
+        and (
+            not requiere_documento_colombiano
+            or resultado.es_documento_colombiano is True
+        )
+        and resultado.lado_correcto is True
+        and resultado.campos_visibles is True
+        and resultado.borrosa is False
+        and resultado.oscura is False
+        and resultado.reflejos is False
+        and resultado.recortada is False
+        and resultado.obstruida is False
+    )
+
+
+def _es_rechazo_concluyente(resultado, *, documento):
+    hallazgos_permitidos = {
+        'MALFORMED_IMAGE',
+        'IMAGE_TOO_SMALL',
+        'TYPE_MISMATCH',
+    }
+    if documento.tipo in TIPOS_IDENTIDAD:
+        hallazgos_permitidos.update({
+            'NOT_IDENTITY_DOCUMENT',
+            'SIDE_MISMATCH',
+        })
+        if (
+            documento.participante
+            and documento.participante.tipo_documento
+            in {TipoDocumentoIdentidad.CC, TipoDocumentoIdentidad.TI}
+        ):
+            hallazgos_permitidos.add('NOT_COLOMBIAN_ID')
+    return bool(
+        _decision_modelo(resultado) == 'REJECTED'
+        and resultado.confianza
+        >= Decimal(settings.FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_CONFIDENCE)
+        and hallazgos_permitidos.intersection(resultado.hallazgos)
+        and 'POSSIBLY_NOT_REAL' not in resultado.hallazgos
+    )
+
+
+def _resultado_estructurado(resultado):
+    return {
+        'schema_version': '2',
+        'decision': _decision_modelo(resultado),
+        'is_identity_document': resultado.es_documento_identidad,
+        'is_colombian_document': resultado.es_documento_colombiano,
+        'side_matches': resultado.lado_correcto,
+        'required_fields_visible': resultado.campos_visibles,
+        'is_blurred': resultado.borrosa,
+        'is_too_dark': resultado.oscura,
+        'has_glare': resultado.reflejos,
+        'is_cropped': resultado.recortada,
+        'is_obstructed': resultado.obstruida,
+        'reason_codes': list(resultado.razones),
+        'visible_document_type': resultado.tipo_documento_visible,
+        'visible_document_number': resultado.numero_documento_visible,
+        'visible_names': list(resultado.nombres_visibles),
+    }
 
 
 @transaction.atomic
@@ -360,12 +636,25 @@ def _finalizar_validacion(*, validacion_id, resultado=None, codigo_error=''):
             'error_code': valores['codigo_error'],
         }
     else:
-        concluyente = _es_concluyente(resultado)
-        estado = (
-            EstadoValidacionIADocumento.AUTO_APPROVED
-            if concluyente
-            else EstadoValidacionIADocumento.MANUAL_REVIEW
+        concluyente = _es_concluyente(
+            resultado,
+            requiere_identidad=documento.tipo in TIPOS_IDENTIDAD,
+            requiere_documento_colombiano=bool(
+                documento.participante
+                and documento.participante.tipo_documento
+                in {TipoDocumentoIdentidad.CC, TipoDocumentoIdentidad.TI}
+            ),
         )
+        rechazo_concluyente = _es_rechazo_concluyente(
+            resultado,
+            documento=documento,
+        )
+        if concluyente:
+            estado = EstadoValidacionIADocumento.AUTO_APPROVED
+        elif rechazo_concluyente:
+            estado = EstadoValidacionIADocumento.AUTO_REJECTED
+        else:
+            estado = EstadoValidacionIADocumento.MANUAL_REVIEW
         hallazgos = list(resultado.hallazgos)
         if not concluyente and not hallazgos:
             hallazgos = ['INCONCLUSIVE']
@@ -381,6 +670,7 @@ def _finalizar_validacion(*, validacion_id, resultado=None, codigo_error=''):
             indicios_imagen_real=resultado.indicios_imagen_real,
             datos_consistentes=resultado.datos_consistentes,
             hallazgos=hallazgos,
+            resultado_estructurado=_resultado_estructurado(resultado),
         )
         resumen['ai_validation'] = {
             'attempt': str(validacion.pk),
@@ -394,6 +684,7 @@ def _finalizar_validacion(*, validacion_id, resultado=None, codigo_error=''):
             'appears_real': resultado.indicios_imagen_real,
             'data_consistent': resultado.datos_consistentes,
             'finding_codes': hallazgos,
+            'structured_result': _resultado_estructurado(resultado),
         }
         documento.nivel_confianza = resultado.confianza
         if (
@@ -406,6 +697,27 @@ def _finalizar_validacion(*, validacion_id, resultado=None, codigo_error=''):
             documento.motivo_rechazo = ''
             documento.observacion_revision = (
                 'Aceptacion automatica por validacion documental concluyente.'
+            )
+        elif (
+            rechazo_concluyente
+            and documento.estado_validacion == EstadoValidacionDocumento.PENDING
+        ):
+            documento.estado_validacion = EstadoValidacionDocumento.REJECTED
+            documento.revisado_por = None
+            documento.revisado_en = ahora
+            documento.motivo_rechazo = (
+                MotivoRechazoDocumento.WRONG_DOCUMENT
+                if {
+                    'NOT_IDENTITY_DOCUMENT',
+                    'NOT_COLOMBIAN_ID',
+                    'SIDE_MISMATCH',
+                    'TYPE_MISMATCH',
+                }.intersection(hallazgos)
+                else MotivoRechazoDocumento.UNREADABLE
+            )
+            documento.observacion_revision = (
+                'La captura no cumple una validacion visual concluyente. '
+                'Realiza una nueva captura del documento solicitado.'
             )
     ValidacionIADocumento.objects.filter(pk=validacion.pk).update(**valores)
     validacion.refresh_from_db()
@@ -434,6 +746,15 @@ def procesar_validacion_documental_ia(
     backend=None,
 ):
     _validar_permiso(actor, origen)
+    if (
+        backend is None
+        and not settings.FINANCIACION_EDUCATIVA_DOCUMENT_AI_ENABLED
+    ):
+        return ResultadoProcesamientoValidacionIA(
+            documento_id=documento.pk,
+            estado='DISABLED',
+            codigo_error='DOCUMENT_AI_DISABLED',
+        )
     backend = backend or obtener_backend_validacion_ia()
     if not getattr(backend, 'enabled', True):
         return ResultadoProcesamientoValidacionIA(
@@ -462,12 +783,16 @@ def procesar_validacion_documental_ia(
             )
         if not contenido or len(contenido) > settings.FINANCIACION_EDUCATIVA_DOCUMENT_MAX_BYTES:
             raise ErrorValidacionDocumentalIA('READ_ERROR')
-        resultado = backend.validar(
-            contenido=contenido,
-            content_type=documento.content_type,
-            tipo_esperado=documento.get_tipo_display(),
-            contexto=_contexto_declarado(documento),
-        )
+        resultado = _prevalidar_imagen(contenido)
+        if resultado is None:
+            contexto = _contexto_declarado(documento)
+            contexto['lado_esperado'] = LADO_IDENTIDAD.get(documento.tipo)
+            resultado = backend.validar(
+                contenido=contenido,
+                content_type=documento.content_type,
+                tipo_esperado=documento.tipo,
+                contexto=contexto,
+            )
         if not isinstance(resultado, ResultadoValidacionDocumentalIA):
             raise ErrorValidacionDocumentalIA('INVALID_RESPONSE')
     except ErrorValidacionDocumentalIA as error:

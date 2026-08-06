@@ -1,4 +1,5 @@
 import hashlib
+import re
 from datetime import date
 from tempfile import TemporaryDirectory
 
@@ -35,6 +36,19 @@ from financiacion_educativa.tests.factories import (
 @override_settings(
     FINANCIACION_EDUCATIVA_ACREEDOR_RAZON_SOCIAL=(
         'APROBADO SOLUCIONES DIGITALES S.A.S.'
+    ),
+    FINANCIACION_EDUCATIVA_ACREEDOR_NIT='900000000-1',
+    FINANCIACION_EDUCATIVA_ACREEDOR_REPRESENTANTE_LEGAL='REPRESENTANTE PRUEBA',
+    FINANCIACION_EDUCATIVA_ACREEDOR_DOMICILIO='Bogota D.C.',
+    FINANCIACION_EDUCATIVA_PAGARE_VERSION_JURIDICA='1',
+    FINANCIACION_EDUCATIVA_PAGARE_CLAUSULA_OBLIGACION=(
+        'CLAUSULA DE OBLIGACION EDUCATIVA APROBADA PARA PRUEBAS.'
+    ),
+    FINANCIACION_EDUCATIVA_PAGARE_CLAUSULA_CARTA_INSTRUCCIONES=(
+        'CLAUSULA DE CARTA DE INSTRUCCIONES APROBADA PARA PRUEBAS.'
+    ),
+    FINANCIACION_EDUCATIVA_PAGARE_CLAUSULA_INCUMPLIMIENTO=(
+        'CLAUSULA DE INCUMPLIMIENTO APROBADA PARA PRUEBAS.'
     ),
 )
 class ArtefactosContractualesTests(TestCase):
@@ -123,10 +137,11 @@ class ArtefactosContractualesTests(TestCase):
 
     def _texto_pdf(self, artefacto):
         with artefacto.archivo.open('rb') as archivo:
-            return '\n'.join(
+            texto = '\n'.join(
                 pagina.extract_text() or ''
                 for pagina in PdfReader(archivo).pages
             )
+        return re.sub(r'\s+', ' ', texto)
 
     def test_genera_dos_pdfs_privados_versionados_e_idempotentes(self):
         self._participante()
@@ -158,10 +173,25 @@ class ArtefactosContractualesTests(TestCase):
                 artefacto.archivo.url
 
         texto_pagare = self._texto_pdf(primera.pagare)
+        texto_ficha = self._texto_pdf(primera.ficha_matricula)
         self.assertIn('ESTUDIANTE EDUCATIVO', texto_pagare)
         self.assertIn('1142711', texto_pagare.replace('.', '').replace(',', ''))
         self.assertNotIn('libranza', texto_pagare.lower())
         self.assertNotIn('nomina', texto_pagare.lower())
+        self.assertNotIn('desembolso', texto_pagare.lower())
+        self.assertIn('CARTA DE INSTRUCCIONES', texto_pagare)
+        self.assertEqual(
+            primera.pagare.version_plantilla,
+            'PAGARE-2.0-EDU-1',
+        )
+        self.assertIn('FICHA DE MATRÍCULA', texto_ficha)
+        self.assertIn('Información de Matrícula', texto_ficha)
+        self.assertIn('Información de Retiro', texto_ficha)
+        self.assertNotIn('38557506', texto_ficha)
+        with primera.ficha_matricula.archivo.open('rb') as archivo:
+            lector = PdfReader(archivo)
+            self.assertEqual(len(lector.pages), 1)
+            self.assertGreaterEqual(len(lector.pages[0].images), 1)
 
     def test_menor_usa_tutor_como_responsable_y_conserva_estudiante(self):
         self._participante(menor=True)
@@ -188,6 +218,24 @@ class ArtefactosContractualesTests(TestCase):
                 solicitud=self.solicitud,
                 actor=self.usuario,
             )
+        self.assertFalse(ArtefactoContractualEducativo.objects.exists())
+
+    @override_settings(
+        FINANCIACION_EDUCATIVA_PAGARE_CLAUSULA_OBLIGACION='',
+    )
+    def test_rechaza_generacion_sin_clausulas_juridicas_aprobadas(self):
+        self._participante()
+        self._preparar_finanzas()
+
+        with self.assertRaisesMessage(
+            ValidationError,
+            'Configura la version y las clausulas juridicas educativas aprobadas.',
+        ):
+            generar_artefactos_contractuales(
+                solicitud=self.solicitud,
+                actor=self.usuario,
+            )
+
         self.assertFalse(ArtefactoContractualEducativo.objects.exists())
 
     def test_descarga_exige_propiedad_de_la_solicitud(self):

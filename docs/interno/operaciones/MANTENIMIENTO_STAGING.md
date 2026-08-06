@@ -325,13 +325,19 @@ Antes de cambiarlo a `true`, deben estar configuradas y validadas las variables
 de `.env.example` para:
 
 - ClamAV: backend, destino, timeouts y limites de intentos;
-- IA: backend OpenAI, modelo, timeout, umbrales y `OPENAI_API_KEY`;
+- IA: interruptor explicito, backend OpenAI, modelo, timeout, dimensiones,
+  umbrales y `OPENAI_API_KEY`;
 - firma: backend educativo, URL sandbox, token, secreto/header de webhook,
-  timeout, intentos, modo de autenticacion y HMAC de destinatario;
-- contrato: `FINANCIACION_EDUCATIVA_ACREEDOR_RAZON_SOCIAL`.
+  timeout, intentos, modo de autenticacion, validacion de identidad y HMAC de
+  destinatario;
+- contrato: razon social, NIT, representante legal y domicilio del acreedor;
+- pagare: version juridica y clausulas aprobadas de obligacion, carta de
+  instrucciones e incumplimiento. No usar textos provisionales ni valores de
+  pruebas.
 
 `staging_manage check` rechaza activar la orquestacion con IA o firma
-deshabilitadas o sin acreedor. La activacion debe probarse primero con una
+deshabilitadas o con datos contractuales incompletos. La activacion debe
+probarse primero con una
 solicitud QA y correo desviado. El callback posterior al commit se ejecuta en
 el proceso web; no es una cola asincrona.
 

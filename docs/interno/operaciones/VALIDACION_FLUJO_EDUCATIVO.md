@@ -186,7 +186,10 @@ principal es el enlace temporal consumido y ligado en servidor a usuario,
 solicitud y participante; la deteccion movil bloquea el flujo normal de
 escritorio.
 
-## 6. Completar expediente y finanzas
+## 6. Completar expediente y finanzas con automatizacion deshabilitada
+
+Este recorrido conserva la operacion anterior y sirve para diagnostico. No es
+el recorrido exitoso esperado cuando la automatizacion esta activa.
 
 1. Registrar o revisar los datos del estudiante.
 2. Para una solicitud de menor, registrar un tutor adulto y capturar las caras
@@ -230,7 +233,7 @@ Resultado esperado:
 El solicitante reemplaza el dato o documento indicado y vuelve a enviar el
 expediente. La consulta debe regresar a `UNDER_REVIEW`.
 
-## 8. Aprobar o rechazar
+## 8. Aprobar o rechazar manualmente
 
 Usar dos solicitudes distintas porque aprobacion y rechazo son decisiones
 finales.
@@ -272,7 +275,71 @@ Para rechazar una segunda solicitud:
 4. Confirmar `status: REJECTED`, `course_authorized: false` y el correo de
    decision en consola.
 
-## 9. Limpiar
+## 9. E2E real en staging con proveedores sandbox
+
+No activar este bloque durante el despliegue inicial. Primero aplicar las
+migraciones, ejecutar `staging_manage check`, validar ClamAV y probar OpenAI y
+ZapSign sandbox por separado. Mantener inicialmente:
+
+```text
+FINANCIACION_EDUCATIVA_AUTOMATION_ENABLED=false
+```
+
+La configuracion requerida esta inventariada en `.env.example`. Para la prueba
+real se deben definir, sin imprimir valores secretos:
+
+- ClamAV: backend, socket Unix o host y puerto, timeouts, intentos y ventana de
+  recuperacion;
+- OpenAI: `OPENAI_API_KEY`, interruptor explicito, backend OpenAI, modelo,
+  timeout, intentos, dimensiones y umbrales;
+- contrato: razon social, NIT, representante legal y domicilio del acreedor,
+  `FINANCIACION_EDUCATIVA_PAGARE_VERSION_JURIDICA` y las tres variables
+  `FINANCIACION_EDUCATIVA_PAGARE_CLAUSULA_*`, con texto juridico aprobado;
+- ZapSign sandbox: backend real, URL base, token, secreto y header del webhook,
+  timeout, intentos, modo de autenticacion, validacion de identidad y HMAC
+  independiente del destinatario;
+- URL publica: debe producir el endpoint HTTPS
+  `/api/v1/financiacion-educativa/integraciones/zapsign/webhook/`.
+
+Orden de validacion:
+
+1. Respaldar `shared/staging.env` sin mostrarlo y confirmar correo QA.
+2. Configurar proveedores con automatizacion aun en `false`.
+3. Ejecutar `staging_manage check` y la regresion focalizada.
+4. Crear una solicitud QA nueva; no reutilizar solicitudes historicas.
+5. Procesar un archivo inerte y otro EICAR controlado contra ClamAV. El segundo
+   debe quedar bloqueado y nunca crear una validacion IA.
+6. Probar imagen valida, objeto ajeno, lado incorrecto y baja calidad contra el
+   modelo configurado. Conservar IDs y codigos, no imágenes ni PII en el
+   informe.
+7. Validar en ZapSign sandbox el payload y header de la cuenta contratada. Un
+   error ambiguo debe conciliarse antes de reintentar.
+8. Cambiar `FINANCIACION_EDUCATIVA_AUTOMATION_ENABLED=true`, reiniciar solo el
+   servicio de staging y comprobar `/health/`.
+9. Crear otra solicitud QA y recorrer invitacion, terminos, captura, expediente
+   y firma. No usar admin ni comandos en el caso exitoso.
+10. Repetir el webhook firmado y confirmar que existe un solo evento y un solo
+    archivo firmado.
+
+Evidencia minima del caso exitoso:
+
+- todos los documentos tienen intento ClamAV limpio y las identificaciones una
+  validacion IA concluyente;
+- existe una unica fotografia financiera activa y bloqueada;
+- existen exactamente un pagare y una ficha vigentes con version y hash;
+- existe un unico proceso `SIGNED` y el PDF firmado privado tiene hash y tamano;
+- antes de firmar, `financial_terms` es `null` y
+  `course_authorized` es `false`;
+- despues de firmar, la API devuelve `APPROVED`, condiciones financieras y
+  autorizacion del curso;
+- un webhook duplicado no crea eventos, archivos ni transiciones adicionales.
+
+Reversion de activacion: restaurar solamente
+`FINANCIACION_EDUCATIVA_AUTOMATION_ENABLED=false`, reiniciar el servicio de
+staging y verificar `/health/`. No borrar intentos, procesos, artefactos ni
+eventos: son evidencia auditable y permiten recuperacion controlada.
+
+## 10. Limpiar
 
 Detener el servidor y borrar exclusivamente los recursos temporales:
 

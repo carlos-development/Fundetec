@@ -29,6 +29,14 @@ class AutomatizacionEducativaChecksTests(SimpleTestCase):
             DISABLED_EDUCATIONAL_SIGNATURE_BACKEND
         ),
         FINANCIACION_EDUCATIVA_ACREEDOR_RAZON_SOCIAL='',
+        FINANCIACION_EDUCATIVA_DOCUMENT_AI_ENABLED=False,
+        FINANCIACION_EDUCATIVA_ACREEDOR_NIT='',
+        FINANCIACION_EDUCATIVA_ACREEDOR_REPRESENTANTE_LEGAL='',
+        FINANCIACION_EDUCATIVA_ACREEDOR_DOMICILIO='',
+        FINANCIACION_EDUCATIVA_PAGARE_VERSION_JURIDICA='',
+        FINANCIACION_EDUCATIVA_PAGARE_CLAUSULA_OBLIGACION='',
+        FINANCIACION_EDUCATIVA_PAGARE_CLAUSULA_CARTA_INSTRUCCIONES='',
+        FINANCIACION_EDUCATIVA_PAGARE_CLAUSULA_INCUMPLIMIENTO='',
     )
     def test_habilitada_exige_ia_firma_y_acreedor(self):
         self.assertEqual(
@@ -37,5 +45,13 @@ class AutomatizacionEducativaChecksTests(SimpleTestCase):
                 'financiacion_educativa.E061',
                 'financiacion_educativa.E062',
                 'financiacion_educativa.E063',
+                'financiacion_educativa.E064',
+                'financiacion_educativa.E065',
+                'financiacion_educativa.E066',
+                'financiacion_educativa.E067',
+                'financiacion_educativa.E068',
+                'financiacion_educativa.E069',
+                'financiacion_educativa.E070',
+                'financiacion_educativa.E071',
             },
         )

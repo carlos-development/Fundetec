@@ -18,32 +18,35 @@ secretos y los system checks. Las variables educativas no reutilizan
 
 ## Secuencia vigente
 
-1. El expediente seguro y aceptado llega a revision administrativa.
-2. La decision aprobatoria crea o bloquea la fotografia financiera definitiva.
-3. La solicitud pasa a `PENDING_PROMISSORY_NOTE` y genera pagare y ficha
+1. Cada carga se escanea y valida por los puertos documentales configurados.
+2. Un expediente concluyente avanza automaticamente; solo los resultados
+   inciertos o tecnicamente fallidos llegan a revision administrativa.
+3. La decision documental crea y bloquea la fotografia financiera definitiva.
+4. La solicitud pasa a `PENDING_PROMISSORY_NOTE` y genera pagare y ficha
    versionados desde datos reales.
-4. `preparar_proceso_firma` crea un proceso idempotente para el pagare vigente.
-5. Con `FINANCIACION_EDUCATIVA_AUTOMATION_ENABLED=true`, la orquestacion reclama
+5. `preparar_proceso_firma` crea un proceso idempotente para el pagare vigente.
+6. Con `FINANCIACION_EDUCATIVA_AUTOMATION_ENABLED=true`, la orquestacion reclama
    el envio con bloqueo y limite de intentos.
-6. El adaptador transmite el PDF en base64 y un unico responsable contractual.
-7. La solicitud pasa a `PENDING_SIGNATURE` despues de confirmar la creacion.
-8. El webhook autentica el secreto, valida `token` y `external_id`, y deduplica
-   por hash del cuerpo.
-9. `doc_signed` exige estado firmado en el proveedor, recupera el PDF, valida
+7. El adaptador transmite el PDF en base64 y un unico responsable contractual.
+8. La solicitud pasa a `PENDING_SIGNATURE` despues de confirmar la creacion.
+9. El webhook autentica el secreto, valida `token` y `external_id`, y deduplica
+   por identificador del proveedor o una huella canonica estable del evento.
+10. `doc_signed` exige estado firmado en el proveedor, recupera el PDF, valida
    formato/tamano, guarda hash y archivo privado y transiciona a `APPROVED`.
-10. Solo entonces la API publica `course_authorized=true` y `financial_terms`.
-11. `doc_refused` invalida el pagare, vuelve a `PENDING_PROMISSORY_NOTE` y
+11. Solo entonces la API publica `course_authorized=true` y `financial_terms`.
+12. `doc_refused` invalida el pagare, vuelve a `PENDING_PROMISSORY_NOTE` y
     permite generar una version nueva.
 
-**Enviar a revision no envia un pagare.** El envio debe ocurrir solo despues de
-la aprobacion administrativa.
+**Enviar a revision no envia un pagare.** El envio ocurre solo despues de una
+decision documental concluyente, automatica o manual.
 
 ## Configuracion educativa
 
 El contrato completo esta en `.env.example`. Las variables principales son
 `FINANCIACION_EDUCATIVA_ZAPSIGN_BACKEND`, `*_BASE_URL`, `*_API_TOKEN`,
 `*_WEBHOOK_SECRET`, `*_WEBHOOK_HEADER`, `*_TIMEOUT_SECONDS`,
-`*_MAX_ATTEMPTS`, `*_STALE_SECONDS`, `*_AUTH_MODE`, `*_REQUIRE_SELFIE` y
+`*_MAX_ATTEMPTS`, `*_STALE_SECONDS`, `*_AUTH_MODE`, `*_REQUIRE_SELFIE`,
+`*_SELFIE_VALIDATION_TYPE` y
 `FINANCIACION_EDUCATIVA_SIGNATURE_RECIPIENT_HMAC_KEY`.
 
 El endpoint privado es
@@ -69,9 +72,15 @@ estudiante.
 - Un timeout o respuesta ambigua del POST real se marca
   `SIGNATURE_SEND_AMBIGUOUS` y no se reenvia automaticamente: primero debe
   conciliarse el `external_id` con el proveedor para evitar dos documentos.
+- Un rechazo HTTP 4xx tampoco se reintenta automaticamente. Despues de corregir
+  la configuracion o el payload, un operador puede usar
+  `enviar_pagares_educativos --confirmar-reintento-permanente`; esta opcion no
+  habilita reenvios de resultados ambiguos.
 - La confirmacion aplica bloqueo transaccional y el historial registra cada
   transicion.
-- La URL de descarga debe usar HTTPS y un host permitido del proveedor.
+- La URL de descarga debe usar HTTPS y un host permitido del proveedor. La
+  descarga no sigue redirecciones, usa streaming y aplica el limite antes de
+  acumular el archivo completo en memoria.
 
 Los adaptadores falsos solo se admiten en pruebas cuando
 `FINANCIACION_EDUCATIVA_ALLOW_TEST_SIGNATURE_BACKENDS=true`. El check de Django
@@ -84,6 +93,11 @@ El recorrido automatico se habilita de forma explicita con:
 ```text
 FINANCIACION_EDUCATIVA_AUTOMATION_ENABLED=true
 ```
+
+La habilitacion exige ademas los datos legales del acreedor y la version y
+clausulas juridicas educativas declaradas en `.env.example`. El sistema no
+genera el pagare con textos provisionales: una variable vacia detiene la
+generacion antes de crear o enviar el artefacto.
 
 Al completar el expediente, el callback posterior al commit ejecuta ClamAV,
 validacion IA, fotografia, artefactos y envio. Si cualquier proveedor falla, el
@@ -109,6 +123,7 @@ duplicado entre procesos Django cooperantes.
 ## Pendientes antes de habilitar un proveedor real
 
 - revision juridica del texto contractual y de la representacion del menor;
+- confirmar NIT, representante legal y domicilio del acreedor;
 - validar en sandbox el evento y header acordados para la cuenta contratada;
 - confirmar modos de autenticacion, selfie y documentos disponibles en el plan;
 - definir retencion, custodia y recuperacion operacional del firmado;

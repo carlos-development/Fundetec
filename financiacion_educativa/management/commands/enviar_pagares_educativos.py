@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.core.management.base import BaseCommand, CommandError
 
 from financiacion_educativa.choices import EstadoProcesoFirmaEducativa
@@ -15,6 +16,14 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument('--solicitud-id')
         parser.add_argument('--limit', type=int, default=20)
+        parser.add_argument(
+            '--confirmar-reintento-permanente',
+            action='store_true',
+            help=(
+                'Permite reintentar un rechazo HTTP 4xx despues de corregir '
+                'la configuracion o el payload. No habilita envios ambiguos.'
+            ),
+        )
 
     def handle(self, *args, **options):
         if str(settings.FINANCIACION_EDUCATIVA_ZAPSIGN_BACKEND).endswith(
@@ -39,8 +48,13 @@ class Command(BaseCommand):
         fallidos = 0
         for proceso in procesos[:limite]:
             try:
-                enviar_pagare_educativo(proceso=proceso)
-            except FirmaEducativaError:
+                enviar_pagare_educativo(
+                    proceso=proceso,
+                    permitir_reintento_permanente=options[
+                        'confirmar_reintento_permanente'
+                    ],
+                )
+            except (FirmaEducativaError, ValidationError):
                 fallidos += 1
             else:
                 procesados += 1

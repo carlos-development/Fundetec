@@ -200,6 +200,15 @@
       </table>
 
       <h2>III. Texto del pagaré</h2>
+      {% if modo_educativo %}
+      <p>
+        Yo, <strong>{{ deudor_nombres|default:"________________" }}</strong>, identificado con
+        {{ tipo_documento_deudor|default:"C.C." }} No. <strong>{{ cedula_deudor|default:"________________" }}</strong>,
+        prometo pagar incondicionalmente a la orden de
+        <strong>{{ beneficiario_razon_social }}</strong> (NIT {{ beneficiario_nit }}), en adelante
+        <strong>EL ACREEDOR</strong>. {{ pagare_clausula_obligacion }}
+      </p>
+      {% else %}
       <p>
         Yo, <strong>{{ deudor_nombres|default:"________________" }}</strong>, identificado con
         {{ tipo_documento_deudor|default:"C.C." }} No. <strong>{{ cedula_deudor|default:"________________" }}</strong>,
@@ -212,6 +221,7 @@
         impuestos, seguros y demás conceptos derivados o relacionados con la obligación respaldada por
         el presente pagaré.
       </p>
+      {% endif %}
 
       <table>
         <tr>
@@ -233,9 +243,13 @@
           <td>{{ fecha_ultimo_pago|default:"________________" }}</td>
         </tr>
         <tr>
-          <th>Modalidad de descuento</th>
+          <th>{% if modo_educativo %}Modalidad de pago{% else %}Modalidad de descuento{% endif %}</th>
           <td colspan="3">{{ modalidad_descuento|default:"________________" }}</td>
         </tr>
+        {% if modo_educativo %}<tr>
+          <th>Estudiante</th><td>{{ estudiante.nombre_completo }}</td>
+          <th>Programa</th><td>{{ solicitud.nombre_curso }}</td>
+        </tr>{% endif %}
       </table>
 
       <h2>IV. Cláusulas de garantía y disposiciones especiales</h2>
@@ -250,12 +264,12 @@
         diligenciado por EL ACREEDOR conforme a la carta de instrucciones adjunta y al artículo 622 del
         Código de Comercio.
       </p>
-      <p>
+      {% if not modo_educativo %}<p>
         Para trabajadores con contrato laboral, autorizo el descuento por nómina, libranza o mecanismo
         equivalente permitido por el pagador. Para prestadores de servicios, autorizo que los descuentos
         se realicen sobre honorarios, cuentas de cobro, facturas o pagos derivados de la relación
         contractual, según aplique y conforme a la autorización otorgada.
-      </p>
+      </p>{% endif %}
 
       <h2>V. Firmas y otorgamiento</h2>
       <p>
@@ -289,12 +303,16 @@
       </p>
 
       <h2>II. Obligación que respalda el pagaré</h2>
+      {% if modo_educativo %}
+      <p>{{ pagare_clausula_carta_instrucciones }}</p>
+      {% else %}
       <p>
         El pagaré respalda las obligaciones de crédito, financiación, intereses, comisiones, gastos,
         seguros, impuestos, costos de cobranza y demás conceptos que se causen a mi cargo a favor de
         EL ACREEDOR, incluyendo las obligaciones derivadas de libranza, adelanto de nómina o modalidad
         de descuento autorizada.
       </p>
+      {% endif %}
 
       <h2>III. Instrucciones de diligenciamiento</h2>
       <p>
@@ -312,7 +330,8 @@
         a esta carta de instrucciones y a la obligación que respalda el pagaré.
       </p>
 
-      <h2>IV. Facultades de cobro y garantías según tipo de vínculo</h2>
+      <h2>IV. Facultades de cobro{% if not modo_educativo %} y garantías según tipo de vínculo{% endif %}</h2>
+      {% if not modo_educativo %}
       <h3>Contrato laboral</h3>
       <p>
         Si tengo contrato laboral, autorizo al pagador, empleador o entidad vinculada para descontar de
@@ -325,6 +344,7 @@
         cobro, facturas, pagos contractuales o saldos a mi favor derivados de la relación de prestación
         de servicios, conforme a las autorizaciones otorgadas.
       </p>
+      {% endif %}
       <p>
         EL ACREEDOR podrá adelantar gestiones de cobro preventivo, prejudicial, extrajudicial y judicial,
         reportar la obligación conforme a la ley aplicable y reclamar los gastos y honorarios causados
@@ -332,6 +352,9 @@
       </p>
 
       <h2>V. Eventos de incumplimiento</h2>
+      {% if modo_educativo %}
+      <p>{{ pagare_clausula_incumplimiento }}</p>
+      {% else %}
       <p>
         Constituyen eventos de incumplimiento la mora en el pago de cualquier cuota, la terminación o
         suspensión del vínculo que sirve de fuente de pago sin normalización de la obligación, la
@@ -339,6 +362,7 @@
         o cualquier evento que afecte el recaudo oportuno de la obligación.
       </p>
 
+      {% endif %}
       <h2>VI. Conservación y devolución del pagaré</h2>
       <p>
         EL ACREEDOR conservará el pagaré y esta carta mientras exista saldo u obligación vigente. Una vez

@@ -4,6 +4,12 @@ from financiacion_educativa.choices import RolParticipante
 from financiacion_educativa.models import EvidenciaMatricula
 
 
+FICHA_MATRICULA_FUENTE_VERSION = 'FO-AD-005-V2'
+FICHA_MATRICULA_FUENTE_SHA256 = (
+    'ca6a22a58f99f356e14d6d8ba4a0a6d6d191630090d6dc9e1b2817941c5aca9c'
+)
+
+
 @dataclass(frozen=True)
 class CampoFichaMatricula:
     campo: str
@@ -218,3 +224,82 @@ def construir_mapeo_ficha_matricula(solicitud):
         ],
     })
     return mapeo
+
+
+def construir_datos_ficha_matricula(solicitud):
+    estudiante = _participante_por_rol(solicitud, RolParticipante.STUDENT)
+    tutor = _participante_por_rol(solicitud, RolParticipante.GUARDIAN)
+    try:
+        evidencia = solicitud.evidencia_matricula
+    except EvidenciaMatricula.DoesNotExist:
+        evidencia = None
+    datos = {
+        'nombres': solicitud.nombres,
+        'apellidos': solicitud.apellidos,
+        'identificacion': (
+            f'{estudiante.get_tipo_documento_display()} {estudiante.numero_documento}'
+            if estudiante
+            else solicitud.numero_documento_estudiante
+        ),
+        'email': solicitud.correo,
+        'celular': solicitud.celular,
+        'telefono': '',
+        'direccion': solicitud.direccion,
+        'fecha_nacimiento': (
+            estudiante.fecha_nacimiento.strftime('%d/%m/%Y')
+            if estudiante and estudiante.fecha_nacimiento
+            else ''
+        ),
+        'municipio_nacimiento': '',
+        'municipio_expedicion': '',
+        'programa': solicitud.nombre_curso,
+        'codigo_matricula': (
+            solicitud.codigo_matricula
+            or (evidencia.referencia_matricula if evidencia else '')
+        ),
+        'sede_jornada': ' - '.join(
+            valor for valor in (solicitud.sede, solicitud.jornada) if valor
+        ),
+        'fecha_matricula': (
+            solicitud.fecha_matricula.strftime('%d/%m/%Y')
+            if solicitud.fecha_matricula
+            else ''
+        ),
+        'periodo': (
+            solicitud.periodo_academico
+            or (evidencia.periodo_academico if evidencia else '')
+        ),
+        'fecha_renovacion': '',
+        'acudiente_nombre': tutor.nombre_completo if tutor else '',
+        'acudiente_identificacion': (
+            f'{tutor.get_tipo_documento_display()} {tutor.numero_documento}'
+            if tutor
+            else ''
+        ),
+        'acudiente_celular': tutor.telefono if tutor else '',
+        'acudiente_telefono': '',
+        'acudiente_parentesco': (
+            tutor.get_relacion_estudiante_display() if tutor else ''
+        ),
+        'acudiente_ocupacion': '',
+        'acudiente_email': tutor.correo if tutor else '',
+        'acudiente_direccion': '',
+    }
+    obligatorios_faltantes = [
+        nombre
+        for nombre in (
+            'nombres',
+            'apellidos',
+            'identificacion',
+            'programa',
+            'codigo_matricula',
+            'periodo',
+        )
+        if not datos[nombre]
+    ]
+    return {
+        'fuente_version': FICHA_MATRICULA_FUENTE_VERSION,
+        'fuente_sha256': FICHA_MATRICULA_FUENTE_SHA256,
+        'datos': datos,
+        'obligatorios_faltantes': obligatorios_faltantes,
+    }

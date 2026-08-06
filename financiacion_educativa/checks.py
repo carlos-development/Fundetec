@@ -223,6 +223,8 @@ def check_document_ai_configuration(app_configs, **kwargs):
     for nombre, identifier in (
         ('FINANCIACION_EDUCATIVA_DOCUMENT_AI_MAX_ATTEMPTS', 'E024'),
         ('FINANCIACION_EDUCATIVA_DOCUMENT_AI_STALE_SECONDS', 'E025'),
+        ('FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_WIDTH', 'E032'),
+        ('FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_HEIGHT', 'E033'),
     ):
         valor = getattr(settings, nombre, None)
         if isinstance(valor, bool) or not isinstance(valor, int) or valor <= 0:
@@ -254,6 +256,12 @@ def check_document_ai_configuration(app_configs, **kwargs):
             errors.append(_error(f'{nombre} debe estar entre 0 y 1.', identifier))
 
     if backend_path == OPENAI_DOCUMENT_AI_BACKEND:
+        if not getattr(
+            settings,
+            'FINANCIACION_EDUCATIVA_DOCUMENT_AI_ENABLED',
+            False,
+        ):
+            errors.append(_error('La validacion IA debe habilitarse explicitamente.', 'E034'))
         if not str(
             getattr(settings, 'FINANCIACION_EDUCATIVA_DOCUMENT_AI_MODEL', '') or ''
         ).strip():
@@ -368,6 +376,23 @@ def check_educational_signature_configuration(app_configs, **kwargs):
                     'E053',
                 )
             )
+        if (
+            getattr(settings, 'FINANCIACION_EDUCATIVA_ZAPSIGN_REQUIRE_SELFIE', False)
+            and not str(
+                getattr(
+                    settings,
+                    'FINANCIACION_EDUCATIVA_ZAPSIGN_SELFIE_VALIDATION_TYPE',
+                    '',
+                )
+                or ''
+            ).strip()
+        ):
+            errors.append(
+                _error(
+                    'La validacion de identidad ZapSign debe configurarse.',
+                    'E054',
+                )
+            )
     return errors
 
 
@@ -397,6 +422,17 @@ def check_educational_automation_configuration(app_configs, **kwargs):
                 'E061',
             )
         )
+    if not getattr(
+        settings,
+        'FINANCIACION_EDUCATIVA_DOCUMENT_AI_ENABLED',
+        False,
+    ):
+        errors.append(
+            _error(
+                'La automatizacion requiere habilitar la IA documental.',
+                'E064',
+            )
+        )
     if signature_backend == DISABLED_EDUCATIONAL_SIGNATURE_BACKEND:
         errors.append(
             _error(
@@ -418,4 +454,23 @@ def check_educational_automation_configuration(app_configs, **kwargs):
                 'E063',
             )
         )
+    for nombre, identifier in (
+        ('FINANCIACION_EDUCATIVA_ACREEDOR_NIT', 'E065'),
+        ('FINANCIACION_EDUCATIVA_ACREEDOR_REPRESENTANTE_LEGAL', 'E066'),
+        ('FINANCIACION_EDUCATIVA_ACREEDOR_DOMICILIO', 'E067'),
+        ('FINANCIACION_EDUCATIVA_PAGARE_VERSION_JURIDICA', 'E068'),
+        ('FINANCIACION_EDUCATIVA_PAGARE_CLAUSULA_OBLIGACION', 'E069'),
+        (
+            'FINANCIACION_EDUCATIVA_PAGARE_CLAUSULA_CARTA_INSTRUCCIONES',
+            'E070',
+        ),
+        ('FINANCIACION_EDUCATIVA_PAGARE_CLAUSULA_INCUMPLIMIENTO', 'E071'),
+    ):
+        if not str(getattr(settings, nombre, '') or '').strip():
+            errors.append(
+                _error(
+                    f'La automatizacion requiere {nombre}.',
+                    identifier,
+                )
+            )
     return errors

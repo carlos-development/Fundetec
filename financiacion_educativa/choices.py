@@ -93,11 +93,13 @@ class EstadoIntentoEscaneoDocumento(models.TextChoices):
 class OrigenIntentoEscaneoDocumento(models.TextChoices):
     ADMIN = 'ADMIN', 'Administrador'
     COMMAND = 'COMMAND', 'Comando de recuperacion'
+    AUTOMATIC = 'AUTOMATIC', 'Orquestacion automatica'
 
 
 class EstadoValidacionIADocumento(models.TextChoices):
     STARTED = 'STARTED', 'Iniciada'
     AUTO_APPROVED = 'AUTO_APPROVED', 'Aceptacion automatica concluyente'
+    AUTO_REJECTED = 'AUTO_REJECTED', 'Rechazo automatico concluyente'
     MANUAL_REVIEW = 'MANUAL_REVIEW', 'Requiere revision manual'
     ERROR = 'ERROR', 'Fallo tecnico'
 
@@ -317,6 +319,7 @@ class EstadoProcesoFirmaEducativa(models.TextChoices):
     REFUSED = 'REFUSED', 'Firma rechazada'
     FAILED = 'FAILED', 'Envio fallido'
     CANCELLED = 'CANCELLED', 'Cancelado'
+    EXPIRED = 'EXPIRED', 'Vencido'
 
 
 class EstadoEventoWebhookFirmaEducativa(models.TextChoices):

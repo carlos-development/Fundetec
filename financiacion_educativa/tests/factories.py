@@ -1,5 +1,10 @@
 from decimal import Decimal
 from datetime import date
+import hashlib
+from io import BytesIO
+
+from django.core.files.uploadedfile import SimpleUploadedFile
+from PIL import Image, ImageDraw
 
 from financiacion_educativa.choices import (
     EstadoConfiguracionFinanciera,
@@ -76,4 +81,23 @@ def crear_configuracion_financiera(
         metodo_calculo=MetodoCalculoFinanciero.FRENCH_AMORTIZATION,
         politica_redondeo=PoliticaRedondeoFinanciero.COP_PESO_HALF_UP,
         politica_causacion=PoliticaCausacionInteres.DAILY_30,
+    )
+
+
+def imagen_jpeg_prueba(nombre='documento.jpg', marca='documento-prueba'):
+    digest = hashlib.sha256(str(marca).encode('utf-8')).digest()
+    imagen = Image.new('RGB', (1200, 800), (35 + digest[0] % 180, 90, 140))
+    dibujo = ImageDraw.Draw(imagen)
+    dibujo.rectangle(
+        (80, 80, 1120, 720),
+        outline=(digest[1], digest[2], digest[3]),
+        width=24,
+    )
+    dibujo.text((120, 120), digest.hex(), fill=(255, 255, 255))
+    salida = BytesIO()
+    imagen.save(salida, format='JPEG', quality=90)
+    return SimpleUploadedFile(
+        nombre,
+        salida.getvalue(),
+        content_type='image/jpeg',
     )
