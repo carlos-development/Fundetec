@@ -229,16 +229,15 @@ def _esquema_respuesta():
             'visible_names',
         ],
         'properties': {
-            'quality_score': {'type': 'number', 'minimum': 0, 'maximum': 1},
-            'legibility_score': {'type': 'number', 'minimum': 0, 'maximum': 1},
-            'confidence': {'type': 'number', 'minimum': 0, 'maximum': 1},
+            'quality_score': {'type': 'number'},
+            'legibility_score': {'type': 'number'},
+            'confidence': {'type': 'number'},
             'document_type_match': {'type': ['boolean', 'null']},
             'appears_real': {'type': ['boolean', 'null']},
             'data_consistent': {'type': ['boolean', 'null']},
             'finding_codes': {
                 'type': 'array',
                 'items': {'type': 'string', 'enum': sorted(HALLAZGOS_PERMITIDOS)},
-                'uniqueItems': True,
             },
             'decision': {'type': 'string', 'enum': sorted(DECISIONES_MODELO)},
             'is_identity_document': {'type': ['boolean', 'null']},
@@ -253,17 +252,14 @@ def _esquema_respuesta():
             'reason_codes': {
                 'type': 'array',
                 'items': {'type': 'string', 'enum': sorted(HALLAZGOS_PERMITIDOS)},
-                'uniqueItems': True,
             },
-            'visible_document_type': {'type': ['string', 'null'], 'maxLength': 30},
+            'visible_document_type': {'type': ['string', 'null']},
             'visible_document_number': {
                 'type': ['string', 'null'],
-                'maxLength': 40,
             },
             'visible_names': {
                 'type': 'array',
-                'items': {'type': 'string', 'maxLength': 100},
-                'maxItems': 8,
+                'items': {'type': 'string'},
             },
         },
     }

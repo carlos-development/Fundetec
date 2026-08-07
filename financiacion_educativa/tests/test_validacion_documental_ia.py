@@ -575,3 +575,13 @@ class AdaptadorOpenAIValidacionDocumentalTests(TestCase):
         self.assertEqual(llamada['text']['format']['type'], 'json_schema')
         self.assertTrue(llamada['text']['format']['strict'])
         self.assertFalse(llamada['store'])
+        esquema = llamada['text']['format']['schema']
+        esquema_serializado = json.dumps(esquema)
+        for palabra_no_soportada in (
+            'uniqueItems',
+            'minimum',
+            'maximum',
+            'maxLength',
+            'maxItems',
+        ):
+            self.assertNotIn(palabra_no_soportada, esquema_serializado)
