@@ -1,0 +1,9 @@
+Expediente recibido
+
+Recibimos los documentos de tu solicitud de financiacion educativa.
+
+Referencia: {{ referencia_externa }}
+
+El expediente quedo disponible para validacion. Te informaremos cuando exista un nuevo paso.
+
+{{ brand_name }}

@@ -20,6 +20,9 @@ SMTP_BACKENDS = frozenset({SMTP_BACKEND, SAFE_ROUTING_SMTP_BACKEND})
 ASUNTO_CAPTURA_MOVIL = (
     'Continúa la captura de tu documento desde el celular | Aprobado'
 )
+ASUNTO_EXPEDIENTE_RECIBIDO = (
+    'Recibimos tu expediente de financiacion educativa | Aprobado'
+)
 URL_MUESTRA_INERTE = 'https://example.invalid/educacion/muestra'
 
 
@@ -195,6 +198,44 @@ def construir_correo_decision_educativa(
         body=texto,
         from_email=settings.DEFAULT_FROM_EMAIL,
         to=[recipient],
+        connection=connection,
+    )
+    mensaje.attach_alternative(html, 'text/html')
+    return mensaje
+
+
+def construir_correo_expediente_recibido(
+    *,
+    recipient,
+    referencia_externa,
+    cc=None,
+    connection=None,
+):
+    recipient = normalizar_destinatario(recipient)
+    destinatarios_copia = []
+    for correo in cc or []:
+        normalizado = normalizar_destinatario(correo)
+        if normalizado != recipient and normalizado not in destinatarios_copia:
+            destinatarios_copia.append(normalizado)
+
+    contexto = {
+        'brand_name': 'Aprobado',
+        'referencia_externa': str(referencia_externa or '').strip(),
+    }
+    texto = render_to_string(
+        'emails/financiacion_educativa/expediente_recibido.txt',
+        contexto,
+    )
+    html = render_to_string(
+        'emails/financiacion_educativa/expediente_recibido.html',
+        contexto,
+    )
+    mensaje = EmailMultiAlternatives(
+        subject=ASUNTO_EXPEDIENTE_RECIBIDO,
+        body=texto,
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        to=[recipient],
+        cc=destinatarios_copia,
         connection=connection,
     )
     mensaje.attach_alternative(html, 'text/html')

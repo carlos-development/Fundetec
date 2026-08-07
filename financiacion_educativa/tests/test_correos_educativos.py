@@ -16,9 +16,11 @@ from financiacion_educativa.models import (
 )
 from financiacion_educativa.services.correos import (
     ASUNTO_CAPTURA_MOVIL,
+    ASUNTO_EXPEDIENTE_RECIBIDO,
     ConfiguracionSMTPInvalida,
     URL_MUESTRA_INERTE,
     construir_correo_captura_movil,
+    construir_correo_expediente_recibido,
     construir_correos_prueba,
     validar_configuracion_smtp,
 )
@@ -108,6 +110,25 @@ class PlantillasCorreoEducativoTests(TestCase):
         self.assertIn('nunca te pedirá tu contraseña', html)
         self.assertIn('https://credito.example.test/continuar#secreto', html)
         self.assertIn('https://credito.example.test/continuar#secreto', mensaje.body)
+
+    def test_confirmacion_expediente_copia_soporte_sin_enlaces_secretos(self):
+        mensaje = construir_correo_expediente_recibido(
+            recipient='persona@example.com',
+            referencia_externa='EDU-OPERACION-001',
+            cc=[
+                'soporte@aprobado.com.co',
+                'SOPORTE@APROBADO.COM.CO',
+                'persona@example.com',
+            ],
+        )
+
+        self.assertEqual(mensaje.subject, ASUNTO_EXPEDIENTE_RECIBIDO)
+        self.assertEqual(mensaje.to, ['persona@example.com'])
+        self.assertEqual(mensaje.cc, ['soporte@aprobado.com.co'])
+        contenido = mensaje.body + mensaje.alternatives[0].content
+        self.assertIn('EDU-OPERACION-001', contenido)
+        self.assertNotIn('/captura-movil/', contenido)
+        self.assertNotIn('/continuar/', contenido)
 
     def test_nueve_muestras_son_inertes_y_no_cambian_el_dominio(self):
         conteos_antes = {

@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import logging
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -13,6 +14,9 @@ from financiacion_educativa.choices import (
 )
 from financiacion_educativa.models import EvidenciaMatricula, SolicitudFinanciacionEducativa
 from financiacion_educativa.services.estados import transicionar_solicitud
+from financiacion_educativa.services.correos import (
+    construir_correo_expediente_recibido,
+)
 from financiacion_educativa.services.participantes import (
     solicitud_requiere_tutor,
 )
@@ -31,6 +35,39 @@ class RequisitoDocumental:
     codigo: str
     descripcion: str
     cumplido: bool
+
+
+logger = logging.getLogger(__name__)
+
+
+def _enviar_notificacion_expediente_recibido(*, solicitud_id):
+    try:
+        solicitud = SolicitudFinanciacionEducativa.objects.only(
+            'correo',
+            'referencia_externa',
+        ).get(pk=solicitud_id)
+        mensaje = construir_correo_expediente_recibido(
+            recipient=solicitud.correo,
+            referencia_externa=solicitud.referencia_externa,
+            cc=settings.FINANCIACION_EDUCATIVA_REVIEW_NOTIFICATION_EMAILS,
+        )
+        mensaje.send(fail_silently=False)
+    except Exception as exc:  # El flujo no debe revertirse por una falla SMTP.
+        logger.warning(
+            'No fue posible entregar la notificacion de expediente; '
+            'solicitud_id=%s error_type=%s',
+            solicitud_id,
+            type(exc).__name__,
+        )
+
+
+def _programar_notificacion_expediente_recibido(*, solicitud_id):
+    transaction.on_commit(
+        lambda: _enviar_notificacion_expediente_recibido(
+            solicitud_id=solicitud_id,
+        ),
+        robust=True,
+    )
 
 
 def _requisito_actualizado_despues_de_correccion(
@@ -241,5 +278,6 @@ def completar_fase_documental(*, solicitud, actor):
             'automation_enabled': settings.FINANCIACION_EDUCATIVA_AUTOMATION_ENABLED,
         },
     )
+    _programar_notificacion_expediente_recibido(solicitud_id=solicitud.pk)
     programar_orquestacion_automatica(solicitud_id=solicitud.pk)
     return solicitud

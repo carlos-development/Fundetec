@@ -1,5 +1,6 @@
 from unittest.mock import patch
 
+from django.core.exceptions import ImproperlyConfigured
 from django.core.mail import EmailMultiAlternatives
 from django.test import SimpleTestCase, override_settings
 
@@ -46,6 +47,7 @@ class SafeRoutingEmailBackendTests(SimpleTestCase):
 
     @override_settings(
         EMAIL_QA_MODE=False,
+        EMAIL_LIVE_DELIVERY_ENABLED=True,
         EMAIL_QA_REDIRECT_TO='qa@aprobado.com.co',
     )
     @patch('django.core.mail.backends.smtp.EmailBackend.send_messages')
@@ -62,3 +64,26 @@ class SafeRoutingEmailBackendTests(SimpleTestCase):
 
         forwarded = parent_send_messages.call_args[0][0][0]
         self.assertEqual(forwarded.to, ['cliente@real.com'])
+
+    @override_settings(
+        EMAIL_QA_MODE=False,
+        EMAIL_LIVE_DELIVERY_ENABLED=False,
+        EMAIL_QA_REDIRECT_TO='',
+    )
+    @patch('django.core.mail.backends.smtp.EmailBackend.send_messages')
+    def test_bloquea_entrega_sin_modo_qa_o_live(self, parent_send_messages):
+        backend = SafeRoutingEmailBackend()
+        message = EmailMultiAlternatives(
+            subject='Entrega no autorizada',
+            body='Contenido',
+            from_email='Aprobado <noreply@aprobado.com.co>',
+            to=['cliente@real.com'],
+        )
+
+        with self.assertRaisesMessage(
+            ImproperlyConfigured,
+            'La entrega SMTP esta bloqueada',
+        ):
+            backend.send_messages([message])
+
+        parent_send_messages.assert_not_called()

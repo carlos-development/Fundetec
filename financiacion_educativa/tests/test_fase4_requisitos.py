@@ -2,6 +2,7 @@ from datetime import date
 from tempfile import TemporaryDirectory
 
 from django.contrib.auth import get_user_model
+from django.core import mail
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
@@ -395,6 +396,32 @@ class RequisitosDocumentalesFase4Tests(TestCase):
             ).count(),
             1,
         )
+
+    @override_settings(
+        EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
+        FINANCIACION_EDUCATIVA_REVIEW_NOTIFICATION_EMAILS=[
+            'soporte@aprobado.com.co',
+        ],
+    )
+    def test_envio_inicial_programa_una_confirmacion_con_copia_operativa(self):
+        estudiante = self._participante()
+        self._documentos_adulto(estudiante, aceptar=True)
+        self._matricula_aceptada()
+
+        with self.captureOnCommitCallbacks(execute=True):
+            completar_fase_documental(
+                solicitud=self.solicitud,
+                actor=self.usuario,
+            )
+        with self.captureOnCommitCallbacks(execute=True):
+            completar_fase_documental(
+                solicitud=self.solicitud,
+                actor=self.usuario,
+            )
+
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, [self.solicitud.correo])
+        self.assertEqual(mail.outbox[0].cc, ['soporte@aprobado.com.co'])
 
     def test_menor_no_completa_sin_tutor(self):
         self._participante(

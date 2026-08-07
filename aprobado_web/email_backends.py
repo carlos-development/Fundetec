@@ -1,12 +1,13 @@
 from copy import copy
 
 from django.conf import settings
+from django.core.exceptions import ImproperlyConfigured
 from django.core.mail.backends.smtp import EmailBackend as SMTPEmailBackend
 
 
 class SafeRoutingEmailBackend(SMTPEmailBackend):
     """
-    SMTP backend with an optional QA guardrail.
+    SMTP backend with explicit QA or live delivery modes.
 
     When EMAIL_QA_MODE=True and EMAIL_QA_REDIRECT_TO is configured, every
     outgoing message is rerouted to that single address while preserving the
@@ -21,7 +22,15 @@ class SafeRoutingEmailBackend(SMTPEmailBackend):
         qa_enabled = getattr(settings, 'EMAIL_QA_MODE', False)
         qa_recipient = (getattr(settings, 'EMAIL_QA_REDIRECT_TO', '') or '').strip()
 
-        if not qa_enabled or not qa_recipient:
+        live_enabled = getattr(settings, 'EMAIL_LIVE_DELIVERY_ENABLED', False)
+
+        if not qa_enabled and not live_enabled:
+            raise ImproperlyConfigured(
+                'La entrega SMTP esta bloqueada. Habilita EMAIL_QA_MODE o '
+                'EMAIL_LIVE_DELIVERY_ENABLED de forma explicita.'
+            )
+
+        if not qa_enabled:
             return super().send_messages(email_messages)
 
         rerouted_messages = []

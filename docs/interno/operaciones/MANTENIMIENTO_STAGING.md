@@ -86,6 +86,8 @@ HMAC. Variables de correo habituales:
 - `CONTACT_EMAIL`;
 - `CREDIT_INTERNAL_NOTIFICATION_EMAILS`;
 - `EMAIL_QA_REDIRECT_TO`.
+- `EMAIL_LIVE_DELIVERY_ENABLED`;
+- `FINANCIACION_EDUCATIVA_REVIEW_NOTIFICATION_EMAILS`.
 
 Aplicar el cambio solo a staging:
 
@@ -133,10 +135,20 @@ procedimiento de migracion aprobado antes de reiniciar. Para un cambio sin
 migraciones, la reversión consiste en volver al hash anterior aprobado como
 `fundetec-staging` y reiniciar únicamente este servicio.
 
-## Probar correo
+## Modos de entrega de correo
 
-Mantener `EMAIL_QA_MODE=true` para que todos los mensajes se desvien al unico
-destinatario QA configurado.
+El backend seguro exige exactamente un modo operativo:
+
+- QA: `EMAIL_QA_MODE=true` y `EMAIL_LIVE_DELIVERY_ENABLED=false`;
+- real: `EMAIL_QA_MODE=false` y `EMAIL_LIVE_DELIVERY_ENABLED=true`.
+
+En modo real, los mensajes se entregan a sus destinatarios originales. Cuando
+el solicitante envia por primera vez su expediente, recibe una confirmacion
+con copia a `FINANCIACION_EDUCATIVA_REVIEW_NOTIFICATION_EMAILS`. Ese mensaje no
+incluye invitaciones, enlaces de captura ni tokens. Los correos que si contienen
+enlaces de un solo uso nunca se copian a la bandeja operativa.
+
+Antes de habilitar entrega real, mantener QA y ejecutar:
 
 ```bash
 staging_manage enviar_correos_prueba_educacion --help
@@ -145,6 +157,25 @@ staging_manage enviar_correos_prueba_educacion \
 ```
 
 El segundo comando envia nueve muestras inertes por SMTP.
+
+Para habilitar el modo real se debe respaldar `staging.env`, configurar la lista
+operativa autorizada, ejecutar `staging_manage check`, reiniciar solamente
+`fundetec-staging.service` y verificar `/health/`. No se deben probar muestras
+inertes despues de activar el modo real salvo autorizacion expresa.
+
+## Rotar ZapSign a productivo
+
+La integracion educativa usa exclusivamente las variables con prefijo
+`FINANCIACION_EDUCATIVA_ZAPSIGN_`; las variables heredadas `ZAPSIGN_*` no deben
+reutilizarse. Para el cambio se requiere una credencial productiva nueva, la URL
+base productiva confirmada por ZapSign y dos webhooks productivos (`doc_signed`
+y `doc_refused`) con el mismo secreto independiente configurado en
+`FINANCIACION_EDUCATIVA_ZAPSIGN_WEBHOOK_SECRET`.
+
+El token de API y el secreto del webhook deben ser valores distintos. Mantener
+la validacion de identidad y el envio automatico de ZapSign habilitados. Tras el
+cambio, validar `manage.py check`, salud local/externa y una solicitud de control;
+no enviar un pagare real usando datos ficticios.
 
 ## Credenciales institucionales
 

@@ -43,7 +43,9 @@ class StagingSettingsTests(SimpleTestCase):
                 'FINANCIACION_EDUCATIVA_PRIVATE_ROOT',
                 'EMAIL_BACKEND',
                 'EMAIL_QA_MODE',
+                'EMAIL_LIVE_DELIVERY_ENABLED',
                 'EMAIL_QA_REDIRECT_TO',
+                'FINANCIACION_EDUCATIVA_REVIEW_NOTIFICATION_EMAILS',
             }
         }
         environment.update(
@@ -78,6 +80,7 @@ class StagingSettingsTests(SimpleTestCase):
                     'aprobado_web.email_backends.SafeRoutingEmailBackend'
                 ),
                 'EMAIL_QA_MODE': 'true',
+                'EMAIL_LIVE_DELIVERY_ENABLED': 'false',
                 'EMAIL_QA_REDIRECT_TO': 'qa@example.test',
                 'EMAIL_HOST': 'smtp.example.test',
                 'EMAIL_PORT': '587',
@@ -180,10 +183,11 @@ print(json.dumps({
         self.assertNotEqual(missing_static_root.returncode, 0)
         self.assertIn('STATIC_ROOT es obligatorio', missing_static_root.stderr)
 
-    def test_staging_rechaza_correo_sin_enrutamiento_qa(self):
+    def test_staging_rechaza_correo_sin_modo_explicito(self):
         environment = self._staging_environment()
         environment['EMAIL_QA_MODE'] = 'false'
-        qa_disabled = self._load_settings(environment)
+        environment['EMAIL_LIVE_DELIVERY_ENABLED'] = 'false'
+        delivery_disabled = self._load_settings(environment)
 
         environment = self._staging_environment()
         environment['EMAIL_BACKEND'] = (
@@ -191,7 +195,34 @@ print(json.dumps({
         )
         unsafe_backend = self._load_settings(environment)
 
-        self.assertNotEqual(qa_disabled.returncode, 0)
-        self.assertIn('Staging requiere EMAIL_QA_MODE=True', qa_disabled.stderr)
+        self.assertNotEqual(delivery_disabled.returncode, 0)
+        self.assertIn(
+            'Staging requiere EMAIL_QA_MODE=True o la habilitacion explicita',
+            delivery_disabled.stderr,
+        )
         self.assertNotEqual(unsafe_backend.returncode, 0)
         self.assertIn('Staging requiere SafeRoutingEmailBackend', unsafe_backend.stderr)
+
+    def test_staging_admite_entrega_real_explicita_con_notificacion_operativa(self):
+        environment = self._staging_environment()
+        environment['EMAIL_QA_MODE'] = 'false'
+        environment['EMAIL_LIVE_DELIVERY_ENABLED'] = 'true'
+        environment['FINANCIACION_EDUCATIVA_REVIEW_NOTIFICATION_EMAILS'] = (
+            'soporte@example.test'
+        )
+
+        result = self._load_settings(environment)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_staging_rechaza_qa_y_entrega_real_simultaneos(self):
+        environment = self._staging_environment()
+        environment['EMAIL_LIVE_DELIVERY_ENABLED'] = 'true'
+
+        result = self._load_settings(environment)
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            'EMAIL_QA_MODE y EMAIL_LIVE_DELIVERY_ENABLED no pueden estar activos',
+            result.stderr,
+        )

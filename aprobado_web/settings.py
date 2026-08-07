@@ -148,8 +148,16 @@ CONTACT_EMAIL = os.environ.get(
     'Info@aprobado.com.co'
 )
 EMAIL_QA_MODE = env_bool('EMAIL_QA_MODE', False)
+EMAIL_LIVE_DELIVERY_ENABLED = env_bool(
+    'EMAIL_LIVE_DELIVERY_ENABLED',
+    False,
+)
 EMAIL_QA_REDIRECT_TO = os.environ.get('EMAIL_QA_REDIRECT_TO', '').strip()
 EMAIL_QA_SUBJECT_PREFIX = os.environ.get('EMAIL_QA_SUBJECT_PREFIX', '[QA]')
+FINANCIACION_EDUCATIVA_REVIEW_NOTIFICATION_EMAILS = _split_env_list(
+    'FINANCIACION_EDUCATIVA_REVIEW_NOTIFICATION_EMAILS',
+    '',
+)
 
 # Correos internos para alertas operativas del flujo de credito.
 # Formato esperado en .env:
@@ -833,6 +841,11 @@ if EMAIL_QA_MODE and not EMAIL_QA_REDIRECT_TO:
     raise ImproperlyConfigured(
         'EMAIL_QA_REDIRECT_TO es obligatorio cuando EMAIL_QA_MODE=True.'
     )
+if EMAIL_QA_MODE and EMAIL_LIVE_DELIVERY_ENABLED:
+    raise ImproperlyConfigured(
+        'EMAIL_QA_MODE y EMAIL_LIVE_DELIVERY_ENABLED no pueden estar activos '
+        'al mismo tiempo.'
+    )
 if DEPLOYMENT_ENVIRONMENT == 'staging':
     if DEBUG:
         raise ImproperlyConfigured('Staging requiere DEBUG=False.')
@@ -840,10 +853,20 @@ if DEPLOYMENT_ENVIRONMENT == 'staging':
         raise ImproperlyConfigured(
             'Staging requiere SafeRoutingEmailBackend.'
         )
-    if not EMAIL_QA_MODE:
-        raise ImproperlyConfigured('Staging requiere EMAIL_QA_MODE=True.')
+    if not EMAIL_QA_MODE and not EMAIL_LIVE_DELIVERY_ENABLED:
+        raise ImproperlyConfigured(
+            'Staging requiere EMAIL_QA_MODE=True o la habilitacion explicita '
+            'EMAIL_LIVE_DELIVERY_ENABLED=True.'
+        )
+    if (
+        EMAIL_LIVE_DELIVERY_ENABLED
+        and not FINANCIACION_EDUCATIVA_REVIEW_NOTIFICATION_EMAILS
+    ):
+        raise ImproperlyConfigured(
+            'FINANCIACION_EDUCATIVA_REVIEW_NOTIFICATION_EMAILS es obligatorio '
+            'para la entrega real en staging.'
+        )
     for _email_setting_name, _email_setting_value in {
-        'EMAIL_QA_REDIRECT_TO': EMAIL_QA_REDIRECT_TO,
         'EMAIL_HOST': EMAIL_HOST,
         'EMAIL_HOST_USER': EMAIL_HOST_USER,
         'EMAIL_HOST_PASSWORD': EMAIL_HOST_PASSWORD,
