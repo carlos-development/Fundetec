@@ -546,6 +546,10 @@ class AdaptadorOpenAIValidacionDocumentalTests(TestCase):
             )
         with self.assertRaises(ErrorValidacionDocumentalIA):
             normalizar_resultado_validacion(
+                {**self.payload, 'quality_score': 8},
+            )
+        with self.assertRaises(ErrorValidacionDocumentalIA):
+            normalizar_resultado_validacion(
                 {**self.payload, 'visible_document_number': {'raw': '100'}},
             )
 
@@ -585,3 +589,11 @@ class AdaptadorOpenAIValidacionDocumentalTests(TestCase):
             'maxItems',
         ):
             self.assertNotIn(palabra_no_soportada, esquema_serializado)
+        for campo in ('quality_score', 'legibility_score', 'confidence'):
+            puntajes = esquema['properties'][campo]['enum']
+            self.assertEqual(len(puntajes), 101)
+            self.assertEqual(puntajes[0], 0)
+            self.assertEqual(puntajes[-1], 1)
+            self.assertIn(0.8, puntajes)
+        instruccion = llamada['input'][0]['content'][0]['text']
+        self.assertIn('ocho sobre diez es 0.80, no 8', instruccion)

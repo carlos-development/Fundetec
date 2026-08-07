@@ -50,6 +50,9 @@ HALLAZGOS_PERMITIDOS = frozenset({
     'INCONCLUSIVE',
 })
 DECISIONES_MODELO = frozenset({'ACCEPTED', 'REJECTED', 'MANUAL_REVIEW'})
+PUNTAJES_RESPUESTA_PERMITIDOS = tuple(
+    round(valor / 100, 2) for valor in range(101)
+)
 TIPOS_IDENTIDAD = frozenset({
     TipoDocumentoFinanciacion.STUDENT_ID_FRONT,
     TipoDocumentoFinanciacion.STUDENT_ID_BACK,
@@ -146,6 +149,9 @@ class OpenAIDocumentAIValidationBackend:
                                     'Para identificaciones, comprueba si muestra una '
                                     'identificacion colombiana y el lado solicitado. Para '
                                     'otros tipos, evalua solo el tipo documental indicado. '
+                                    'Expresa quality_score, legibility_score y confidence '
+                                    'como numeros entre 0.00 y 1.00 con maximo dos '
+                                    'decimales; por ejemplo, ocho sobre diez es 0.80, no 8. '
                                     'No infieras datos no visibles. Una duda debe producir '
                                     'MANUAL_REVIEW; usa '
                                     'REJECTED solo para una contradiccion visual concluyente.'
@@ -229,9 +235,18 @@ def _esquema_respuesta():
             'visible_names',
         ],
         'properties': {
-            'quality_score': {'type': 'number'},
-            'legibility_score': {'type': 'number'},
-            'confidence': {'type': 'number'},
+            'quality_score': {
+                'type': 'number',
+                'enum': PUNTAJES_RESPUESTA_PERMITIDOS,
+            },
+            'legibility_score': {
+                'type': 'number',
+                'enum': PUNTAJES_RESPUESTA_PERMITIDOS,
+            },
+            'confidence': {
+                'type': 'number',
+                'enum': PUNTAJES_RESPUESTA_PERMITIDOS,
+            },
             'document_type_match': {'type': ['boolean', 'null']},
             'appears_real': {'type': ['boolean', 'null']},
             'data_consistent': {'type': ['boolean', 'null']},
