@@ -243,10 +243,14 @@ def reemplazar_documento(
     actor,
     origen_captura=OrigenCapturaDocumento.USER_UPLOAD,
 ):
-    anterior = DocumentoFinanciacion.objects.select_for_update().select_related(
-        'solicitud',
-        'participante',
-    ).get(pk=documento.pk)
+    anterior = (
+        DocumentoFinanciacion.objects.select_for_update(of=('self',))
+        .select_related(
+            'solicitud',
+            'participante',
+        )
+        .get(pk=documento.pk)
+    )
     _validar_propiedad(anterior.solicitud, actor)
     if not anterior.activo:
         raise ValidationError('El documento ya fue reemplazado.')

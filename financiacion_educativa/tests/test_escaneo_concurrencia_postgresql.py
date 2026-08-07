@@ -15,7 +15,10 @@ from financiacion_educativa.choices import (
     TipoDocumentoFinanciacion,
 )
 from financiacion_educativa.models import IntentoEscaneoDocumento
-from financiacion_educativa.services.documentos import registrar_documento
+from financiacion_educativa.services.documentos import (
+    registrar_documento,
+    reemplazar_documento,
+)
 from financiacion_educativa.services.escaneo_documentos import (
     ResultadoAntivirus,
     VeredictoAntivirus,
@@ -58,11 +61,14 @@ class ConcurrenciaEscaneoPostgreSQLTests(TransactionTestCase):
         self.override.enable()
         self.addCleanup(self.override.disable)
         self.addCleanup(self.private_root.cleanup)
-        usuario = get_user_model().objects.create_user(
+        self.usuario = get_user_model().objects.create_user(
             username='pg-scan-owner@example.com',
             password='Clave-2026',
         )
-        solicitud = crear_solicitud(usuario=usuario, referencia='PG-SCAN-001')
+        solicitud = crear_solicitud(
+            usuario=self.usuario,
+            referencia='PG-SCAN-001',
+        )
         solicitud.estado = EstadoSolicitudFinanciacion.PENDING_DOCUMENT
         solicitud.save(update_fields=['estado'])
         self.documento = registrar_documento(
@@ -74,8 +80,25 @@ class ConcurrenciaEscaneoPostgreSQLTests(TransactionTestCase):
                 b'%PDF-1.7\npg\n%%EOF',
                 content_type='application/pdf',
             ),
-            actor=usuario,
+            actor=self.usuario,
         )
+
+    @override_settings(FINANCIACION_EDUCATIVA_AUTOMATION_ENABLED=False)
+    def test_reemplazo_bloquea_solo_documento_y_no_el_join_nullable(self):
+        nuevo = reemplazar_documento(
+            documento=self.documento,
+            archivo=SimpleUploadedFile(
+                'pg-reemplazo.pdf',
+                b'%PDF-1.7\npg-reemplazo\n%%EOF',
+                content_type='application/pdf',
+            ),
+            actor=self.usuario,
+        )
+
+        self.documento.refresh_from_db()
+        self.assertFalse(self.documento.activo)
+        self.assertTrue(nuevo.activo)
+        self.assertEqual(nuevo.reemplaza_a_id, self.documento.pk)
 
     def test_dos_conexiones_generan_un_solo_intento_y_un_escaneo(self):
         backend = BackendConcurrenteControlado()

@@ -156,6 +156,12 @@
                                         <span class="edu-badge {% if documento.estado_validacion == 'APPROVED' %}edu-badge-success{% elif documento.estado_validacion == 'REJECTED' %}edu-badge-warning{% endif %}">
                                             {{ documento.get_estado_validacion_display }}
                                         </span>
+                                        {% if documento.estado_validacion == "REJECTED" %}
+                                            <span class="edu-document-meta">Motivo: {{ documento.get_motivo_rechazo_display }}</span>
+                                            {% if not documento.revisado_por_id and documento.observacion_revision %}
+                                                <span class="edu-document-meta">{{ documento.observacion_revision }}</span>
+                                            {% endif %}
+                                        {% endif %}
                                     </div>
                                     <div class="edu-inline-actions">
                                         {% if documento.content_type == "application/pdf" or documento.content_type == "image/jpeg" or documento.content_type == "image/png" %}

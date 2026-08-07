@@ -8,6 +8,8 @@ from django.urls import reverse
 
 from financiacion_educativa.choices import (
     EstadoSolicitudFinanciacion,
+    EstadoValidacionDocumento,
+    MotivoRechazoDocumento,
     RelacionEstudiante,
     RolParticipante,
     TipoDocumentoFinanciacion,
@@ -236,6 +238,39 @@ class FlujoWebDocumentalFase4Tests(TestCase):
             resumen,
             'Informaci&oacute;n recibida de la instituci&oacute;n',
         )
+
+    def test_resumen_muestra_motivo_controlado_de_rechazo_automatico(self):
+        participante = self._crear_estudiante()
+        self.client.force_login(self.usuario)
+        self.client.post(
+            self._url('documento-cargar'),
+            {
+                'tipo': TipoDocumentoFinanciacion.INCOME_CERTIFICATE,
+                'participante': str(participante.pk),
+                'archivo': SimpleUploadedFile(
+                    'ingresos.pdf',
+                    b'%PDF-1.7\nweb-rechazo\n%%EOF',
+                    content_type='application/pdf',
+                ),
+            },
+        )
+        documento = DocumentoFinanciacion.objects.get()
+        documento.estado_validacion = EstadoValidacionDocumento.REJECTED
+        documento.motivo_rechazo = MotivoRechazoDocumento.UNREADABLE
+        documento.observacion_revision = (
+            'La imagen es demasiado pequena. Usa una captura de mayor resolucion.'
+        )
+        documento.save(update_fields=[
+            'estado_validacion',
+            'motivo_rechazo',
+            'observacion_revision',
+            'actualizado_en',
+        ])
+
+        resumen = self.client.get(self._url('documentacion'))
+
+        self.assertContains(resumen, 'Motivo: Documento ilegible')
+        self.assertContains(resumen, 'Usa una captura de mayor resolucion')
 
     def test_post_documental_exige_csrf(self):
         cliente = Client(enforce_csrf_checks=True)
