@@ -23,6 +23,7 @@ from .choices import (
     EstadoEntregaInvitacion,
     EstadoEntregaCapturaMovil,
     EstadoEntregaCorreoSolicitud,
+    EstadoOutboxCorreoEducativo,
     EstadoEnlaceCapturaMovil,
     EstadoEvidenciaMatricula,
     EstadoValidacionDocumento,
@@ -34,6 +35,9 @@ from .choices import (
     EstadoArtefactoContractualEducativo,
     EstadoProcesoFirmaEducativa,
     EstadoEventoWebhookFirmaEducativa,
+    EstadoProcesoAutomatizacionEducativa,
+    EtapaAutomatizacionEducativa,
+    CodigoRazonAutomatizacionEducativa,
     MetodoCalculoFinanciero,
     MotivoRechazoDocumento,
     OrigenEntregaInvitacion,
@@ -49,6 +53,8 @@ from .choices import (
     TipoEventoInvitacion,
     TipoEventoEnlaceCapturaMovil,
     TipoEventoSeguridadFinanciacion,
+    TipoEventoCorreoEducativo,
+    CodigoMensajeCorreoEducativo,
     TipoDecisionRevisionEducativa,
     MotivoDecisionRevisionEducativa,
     RequisitoCorreccionEducativa,
@@ -1446,7 +1452,7 @@ class ValidacionIADocumento(models.Model):
     )
     proveedor = models.CharField(max_length=60, blank=True)
     modelo = models.CharField(max_length=80, blank=True)
-    version_esquema = models.CharField(max_length=30, default='2')
+    version_esquema = models.CharField(max_length=30, default='3')
     calidad = models.DecimalField(
         max_digits=5,
         decimal_places=4,
@@ -1469,7 +1475,14 @@ class ValidacionIADocumento(models.Model):
         validators=[MinValueValidator(0), MaxValueValidator(1)],
     )
     corresponde_tipo = models.BooleanField(null=True, blank=True)
-    indicios_imagen_real = models.BooleanField(null=True, blank=True)
+    indicios_imagen_real = models.BooleanField(
+        'captura aparente de documento fisico',
+        null=True,
+        blank=True,
+        help_text=(
+            'Campo compatible con esquema v2; no certifica autenticidad ni liveness.'
+        ),
+    )
     datos_consistentes = models.BooleanField(null=True, blank=True)
     hallazgos = models.JSONField(default=list, blank=True)
     resultado_estructurado = models.JSONField(default=dict, blank=True)
@@ -2199,6 +2212,161 @@ class EventoWebhookFirmaEducativa(models.Model):
         return f'{self.tipo_evento} - {self.get_estado_display()}'
 
 
+class ProcesoAutomatizacionEducativa(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    solicitud = models.ForeignKey(
+        SolicitudFinanciacionEducativa,
+        on_delete=models.PROTECT,
+        related_name='procesos_automatizacion',
+    )
+    version_expediente = models.PositiveIntegerField()
+    version_politica = models.CharField(
+        max_length=40,
+        default='EDU_AUTOMATION_V1',
+        editable=False,
+    )
+    version_esquema_ia = models.CharField(
+        max_length=30,
+        default='3',
+        editable=False,
+    )
+    estado = models.CharField(
+        max_length=30,
+        choices=EstadoProcesoAutomatizacionEducativa.choices,
+        default=EstadoProcesoAutomatizacionEducativa.QUEUED,
+    )
+    etapa_actual = models.CharField(
+        max_length=40,
+        choices=EtapaAutomatizacionEducativa.choices,
+        default=EtapaAutomatizacionEducativa.SECURITY_SCAN,
+    )
+    intento_actual = models.PositiveSmallIntegerField(default=0)
+    maximo_intentos = models.PositiveSmallIntegerField(default=3)
+    proxima_ejecucion_en = models.DateTimeField(default=timezone.now)
+    codigo_razon = models.CharField(
+        max_length=60,
+        choices=CodigoRazonAutomatizacionEducativa.choices,
+        blank=True,
+    )
+    requisitos_correccion = models.JSONField(default=list, blank=True)
+    lease_id = models.UUIDField(null=True, blank=True, editable=False)
+    lease_vence_en = models.DateTimeField(null=True, blank=True, editable=False)
+    iniciada_en = models.DateTimeField(null=True, blank=True, editable=False)
+    finalizada_en = models.DateTimeField(null=True, blank=True, editable=False)
+    creada_en = models.DateTimeField(auto_now_add=True)
+    actualizada_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-creada_en']
+        verbose_name = 'Proceso de automatizacion educativa'
+        verbose_name_plural = 'Procesos de automatizacion educativa'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['solicitud', 'version_expediente'],
+                name='uniq_auto_edu_sol_version',
+            ),
+            models.UniqueConstraint(
+                fields=['solicitud'],
+                condition=models.Q(
+                    estado__in=[
+                        EstadoProcesoAutomatizacionEducativa.QUEUED,
+                        EstadoProcesoAutomatizacionEducativa.RUNNING,
+                        EstadoProcesoAutomatizacionEducativa.RETRYING,
+                        EstadoProcesoAutomatizacionEducativa.PENDING_SIGNATURE,
+                    ]
+                ),
+                name='uniq_auto_edu_sol_activo',
+            ),
+            models.CheckConstraint(
+                condition=models.Q(maximo_intentos__gt=0),
+                name='auto_edu_max_intentos_pos',
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(
+                        estado=EstadoProcesoAutomatizacionEducativa.RUNNING,
+                        lease_id__isnull=False,
+                        lease_vence_en__isnull=False,
+                    )
+                    | (
+                        ~models.Q(
+                            estado=EstadoProcesoAutomatizacionEducativa.RUNNING
+                        )
+                        & models.Q(
+                            lease_id__isnull=True,
+                            lease_vence_en__isnull=True,
+                        )
+                    )
+                ),
+                name='auto_edu_lease_consistente',
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=['estado', 'proxima_ejecucion_en'],
+                name='auto_edu_estado_proxima',
+            ),
+            models.Index(
+                fields=['estado', 'lease_vence_en'],
+                name='auto_edu_estado_lease',
+            ),
+        ]
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError(
+            'Los procesos de automatizacion deben conservarse para auditoria.'
+        )
+
+    def __str__(self):
+        return f'{self.solicitud_id} v{self.version_expediente} - {self.estado}'
+
+
+class EtapaProcesoAutomatizacionEducativa(ModeloInmutableMixin, models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    proceso = models.ForeignKey(
+        ProcesoAutomatizacionEducativa,
+        on_delete=models.PROTECT,
+        related_name='etapas',
+    )
+    etapa = models.CharField(
+        max_length=40,
+        choices=EtapaAutomatizacionEducativa.choices,
+    )
+    estado = models.CharField(
+        max_length=30,
+        choices=EstadoProcesoAutomatizacionEducativa.choices,
+    )
+    intento = models.PositiveSmallIntegerField()
+    codigo_razon = models.CharField(
+        max_length=60,
+        choices=CodigoRazonAutomatizacionEducativa.choices,
+        blank=True,
+    )
+    metadata_publica = models.JSONField(default=dict, blank=True)
+    iniciada_en = models.DateTimeField()
+    finalizada_en = models.DateTimeField(default=timezone.now, editable=False)
+
+    class Meta:
+        ordering = ['proceso', 'iniciada_en', 'id']
+        verbose_name = 'Etapa de automatizacion educativa'
+        verbose_name_plural = 'Etapas de automatizacion educativa'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['proceso', 'etapa', 'intento'],
+                name='uniq_auto_edu_etapa_intento',
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=['proceso', 'etapa'],
+                name='auto_edu_proc_etapa',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.proceso_id} - {self.etapa} #{self.intento}'
+
+
 class HistorialEstadoSolicitud(ModeloInmutableMixin, models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     solicitud = models.ForeignKey(
@@ -2439,3 +2607,123 @@ class EntregaCorreoEstadoSolicitud(models.Model):
 
     def __str__(self):
         return f'{self.solicitud_id} - {self.get_estado_display()}'
+
+
+class OutboxCorreoEducativo(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    solicitud = models.ForeignKey(
+        SolicitudFinanciacionEducativa,
+        on_delete=models.PROTECT,
+        related_name='correos_outbox',
+    )
+    tipo_evento = models.CharField(
+        max_length=40,
+        choices=TipoEventoCorreoEducativo.choices,
+    )
+    clave_idempotencia = models.CharField(max_length=180, unique=True)
+    evento_logico = models.CharField(
+        max_length=64,
+        validators=[hash_sha256_validator],
+        editable=False,
+    )
+    destinatarios = models.JSONField(default=list)
+    destinatarios_copia = models.JSONField(default=list, blank=True)
+    codigo_mensaje = models.CharField(
+        max_length=40,
+        choices=CodigoMensajeCorreoEducativo.choices,
+    )
+    contexto = models.JSONField(default=dict, blank=True)
+    estado = models.CharField(
+        max_length=20,
+        choices=EstadoOutboxCorreoEducativo.choices,
+        default=EstadoOutboxCorreoEducativo.PENDING,
+    )
+    intentos = models.PositiveSmallIntegerField(default=0)
+    maximo_intentos = models.PositiveSmallIntegerField(default=3)
+    proxima_ejecucion_en = models.DateTimeField(default=timezone.now)
+    lease_id = models.UUIDField(null=True, blank=True, editable=False)
+    lease_vence_en = models.DateTimeField(null=True, blank=True, editable=False)
+    message_id = models.CharField(max_length=255, unique=True, editable=False)
+    ultimo_intento_en = models.DateTimeField(null=True, blank=True, editable=False)
+    enviada_en = models.DateTimeField(null=True, blank=True, editable=False)
+    codigo_ultimo_error = models.CharField(max_length=60, blank=True)
+    entrega_invitacion = models.OneToOneField(
+        EntregaInvitacionContinuacion,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='correo_outbox',
+    )
+    enlace_captura = models.OneToOneField(
+        EnlaceCapturaMovil,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='correo_outbox',
+    )
+    decision = models.OneToOneField(
+        DecisionRevisionEducativa,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='correo_outbox',
+    )
+    creada_en = models.DateTimeField(auto_now_add=True)
+    actualizada_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['proxima_ejecucion_en', 'creada_en']
+        verbose_name = 'Correo educativo en outbox'
+        verbose_name_plural = 'Correos educativos en outbox'
+        indexes = [
+            models.Index(
+                fields=['estado', 'proxima_ejecucion_en'],
+                name='out_email_estado_prox',
+            ),
+            models.Index(
+                fields=['estado', 'lease_vence_en'],
+                name='out_email_estado_lease',
+            ),
+            models.Index(
+                fields=['solicitud', 'tipo_evento'],
+                name='out_email_sol_evento',
+            ),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['evento_logico'],
+                condition=models.Q(estado=EstadoOutboxCorreoEducativo.SENT),
+                name='uniq_out_email_evento_sent',
+            ),
+            models.CheckConstraint(
+                condition=models.Q(intentos__gte=0),
+                name='out_email_intentos_nn',
+            ),
+            models.CheckConstraint(
+                condition=models.Q(maximo_intentos__gt=0),
+                name='out_email_max_int_pos',
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(
+                        estado=EstadoOutboxCorreoEducativo.SENDING,
+                        lease_id__isnull=False,
+                        lease_vence_en__isnull=False,
+                    )
+                    | models.Q(
+                        ~models.Q(estado=EstadoOutboxCorreoEducativo.SENDING),
+                        lease_id__isnull=True,
+                        lease_vence_en__isnull=True,
+                    )
+                ),
+                name='out_email_lease_consist',
+            ),
+        ]
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError(
+            'El outbox de correo debe conservarse para auditoria.'
+        )
+
+    def __str__(self):
+        return f'{self.tipo_evento} - {self.estado}'

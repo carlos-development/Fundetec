@@ -13,8 +13,8 @@
                     <h1>{% if requiere_reverso %}Captura frente y reverso{% else %}Captura la identificaci&oacute;n{% endif %}</h1>
                     <p>
                         Usa la c&aacute;mara para fotografiar el documento de
-                        {{ participante.nombre_completo }}. Esta captura no realiza OCR
-                        ni valida autom&aacute;ticamente la identidad.
+                        {{ participante.nombre_completo }}. Los controles de encuadre y
+                        calidad no certifican autenticidad ni presencia de la persona.
                     </p>
                 </div>
 
@@ -54,6 +54,8 @@
                     data-upload-url="{% url 'financiacion_educativa_web:capturar-identidad' solicitud.id persona %}"
                     data-requires-back="{% if requiere_reverso %}true{% else %}false{% endif %}"
                     data-initial-side="{% if not documento_frente %}frente{% elif requiere_reverso and not documento_reverso %}reverso{% else %}frente{% endif %}"
+                    data-min-width="{{ captura_min_ancho }}"
+                    data-min-height="{{ captura_min_alto }}"
                 >
                     <form data-camera-csrf hidden>{% csrf_token %}</form>
                     <div class="edu-camera-instruction" role="status" aria-live="polite">
@@ -70,6 +72,16 @@
                         <div class="edu-camera-frame" aria-hidden="true"></div>
                     </div>
                     <canvas data-camera-canvas hidden></canvas>
+                    <label class="edu-camera-fallback">
+                        <span>Usar la c&aacute;mara o un archivo del dispositivo</span>
+                        <input
+                            type="file"
+                            accept="image/*"
+                            capture="environment"
+                            data-camera-file
+                        >
+                    </label>
+                    <div class="edu-camera-quality" data-camera-quality role="status" aria-live="polite" hidden></div>
                     <div class="edu-camera-message" data-camera-message role="alert" hidden></div>
                     <div class="edu-camera-actions">
                         <button class="edu-button" type="button" data-camera-start>

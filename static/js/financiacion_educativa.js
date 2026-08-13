@@ -157,6 +157,8 @@ document.addEventListener('DOMContentLoaded', function () {
         const shootButton = cameraRoot.querySelector('[data-camera-shoot]');
         const repeatButton = cameraRoot.querySelector('[data-camera-repeat]');
         const confirmButton = cameraRoot.querySelector('[data-camera-confirm]');
+        const fileInput = cameraRoot.querySelector('[data-camera-file]');
+        const quality = cameraRoot.querySelector('[data-camera-quality]');
         const title = cameraRoot.querySelector('[data-camera-side-title]');
         const help = cameraRoot.querySelector('[data-camera-side-help]');
         const csrf = cameraRoot.querySelector(
@@ -167,15 +169,18 @@ document.addEventListener('DOMContentLoaded', function () {
         let previewUrl = '';
         let side = cameraRoot.dataset.initialSide || 'frente';
         const requiresBack = cameraRoot.dataset.requiresBack === 'true';
+        const minWidth = Number(cameraRoot.dataset.minWidth || 800);
+        const minHeight = Number(cameraRoot.dataset.minHeight || 500);
         let replacementSide = '';
+        let qualityPassed = false;
 
         const setSide = function (newSide) {
             side = newSide;
             const front = side === 'frente';
             title.textContent = front ? 'Parte frontal' : 'Parte posterior';
             help.textContent = front
-                ? 'Ubica el frente completo dentro del encuadre, con buena luz y sin reflejos.'
-                : 'Gira el documento y ubica el reverso completo dentro del encuadre.';
+                ? 'Pon el documento horizontal. Ubica el frente y sus cuatro bordes dentro del marco, sin reflejos.'
+                : 'Gira el documento. Manten el reverso horizontal y sus cuatro bordes dentro del marco.';
         };
 
         const stopCamera = function () {
@@ -191,10 +196,15 @@ document.addEventListener('DOMContentLoaded', function () {
 
         const clearPreview = function () {
             captureBlob = null;
+            qualityPassed = false;
             if (previewUrl) URL.revokeObjectURL(previewUrl);
             previewUrl = '';
             preview.removeAttribute('src');
             preview.hidden = true;
+            quality.hidden = true;
+            quality.classList.remove('is-valid');
+            quality.textContent = '';
+            if (fileInput) fileInput.value = '';
         };
 
         const showMessage = function (text) {
@@ -216,7 +226,7 @@ document.addEventListener('DOMContentLoaded', function () {
             }
             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
                 showMessage(
-                    'Este dispositivo o navegador no ofrece una camara compatible.'
+                    'La camara en vivo no esta disponible. Usa el selector del dispositivo.'
                 );
                 return;
             }
@@ -263,12 +273,88 @@ document.addEventListener('DOMContentLoaded', function () {
                     showMessage('No se encontro una camara disponible.');
                 } else {
                     showMessage(
-                        'No fue posible iniciar la camara. Revisa permisos y disponibilidad.'
+                        'No fue posible iniciar la camara. Usa el selector del dispositivo.'
                     );
                 }
                 stopCamera();
                 placeholder.hidden = false;
             }
+        };
+
+        const evaluarCalidad = function (context, width, height) {
+            if (width < minWidth || height < minHeight) {
+                return {
+                    valid: false,
+                    message: 'La imagen es demasiado pequena. Usa al menos '
+                        + minWidth + ' x ' + minHeight + ' pixeles.'
+                };
+            }
+            const sampleWidth = Math.min(320, width);
+            const sampleHeight = Math.max(1, Math.round(height * sampleWidth / width));
+            const sample = document.createElement('canvas');
+            sample.width = sampleWidth;
+            sample.height = sampleHeight;
+            const sampleContext = sample.getContext('2d', { willReadFrequently: true });
+            sampleContext.drawImage(context.canvas, 0, 0, sampleWidth, sampleHeight);
+            const pixels = sampleContext.getImageData(
+                0, 0, sampleWidth, sampleHeight
+            ).data;
+            const gray = new Float32Array(sampleWidth * sampleHeight);
+            let luminance = 0;
+            for (let index = 0; index < gray.length; index += 1) {
+                const offset = index * 4;
+                const value = (
+                    pixels[offset] * 0.299
+                    + pixels[offset + 1] * 0.587
+                    + pixels[offset + 2] * 0.114
+                );
+                gray[index] = value;
+                luminance += value;
+            }
+            luminance /= gray.length;
+            if (luminance < 45) {
+                return { valid: false, message: 'La imagen esta muy oscura. Busca una luz uniforme y repite.' };
+            }
+            let sum = 0;
+            let squared = 0;
+            let count = 0;
+            for (let y = 1; y < sampleHeight - 1; y += 1) {
+                for (let x = 1; x < sampleWidth - 1; x += 1) {
+                    const index = y * sampleWidth + x;
+                    const laplacian = (
+                        gray[index - 1] + gray[index + 1]
+                        + gray[index - sampleWidth] + gray[index + sampleWidth]
+                        - 4 * gray[index]
+                    );
+                    sum += laplacian;
+                    squared += laplacian * laplacian;
+                    count += 1;
+                }
+            }
+            const variance = count ? (squared / count) - ((sum / count) ** 2) : 0;
+            if (variance < 35) {
+                return { valid: false, message: 'La imagen parece desenfocada. Limpia la lente, estabiliza el telefono y repite.' };
+            }
+            return {
+                valid: true,
+                message: 'Calidad basica superada. Confirma visualmente que se vean los cuatro bordes y el texto.'
+            };
+        };
+
+        const prepararVistaPrevia = function (blob, context, width, height) {
+            const result = evaluarCalidad(context, width, height);
+            captureBlob = blob;
+            qualityPassed = result.valid;
+            previewUrl = URL.createObjectURL(blob);
+            preview.src = previewUrl;
+            preview.hidden = false;
+            video.hidden = true;
+            shootButton.hidden = true;
+            repeatButton.hidden = false;
+            confirmButton.hidden = !qualityPassed;
+            quality.textContent = result.message;
+            quality.hidden = false;
+            quality.classList.toggle('is-valid', qualityPassed);
         };
 
         startButton.addEventListener('click', startCamera);
@@ -292,28 +378,55 @@ document.addEventListener('DOMContentLoaded', function () {
                     showMessage('No fue posible generar la captura.');
                     return;
                 }
-                captureBlob = blob;
-                previewUrl = URL.createObjectURL(blob);
-                preview.src = previewUrl;
-                preview.hidden = false;
-                video.hidden = true;
-                shootButton.hidden = true;
-                repeatButton.hidden = false;
-                confirmButton.hidden = false;
-            }, 'image/jpeg', 0.9);
+                prepararVistaPrevia(blob, canvas.getContext('2d'), canvas.width, canvas.height);
+            }, 'image/jpeg', 0.92);
+        });
+
+        fileInput.addEventListener('change', function () {
+            const file = fileInput.files && fileInput.files[0];
+            if (!file || !file.type.startsWith('image/')) {
+                showMessage('Selecciona una imagen valida del documento.');
+                return;
+            }
+            const image = new Image();
+            const sourceUrl = URL.createObjectURL(file);
+            image.onload = function () {
+                stopCamera();
+                clearPreview();
+                canvas.width = image.naturalWidth;
+                canvas.height = image.naturalHeight;
+                const context = canvas.getContext('2d');
+                context.drawImage(image, 0, 0);
+                canvas.toBlob(function (blob) {
+                    URL.revokeObjectURL(sourceUrl);
+                    if (!blob) {
+                        showMessage('No fue posible preparar la imagen seleccionada.');
+                        return;
+                    }
+                    prepararVistaPrevia(blob, context, canvas.width, canvas.height);
+                }, 'image/jpeg', 0.92);
+            };
+            image.onerror = function () {
+                URL.revokeObjectURL(sourceUrl);
+                showMessage('El navegador no pudo leer la imagen seleccionada.');
+            };
+            image.src = sourceUrl;
         });
 
         repeatButton.addEventListener('click', function () {
             hideMessage();
+            stopCamera();
             clearPreview();
-            video.hidden = false;
-            shootButton.hidden = false;
+            video.hidden = true;
+            placeholder.hidden = false;
+            shootButton.hidden = true;
+            startButton.hidden = false;
             repeatButton.hidden = true;
             confirmButton.hidden = true;
         });
 
         confirmButton.addEventListener('click', async function () {
-            if (!captureBlob) return;
+            if (!captureBlob || !qualityPassed) return;
             hideMessage();
             confirmButton.disabled = true;
             const savedSide = side;

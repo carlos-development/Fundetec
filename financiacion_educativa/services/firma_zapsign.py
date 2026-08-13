@@ -293,6 +293,10 @@ def _responsable_contractual(solicitud):
     return responsables[0]
 
 
+def validar_responsable_contractual_para_firma(*, solicitud):
+    return _responsable_contractual(solicitud)
+
+
 def _hmac_destinatario(correo):
     clave = str(
         settings.FINANCIACION_EDUCATIVA_SIGNATURE_RECIPIENT_HMAC_KEY
@@ -346,6 +350,25 @@ def _marcar_fallo_envio(proceso_id, codigo):
                     'actualizado_en',
                 ]
             )
+
+
+def marcar_envio_inconcluso_para_conciliacion(*, proceso):
+    with transaction.atomic():
+        proceso = ProcesoFirmaEducativa.objects.select_for_update().get(
+            pk=proceso.pk
+        )
+        if proceso.estado != EstadoProcesoFirmaEducativa.SENDING:
+            return proceso
+        proceso.estado = EstadoProcesoFirmaEducativa.FAILED
+        proceso.codigo_ultimo_error = FirmaEducativaEnvioAmbiguo.codigo
+        proceso.save(
+            update_fields=[
+                'estado',
+                'codigo_ultimo_error',
+                'actualizado_en',
+            ]
+        )
+        return proceso
 
 
 def enviar_pagare_educativo(
@@ -596,6 +619,11 @@ def _finalizar_firma(*, evento, proceso, pdf_firmado):
                     'course_authorized': True,
                 },
             )
+            from financiacion_educativa.services.cola_automatizacion import (
+                completar_proceso_por_firma,
+            )
+
+            completar_proceso_por_firma(solicitud_id=solicitud.pk)
             _marcar_evento(
                 evento,
                 estado=EstadoEventoWebhookFirmaEducativa.PROCESSED,
@@ -861,13 +889,16 @@ def procesar_webhook_firma(*, payload, raw_body):
     if tipo_evento == 'doc_refused':
         _registrar_rechazo(evento=evento, proceso=proceso)
         if settings.FINANCIACION_EDUCATIVA_AUTOMATION_ENABLED:
-            from financiacion_educativa.services.orquestacion_automatica import (
-                ejecutar_orquestacion_automatica_segura,
+            from financiacion_educativa.services.cola_automatizacion import (
+                cerrar_proceso_de_firma_interrumpido,
+                encolar_proceso_automatizacion,
             )
 
-            ejecutar_orquestacion_automatica_segura(
-                solicitud_id=proceso.solicitud_id
+            cerrar_proceso_de_firma_interrumpido(
+                solicitud_id=proceso.solicitud_id,
+                codigo='SIGNATURE_REFUSED',
             )
+            encolar_proceso_automatizacion(solicitud_id=proceso.solicitud_id)
         return ResultadoWebhookFirma(estado='processed', codigo='REFUSAL_RECORDED')
 
     if tipo_evento in {'doc_deleted', 'doc_cancelled'}:
@@ -877,6 +908,17 @@ def procesar_webhook_firma(*, payload, raw_body):
             estado_proceso=EstadoProcesoFirmaEducativa.CANCELLED,
             codigo='SIGNATURE_CANCELLED',
         )
+        if settings.FINANCIACION_EDUCATIVA_AUTOMATION_ENABLED:
+            from financiacion_educativa.services.cola_automatizacion import (
+                cerrar_proceso_de_firma_interrumpido,
+                encolar_proceso_automatizacion,
+            )
+
+            cerrar_proceso_de_firma_interrumpido(
+                solicitud_id=proceso.solicitud_id,
+                codigo='SIGNATURE_CANCELLED',
+            )
+            encolar_proceso_automatizacion(solicitud_id=proceso.solicitud_id)
         return ResultadoWebhookFirma(estado='processed', codigo='SIGNATURE_CANCELLED')
 
     if tipo_evento == 'doc_expired':
@@ -886,6 +928,17 @@ def procesar_webhook_firma(*, payload, raw_body):
             estado_proceso=EstadoProcesoFirmaEducativa.EXPIRED,
             codigo='SIGNATURE_EXPIRED',
         )
+        if settings.FINANCIACION_EDUCATIVA_AUTOMATION_ENABLED:
+            from financiacion_educativa.services.cola_automatizacion import (
+                cerrar_proceso_de_firma_interrumpido,
+                encolar_proceso_automatizacion,
+            )
+
+            cerrar_proceso_de_firma_interrumpido(
+                solicitud_id=proceso.solicitud_id,
+                codigo='SIGNATURE_EXPIRED',
+            )
+            encolar_proceso_automatizacion(solicitud_id=proceso.solicitud_id)
         return ResultadoWebhookFirma(estado='processed', codigo='SIGNATURE_EXPIRED')
 
     if tipo_evento == 'signer_authentication_failed':

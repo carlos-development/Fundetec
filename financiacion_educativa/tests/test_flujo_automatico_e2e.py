@@ -12,6 +12,7 @@ from rest_framework.test import APITestCase
 from financiacion_educativa.choices import (
     EstadoArtefactoContractualEducativo,
     EstadoEscaneoDocumento,
+    EstadoProcesoAutomatizacionEducativa,
     EstadoProcesoFirmaEducativa,
     EstadoSolicitudFinanciacion,
     EstadoValidacionDocumento,
@@ -25,11 +26,16 @@ from financiacion_educativa.models import (
     ArtefactoContractualEducativo,
     CondicionesFinancieras,
     EventoWebhookFirmaEducativa,
+    OutboxCorreoEducativo,
     ProcesoFirmaEducativa,
     SolicitudFinanciacionEducativa,
     VersionTerminosFinanciacion,
 )
 from financiacion_educativa.services.documentos import registrar_documento
+from financiacion_educativa.services.cola_automatizacion import (
+    procesar_siguiente_trabajo,
+)
+from financiacion_educativa.services.outbox_correos import procesar_siguiente_correo
 from financiacion_educativa.services.terminos import publicar_version_terminos
 from financiacion_educativa.tests.delivery_backends import (
     RecordingInvitationDeliveryBackend,
@@ -79,6 +85,8 @@ PAYLOAD = {
 
 
 @override_settings(
+    DEBUG=True,
+    EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
     BRAND_PUBLIC_BASE_URL='https://credito.example.com',
     FINANCIACION_EDUCATIVA_INVITATION_DELIVERY_BACKEND=INVITATION_BACKEND,
     FINANCIACION_EDUCATIVA_AUTOMATION_ENABLED=True,
@@ -160,10 +168,13 @@ class FlujoAutomaticoE2ETests(APITestCase):
                 actor=solicitud.usuario,
             )
         documento.refresh_from_db()
-        self.assertEqual(documento.estado_escaneo, EstadoEscaneoDocumento.SAFE)
+        self.assertEqual(
+            documento.estado_escaneo,
+            EstadoEscaneoDocumento.PENDING_SECURITY_SCAN,
+        )
         self.assertEqual(
             documento.estado_validacion,
-            EstadoValidacionDocumento.APPROVED,
+            EstadoValidacionDocumento.PENDING,
         )
         return documento
 
@@ -176,6 +187,8 @@ class FlujoAutomaticoE2ETests(APITestCase):
                 **self._api_headers(),
             )
         self.assertEqual(creacion.status_code, status.HTTP_202_ACCEPTED)
+        resultado_correo = procesar_siguiente_correo()
+        self.assertTrue(resultado_correo.procesado)
         self.assertEqual(len(RecordingInvitationDeliveryBackend.deliveries), 1)
 
         enlace = RecordingInvitationDeliveryBackend.deliveries[0]['continuation_url']
@@ -233,8 +246,21 @@ class FlujoAutomaticoE2ETests(APITestCase):
                     'financiacion_educativa_web:documentacion-completar',
                     kwargs={'solicitud_id': solicitud.pk},
                 )
-            )
+        )
         self.assertEqual(completar.status_code, status.HTTP_302_FOUND)
+        resultado_correo = procesar_siguiente_correo()
+        self.assertTrue(resultado_correo.procesado)
+
+        for _ in range(10):
+            resultado_worker = procesar_siguiente_trabajo()
+            self.assertTrue(resultado_worker.procesado)
+            if (
+                resultado_worker.estado
+                == EstadoProcesoAutomatizacionEducativa.PENDING_SIGNATURE
+            ):
+                break
+        else:
+            self.fail('El worker no alcanzo PENDING_SIGNATURE.')
 
         solicitud.refresh_from_db()
         proceso = ProcesoFirmaEducativa.objects.get(solicitud=solicitud)
@@ -244,6 +270,15 @@ class FlujoAutomaticoE2ETests(APITestCase):
         )
         self.assertEqual(proceso.estado, EstadoProcesoFirmaEducativa.SENT)
         self.assertEqual(len(RecordingEducationalSignatureBackend.submissions), 1)
+        resultado_correo = procesar_siguiente_correo()
+        self.assertTrue(resultado_correo.procesado)
+        self.assertEqual(
+            OutboxCorreoEducativo.objects.filter(
+                solicitud=solicitud,
+                estado='SENT',
+            ).count(),
+            3,
+        )
         fotografia = CondicionesFinancieras.objects.get(
             solicitud=solicitud,
             activa=True,

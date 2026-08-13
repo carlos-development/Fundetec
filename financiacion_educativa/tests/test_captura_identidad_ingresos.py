@@ -150,7 +150,7 @@ class CapturaIdentidadEIngresosTests(TestCase):
         sesion.save()
         return enlace
 
-    def test_pagina_movil_usa_camara_en_vivo_sin_input_de_archivo(self):
+    def test_pagina_movil_guia_camara_y_ofrece_fallback_controlado(self):
         self._autorizar_captura_movil()
 
         respuesta = self.client.get(self.url_camara)
@@ -158,7 +158,11 @@ class CapturaIdentidadEIngresosTests(TestCase):
         self.assertEqual(respuesta.status_code, 200)
         self.assertContains(respuesta, 'data-camera-capture')
         self.assertContains(respuesta, 'data-camera-video')
-        self.assertNotContains(respuesta, 'type="file"')
+        self.assertContains(respuesta, 'type="file"')
+        self.assertContains(respuesta, 'accept="image/*"')
+        self.assertContains(respuesta, 'capture="environment"')
+        self.assertContains(respuesta, 'data-min-width="800"')
+        self.assertContains(respuesta, 'data-min-height="500"')
         javascript = (
             Path(settings.BASE_DIR)
             / 'static'
@@ -166,9 +170,17 @@ class CapturaIdentidadEIngresosTests(TestCase):
             / 'financiacion_educativa.js'
         ).read_text(encoding='utf-8')
         self.assertIn('navigator.mediaDevices.getUserMedia', javascript)
+        self.assertIn("facingMode: { ideal: 'environment' }", javascript)
         self.assertIn('NotAllowedError', javascript)
         self.assertIn('NotFoundError', javascript)
         self.assertIn('track.stop()', javascript)
+        self.assertIn('const evaluarCalidad', javascript)
+        self.assertIn('const variance', javascript)
+        repeat_handler = javascript.split(
+            "repeatButton.addEventListener('click'", 1
+        )[1].split('});', 1)[0]
+        self.assertIn('stopCamera();', repeat_handler)
+        self.assertIn("window.addEventListener('pagehide', stopCamera)", javascript)
 
     def test_captura_frente_y_reverso_como_evidencias_distintas(self):
         self._autorizar_captura_movil()

@@ -21,8 +21,8 @@ from financiacion_educativa.models import (
 )
 from financiacion_educativa.services.entrega_invitaciones import (
     calcular_hmac_destinatario,
-    ejecutar_callback_entrega,
 )
+from financiacion_educativa.services.outbox_correos import crear_correo_invitacion
 from financiacion_educativa.services.idempotencia import (
     crear_solicitud_idempotente,
 )
@@ -44,19 +44,6 @@ def _entero_configuracion(nombre, predeterminado, *, minimo=0):
     if valor < minimo:
         raise ImproperlyConfigured(f'{nombre} debe ser mayor o igual a {minimo}.')
     return valor
-
-
-def _programar_callback(*, entrega, url):
-    def entregar_invitacion_educativa():
-        ejecutar_callback_entrega(
-            entrega_id=entrega.pk,
-            continuation_url=url,
-        )
-
-    transaction.on_commit(
-        entregar_invitacion_educativa,
-        robust=True,
-    )
 
 
 def _siguiente_secuencia(solicitud):
@@ -94,10 +81,7 @@ def _crear_entrega(
         actor=actor,
         metadata={'delivery_id': str(entrega.pk), 'channel': entrega.canal},
     )
-    _programar_callback(
-        entrega=entrega,
-        url=emitida.url,
-    )
+    crear_correo_invitacion(entrega=entrega)
     return entrega
 
 

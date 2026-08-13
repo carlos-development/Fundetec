@@ -26,7 +26,11 @@ from financiacion_educativa.models import (
     ArtefactoContractualEducativo,
     DecisionRevisionEducativa,
     EventoWebhookFirmaEducativa,
+    ProcesoAutomatizacionEducativa,
     ProcesoFirmaEducativa,
+)
+from financiacion_educativa.services.cola_automatizacion import (
+    encolar_proceso_automatizacion,
 )
 from financiacion_educativa.services.artefactos_contractuales import (
     generar_artefactos_contractuales,
@@ -199,9 +203,13 @@ class FirmaEducativaTests(TestCase):
         self.assertFalse(hasattr(primero, 'sign_url'))
         self.assertNotIn('firmante@example.com', str(primero.__dict__))
 
+    @override_settings(FINANCIACION_EDUCATIVA_AUTOMATION_ENABLED=True)
     def test_webhook_firmado_autoriza_curso_y_es_idempotente(self):
         self._enviar()
         self.proceso.refresh_from_db()
+        proceso_automatico, creado = encolar_proceso_automatizacion(
+            solicitud_id=self.solicitud.pk
+        )
         payload = self._payload()
 
         primera = self._post_webhook(payload)
@@ -212,6 +220,7 @@ class FirmaEducativaTests(TestCase):
         self.artefactos.pagare.refresh_from_db()
         resultado = obtener_resultado_publico(self.solicitud)
         self.assertEqual(primera.status_code, 200)
+        self.assertTrue(creado)
         self.assertEqual(segunda.status_code, 200)
         self.assertEqual(segunda.json()['status'], 'replayed')
         self.assertEqual(EventoWebhookFirmaEducativa.objects.count(), 1)
@@ -235,6 +244,9 @@ class FirmaEducativaTests(TestCase):
         self.assertTrue(resultado.curso_autorizado)
         self.assertEqual(resultado.estado, 'APPROVED')
         self.assertEqual(resultado.condiciones_financieras['currency'], 'COP')
+        proceso_automatico.refresh_from_db()
+        self.assertEqual(proceso_automatico.estado, 'COMPLETED')
+        self.assertEqual(ProcesoAutomatizacionEducativa.objects.count(), 1)
 
     def test_webhook_equivalente_con_serializacion_distinta_es_replay(self):
         self._enviar()

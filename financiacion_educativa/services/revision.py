@@ -22,10 +22,11 @@ from financiacion_educativa.services.artefactos_contractuales import (
 from financiacion_educativa.services.entrega_invitaciones import (
     calcular_hmac_destinatario,
 )
-from financiacion_educativa.services.entrega_correos_estado import (
-    ejecutar_entrega_correo_estado,
-)
+from financiacion_educativa.services.outbox_correos import crear_correo_decision
 from financiacion_educativa.services.estados import transicionar_solicitud
+from financiacion_educativa.services.firma_zapsign import (
+    validar_responsable_contractual_para_firma,
+)
 from financiacion_educativa.services.participantes import (
     solicitud_requiere_tutor,
 )
@@ -62,15 +63,16 @@ def _programar_correo(*, solicitud, decision):
         decision=decision,
         destinatario_hmac=calcular_hmac_destinatario(destinatario),
     )
-    transaction.on_commit(
-        lambda: ejecutar_entrega_correo_estado(entrega_id=entrega.pk),
-        robust=True,
+    crear_correo_decision(
+        solicitud=solicitud,
+        decision=decision,
+        entrega_legacy=entrega,
     )
     return entrega
 
 
 @transaction.atomic
-def decidir_solicitud(
+def _persistir_decision(
     *,
     solicitud,
     actor,
@@ -196,15 +198,43 @@ def decidir_solicitud(
         },
     )
     if tipo == TipoDecisionRevisionEducativa.APPROVED:
-        generar_artefactos_contractuales(
-            solicitud=solicitud,
-            actor=actor,
-        )
         solicitud.participantes.update(
             identidad_verificada=True,
             relacion_verificada=True,
             actualizado_por=actor,
         )
-        programar_orquestacion_automatica(solicitud_id=solicitud.pk)
     _programar_correo(solicitud=solicitud, decision=decision)
+    return decision
+
+
+def decidir_solicitud(
+    *,
+    solicitud,
+    actor,
+    tipo,
+    motivo,
+    mensaje_solicitante='',
+    observacion_interna='',
+    requisitos_pendientes=(),
+):
+    if tipo == TipoDecisionRevisionEducativa.APPROVED:
+        validar_responsable_contractual_para_firma(solicitud=solicitud)
+    decision = _persistir_decision(
+        solicitud=solicitud,
+        actor=actor,
+        tipo=tipo,
+        motivo=motivo,
+        mensaje_solicitante=mensaje_solicitante,
+        observacion_interna=observacion_interna,
+        requisitos_pendientes=requisitos_pendientes,
+    )
+    solicitud = SolicitudFinanciacionEducativa.objects.get(
+        pk=decision.solicitud_id
+    )
+    if tipo == TipoDecisionRevisionEducativa.APPROVED:
+        generar_artefactos_contractuales(
+            solicitud=solicitud,
+            actor=actor,
+        )
+        programar_orquestacion_automatica(solicitud_id=solicitud.pk)
     return decision

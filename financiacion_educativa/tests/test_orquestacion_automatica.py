@@ -11,8 +11,10 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from financiacion_educativa.choices import (
+    EtapaAutomatizacionEducativa,
     EstadoArtefactoContractualEducativo,
     EstadoEvidenciaMatricula,
+    EstadoOutboxCorreoEducativo,
     EstadoEscaneoDocumento,
     EstadoProcesoFirmaEducativa,
     EstadoSolicitudFinanciacion,
@@ -29,15 +31,20 @@ from financiacion_educativa.models import (
     CondicionesFinancieras,
     EvidenciaMatricula,
     EventoWebhookFirmaEducativa,
+    OutboxCorreoEducativo,
     ProcesoFirmaEducativa,
     ValidacionIADocumento,
 )
 from financiacion_educativa.services.documentos import registrar_documento
+from financiacion_educativa.services.cola_automatizacion import (
+    procesar_siguiente_trabajo,
+)
 from financiacion_educativa.services.estado_publico import obtener_resultado_publico
 from financiacion_educativa.services.matricula import (
     registrar_o_actualizar_evidencia_matricula,
 )
 from financiacion_educativa.services.orquestacion_automatica import (
+    ejecutar_etapa_persistente,
     ejecutar_orquestacion_automatica,
 )
 from financiacion_educativa.services.participantes import (
@@ -285,6 +292,10 @@ class OrquestacionAutomaticaTests(TestCase):
         self.assertEqual(CondicionesFinancieras.objects.filter(activa=True).count(), 1)
         self.assertTrue(CondicionesFinancieras.objects.get().bloqueada)
         self.assertEqual(len(RecordingEducationalSignatureBackend.submissions), 1)
+        self.assertEqual(
+            OutboxCorreoEducativo.objects.filter(solicitud=solicitud).count(),
+            1,
+        )
 
         repeticion = ejecutar_orquestacion_automatica(solicitud_id=solicitud.pk)
         self.assertEqual(repeticion.codigo, 'ALREADY_PENDING_SIGNATURE')
@@ -295,6 +306,10 @@ class OrquestacionAutomaticaTests(TestCase):
             2,
         )
         self.assertEqual(len(RecordingEducationalSignatureBackend.submissions), 1)
+        self.assertEqual(
+            OutboxCorreoEducativo.objects.filter(solicitud=solicitud).count(),
+            1,
+        )
 
         primera = self._firmar(proceso)
         segunda = self._firmar(proceso)
@@ -344,7 +359,7 @@ class OrquestacionAutomaticaTests(TestCase):
         self.assertEqual(evidencia.referencia_matricula, 'MAT-AUTO-001')
         self.assertEqual(solicitud.estado, EstadoSolicitudFinanciacion.PENDING_SIGNATURE)
 
-    def test_soporte_matricula_pdf_seguro_no_obliga_revision_manual(self):
+    def test_soporte_matricula_pdf_no_se_autoacepta_por_metadatos(self):
         solicitud, _ = self._adulto_listo('AUTO-MATRICULA-PDF')
         solicitud.estado = EstadoSolicitudFinanciacion.PENDING_DOCUMENT
         solicitud.save(update_fields=['estado'])
@@ -367,17 +382,24 @@ class OrquestacionAutomaticaTests(TestCase):
         documento = evidencia.documento_soporte
         documento.refresh_from_db()
         decision = documento.resultado_procesamiento['automatic_document_policy']
-        self.assertEqual(resultado.codigo, 'PENDING_SIGNATURE')
-        self.assertEqual(solicitud.estado, EstadoSolicitudFinanciacion.PENDING_SIGNATURE)
+        self.assertEqual(resultado.codigo, 'MANUAL_REVIEW_REQUIRED')
+        self.assertEqual(
+            solicitud.estado,
+            EstadoSolicitudFinanciacion.PENDING_MANUAL_REVIEW,
+        )
         self.assertEqual(documento.estado_escaneo, EstadoEscaneoDocumento.SAFE)
-        self.assertEqual(documento.estado_validacion, EstadoValidacionDocumento.APPROVED)
-        self.assertEqual(evidencia.estado, EstadoEvidenciaMatricula.ACCEPTED)
-        self.assertEqual(decision['decision'], 'AUTO_APPROVED')
+        self.assertEqual(
+            documento.estado_validacion,
+            EstadoValidacionDocumento.PENDING,
+        )
+        self.assertEqual(evidencia.estado, EstadoEvidenciaMatricula.PENDING)
+        self.assertEqual(decision['decision'], 'MANUAL_EXCEPTION')
         self.assertEqual(
             decision['reason'],
-            'OPTIONAL_ENROLLMENT_PDF_WITH_DECLARED_DATA_AND_CLEAN_SCAN',
+            'PDF_CONTENT_PROCESSING_REQUIRED',
         )
         self.assertFalse(documento.validaciones_ia.exists())
+        self.assertFalse(CondicionesFinancieras.objects.exists())
 
     def test_pdf_que_requiere_validacion_de_contenido_pasa_a_revision_manual(self):
         solicitud = self._solicitud_base('AUTO-INGRESOS-PDF')
@@ -466,6 +488,7 @@ class OrquestacionAutomaticaTests(TestCase):
         solicitud, _ = self._adulto_listo('AUTO-NO-IDENTIDAD')
 
         resultado = ejecutar_orquestacion_automatica(solicitud_id=solicitud.pk)
+        repeticion = ejecutar_orquestacion_automatica(solicitud_id=solicitud.pk)
 
         solicitud.refresh_from_db()
         self.assertEqual(resultado.codigo, 'DOCUMENT_CORRECTION_REQUIRED')
@@ -488,6 +511,9 @@ class OrquestacionAutomaticaTests(TestCase):
             ).exists()
         )
         self.assertFalse(CondicionesFinancieras.objects.exists())
+        self.assertEqual(repeticion.codigo, 'STATE_NOT_AUTOMATABLE')
+        outbox = OutboxCorreoEducativo.objects.get(solicitud=solicitud)
+        self.assertEqual(outbox.estado, EstadoOutboxCorreoEducativo.PENDING)
 
     @override_settings(FINANCIACION_EDUCATIVA_DOCUMENT_SCAN_BACKEND=SCAN_INFECTED)
     def test_malware_bloquea_el_documento_y_no_avanza(self):
@@ -573,6 +599,46 @@ class OrquestacionAutomaticaTests(TestCase):
         self.assertEqual(len(RecordingEducationalSignatureBackend.submissions), 1)
         self.assertEqual(solicitud.estado, EstadoSolicitudFinanciacion.PENDING_SIGNATURE)
 
+    def test_recuperacion_despues_del_envio_no_reenvia_a_zapsign(self):
+        solicitud, _ = self._adulto_listo('AUTO-SEND-RECOVERY')
+        ejecutar_orquestacion_automatica(solicitud_id=solicitud.pk)
+        self.assertEqual(len(RecordingEducationalSignatureBackend.submissions), 1)
+
+        salida = ejecutar_etapa_persistente(
+            solicitud_id=solicitud.pk,
+            etapa=EtapaAutomatizacionEducativa.SIGNATURE_SEND,
+        )
+
+        self.assertEqual(salida.estado, 'PENDING_SIGNATURE')
+        self.assertEqual(len(RecordingEducationalSignatureBackend.submissions), 1)
+
+    def test_caida_con_envio_sending_exige_conciliacion_y_no_reenvia(self):
+        solicitud, _ = self._adulto_listo('AUTO-SEND-CRASH')
+        ejecutar_orquestacion_automatica(solicitud_id=solicitud.pk)
+        proceso = ProcesoFirmaEducativa.objects.get(solicitud=solicitud)
+        proceso.estado = EstadoProcesoFirmaEducativa.SENDING
+        proceso.token_documento_externo = ''
+        proceso.save(
+            update_fields=['estado', 'token_documento_externo', 'actualizado_en']
+        )
+        solicitud.estado = EstadoSolicitudFinanciacion.PENDING_PROMISSORY_NOTE
+        solicitud.save(update_fields=['estado'])
+
+        salida = ejecutar_etapa_persistente(
+            solicitud_id=solicitud.pk,
+            etapa=EtapaAutomatizacionEducativa.SIGNATURE_SEND,
+        )
+
+        proceso.refresh_from_db()
+        self.assertEqual(salida.estado, 'MANUAL_EXCEPTION')
+        self.assertEqual(salida.codigo, 'SIGNATURE_SEND_AMBIGUOUS')
+        self.assertEqual(proceso.estado, EstadoProcesoFirmaEducativa.FAILED)
+        self.assertEqual(
+            proceso.codigo_ultimo_error,
+            'SIGNATURE_SEND_AMBIGUOUS',
+        )
+        self.assertEqual(len(RecordingEducationalSignatureBackend.submissions), 1)
+
     @override_settings(FINANCIACION_EDUCATIVA_ZAPSIGN_BACKEND=SIGNATURE_AMBIGUOUS)
     def test_envio_ambiguo_no_se_repite_automaticamente(self):
         solicitud, _ = self._adulto_listo('AUTO-SIGN-AMBIGUOUS')
@@ -634,10 +700,14 @@ class OrquestacionAutomaticaTests(TestCase):
             content_type='application/json',
             HTTP_X_EDUCATIONAL_SIGNATURE_SECRET='automatic-webhook-secret',
         )
+        primera_etapa = procesar_siguiente_trabajo()
+        segunda_etapa = procesar_siguiente_trabajo()
 
         solicitud.refresh_from_db()
         self.assertEqual(primera.status_code, 200)
         self.assertEqual(segunda.status_code, 200)
+        self.assertTrue(primera_etapa.procesado)
+        self.assertTrue(segunda_etapa.procesado)
         self.assertEqual(solicitud.estado, EstadoSolicitudFinanciacion.PENDING_SIGNATURE)
         self.assertEqual(ProcesoFirmaEducativa.objects.count(), 2)
         self.assertEqual(len(RecordingEducationalSignatureBackend.submissions), 2)

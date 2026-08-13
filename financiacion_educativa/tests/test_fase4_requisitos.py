@@ -1,5 +1,6 @@
 from datetime import date
 from tempfile import TemporaryDirectory
+from unittest import mock
 
 from django.contrib.auth import get_user_model
 from django.core import mail
@@ -11,6 +12,7 @@ from django.utils import timezone
 from financiacion_educativa.choices import (
     EstadoEscaneoDocumento,
     EstadoEvidenciaMatricula,
+    EstadoOutboxCorreoEducativo,
     EstadoSolicitudFinanciacion,
     MotivoRechazoDocumento,
     OrigenCapturaDocumento,
@@ -23,6 +25,7 @@ from financiacion_educativa.choices import (
 from financiacion_educativa.models import (
     Consentimiento,
     HistorialEstadoSolicitud,
+    OutboxCorreoEducativo,
     VersionTerminosFinanciacion,
 )
 from financiacion_educativa.services.documentos import (
@@ -42,6 +45,7 @@ from financiacion_educativa.services.requisitos_documentales import (
     completar_fase_documental,
     fase_documental_completa,
 )
+from financiacion_educativa.services.outbox_correos import procesar_siguiente_correo
 from financiacion_educativa.tests.factories import crear_solicitud
 from financiacion_educativa.tests.scan_helpers import (
     conceder_permisos_documentales,
@@ -398,6 +402,7 @@ class RequisitosDocumentalesFase4Tests(TestCase):
         )
 
     @override_settings(
+        DEBUG=True,
         EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
         FINANCIACION_EDUCATIVA_REVIEW_NOTIFICATION_EMAILS=[
             'soporte@aprobado.com.co',
@@ -408,20 +413,51 @@ class RequisitosDocumentalesFase4Tests(TestCase):
         self._documentos_adulto(estudiante, aceptar=True)
         self._matricula_aceptada()
 
-        with self.captureOnCommitCallbacks(execute=True):
-            completar_fase_documental(
-                solicitud=self.solicitud,
-                actor=self.usuario,
-            )
-        with self.captureOnCommitCallbacks(execute=True):
-            completar_fase_documental(
-                solicitud=self.solicitud,
-                actor=self.usuario,
-            )
+        completar_fase_documental(
+            solicitud=self.solicitud,
+            actor=self.usuario,
+        )
+        completar_fase_documental(
+            solicitud=self.solicitud,
+            actor=self.usuario,
+        )
 
+        self.assertEqual(mail.outbox, [])
+        outbox = OutboxCorreoEducativo.objects.get()
+        self.assertEqual(outbox.estado, EstadoOutboxCorreoEducativo.PENDING)
+        procesar_siguiente_correo()
         self.assertEqual(len(mail.outbox), 1)
         self.assertEqual(mail.outbox[0].to, [self.solicitud.correo])
         self.assertEqual(mail.outbox[0].cc, ['soporte@aprobado.com.co'])
+
+    def test_fallo_al_crear_outbox_revierte_envio_documental(self):
+        estudiante = self._participante()
+        self._documentos_adulto(estudiante, aceptar=True)
+        self._matricula_aceptada()
+
+        with mock.patch(
+            'financiacion_educativa.services.requisitos_documentales.'
+            'crear_correo_expediente_recibido',
+            side_effect=RuntimeError('fallo controlado'),
+        ):
+            with self.assertRaises(RuntimeError):
+                completar_fase_documental(
+                    solicitud=self.solicitud,
+                    actor=self.usuario,
+                )
+
+        self.solicitud.refresh_from_db()
+        self.assertEqual(
+            self.solicitud.estado,
+            EstadoSolicitudFinanciacion.PENDING_DOCUMENT,
+        )
+        self.assertFalse(OutboxCorreoEducativo.objects.exists())
+        self.assertFalse(
+            HistorialEstadoSolicitud.objects.filter(
+                solicitud=self.solicitud,
+                estado_nuevo=EstadoSolicitudFinanciacion.PENDING_MANUAL_REVIEW,
+            ).exists()
+        )
 
     def test_menor_no_completa_sin_tutor(self):
         self._participante(

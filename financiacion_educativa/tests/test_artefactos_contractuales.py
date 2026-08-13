@@ -5,6 +5,7 @@ from tempfile import TemporaryDirectory
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
+from django.db import transaction
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from pypdf import PdfReader
@@ -192,6 +193,19 @@ class ArtefactosContractualesTests(TestCase):
             lector = PdfReader(archivo)
             self.assertEqual(len(lector.pages), 1)
             self.assertGreaterEqual(len(lector.pages[0].images), 1)
+
+    def test_rechaza_renderizar_weasyprint_dentro_de_transaccion_aplicativa(self):
+        self._participante()
+        self._preparar_finanzas()
+
+        with transaction.atomic(), self.assertRaisesMessage(
+            RuntimeError,
+            'El PDF contractual debe renderizarse fuera de una transaccion.',
+        ):
+            generar_artefactos_contractuales(
+                solicitud=self.solicitud,
+                actor=self.usuario,
+            )
 
     def test_menor_usa_tutor_como_responsable_y_conserva_estudiante(self):
         self._participante(menor=True)

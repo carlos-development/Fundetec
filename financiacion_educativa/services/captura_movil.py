@@ -29,7 +29,6 @@ from financiacion_educativa.models import (
 from financiacion_educativa.services.correos import (
     ConfiguracionSMTPInvalida,
     SMTP_BACKENDS,
-    clasificar_error_entrega,
     construir_correo_captura_movil,
     normalizar_destinatario,
     validar_configuracion_smtp,
@@ -246,17 +245,16 @@ def emitir_enlace_captura_movil(*, solicitud, persona, actor):
         metadata={'expires_at': enlace.vence_en.isoformat()},
     )
     url = _construir_url(token)
-    transaction.on_commit(
-        lambda: ejecutar_callback_entrega(
-            enlace_id=enlace.pk,
-            continuation_url=url,
-        )
-    )
+    from financiacion_educativa.services.outbox_correos import crear_correo_captura
+
+    crear_correo_captura(enlace=enlace)
     return EnlaceCapturaEmitido(enlace=enlace, url=url)
 
 
 class DjangoEmailMobileCaptureDeliveryBackend:
-    def deliver(self, *, recipient, continuation_url, expires_at):
+    def deliver(
+        self, *, recipient, continuation_url, expires_at, message_id=None
+    ):
         if settings.EMAIL_BACKEND in SMTP_BACKENDS:
             validar_configuracion_smtp()
         elif not settings.DEBUG:
@@ -271,6 +269,8 @@ class DjangoEmailMobileCaptureDeliveryBackend:
             expires_at=expires_at,
             connection=connection,
         )
+        if message_id:
+            message.extra_headers['Message-ID'] = message_id
         if message.send(fail_silently=False) != 1:
             raise RuntimeError('No fue posible confirmar la entrega.')
 
@@ -370,27 +370,9 @@ def _marcar_entrega(enlace_id, *, enviada, codigo_error=''):
 
 
 def ejecutar_callback_entrega(*, enlace_id, continuation_url):
-    """La entrega ocurre tras el commit y nunca propaga errores al POST."""
-    try:
-        enlace = _iniciar_entrega(enlace_id)
-        if enlace is None:
-            return
-        _delivery_backend().deliver(
-            recipient=enlace.solicitud.correo,
-            continuation_url=continuation_url,
-            expires_at=enlace.vence_en,
-        )
-        _marcar_entrega(enlace_id, enviada=True)
-    except Exception as error:
-        codigo_error = clasificar_error_entrega(error)
-        try:
-            _marcar_entrega(
-                enlace_id,
-                enviada=False,
-                codigo_error=codigo_error,
-            )
-        except Exception:
-            pass
+    raise RuntimeError(
+        'La entrega directa fue retirada; procesa el outbox educativo.'
+    )
 
 
 def obtener_enlace_vigente_por_token(token):

@@ -5,7 +5,7 @@ from pathlib import Path
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.files.base import ContentFile
-from django.db import transaction
+from django.db import connection, transaction
 from django.db.models import Max
 from django.template.loader import render_to_string
 from django.utils import timezone
@@ -36,6 +36,15 @@ VERSION_PLANTILLA_FICHA = 'FO-AD-005-V2-EDU-1'
 class ArtefactosContractualesGenerados:
     pagare: ArtefactoContractualEducativo
     ficha_matricula: ArtefactoContractualEducativo
+
+
+@dataclass(frozen=True)
+class ArtefactoContractualPreparado:
+    tipo: str
+    numero_version: int
+    numero_documento: str
+    version_plantilla: str
+    pdf: bytes
 
 
 def _responsable_contractual(solicitud):
@@ -148,6 +157,13 @@ def _contexto_base(solicitud, fotografia):
 
 
 def _renderizar_pdf(nombre_plantilla, contexto):
+    if any(
+        not getattr(bloque, '_from_testcase', False)
+        for bloque in connection.atomic_blocks
+    ):
+        raise RuntimeError(
+            'El PDF contractual debe renderizarse fuera de una transaccion.'
+        )
     from weasyprint import HTML
 
     html = render_to_string(nombre_plantilla, contexto)
@@ -166,29 +182,14 @@ def _numero_documento(solicitud, tipo, version):
     return f'{prefijo}-{solicitud.pk.hex[:12].upper()}-V{version}'
 
 
-def _crear_artefacto(
+def _preparar_artefacto(
     *,
     solicitud,
-    fotografia,
     tipo,
     version_plantilla,
     plantilla,
     contexto,
-    actor,
-    archivos_creados,
 ):
-    existente = ArtefactoContractualEducativo.objects.filter(
-        solicitud=solicitud,
-        tipo=tipo,
-        vigente=True,
-    ).first()
-    if existente:
-        if existente.fotografia_financiera_id != fotografia.pk:
-            raise ValidationError(
-                'Existe un artefacto vigente asociado a otras condiciones.'
-            )
-        return existente
-
     version = (
         ArtefactoContractualEducativo.objects.filter(
             solicitud=solicitud,
@@ -205,20 +206,49 @@ def _crear_artefacto(
             'numero_pagare': numero,
         },
     )
-    artefacto = ArtefactoContractualEducativo(
-        solicitud=solicitud,
-        fotografia_financiera=fotografia,
+    return ArtefactoContractualPreparado(
         tipo=tipo,
         numero_version=version,
         numero_documento=numero,
         version_plantilla=version_plantilla,
-        hash_sha256=hashlib.sha256(pdf).hexdigest(),
-        tamano_bytes=len(pdf),
+        pdf=pdf,
+    )
+
+
+def _persistir_artefacto(
+    *,
+    solicitud,
+    fotografia,
+    preparado,
+    actor,
+    archivos_creados,
+):
+    existente = ArtefactoContractualEducativo.objects.filter(
+        solicitud=solicitud,
+        tipo=preparado.tipo,
+        vigente=True,
+    ).first()
+    if existente:
+        if existente.fotografia_financiera_id != fotografia.pk:
+            raise ValidationError(
+                'Existe un artefacto vigente asociado a otras condiciones.'
+            )
+        return existente
+
+    artefacto = ArtefactoContractualEducativo(
+        solicitud=solicitud,
+        fotografia_financiera=fotografia,
+        tipo=preparado.tipo,
+        numero_version=preparado.numero_version,
+        numero_documento=preparado.numero_documento,
+        version_plantilla=preparado.version_plantilla,
+        hash_sha256=hashlib.sha256(preparado.pdf).hexdigest(),
+        tamano_bytes=len(preparado.pdf),
         generado_por=actor,
     )
     artefacto.archivo.save(
-        f'{numero}.pdf',
-        ContentFile(pdf),
+        f'{preparado.numero_documento}.pdf',
+        ContentFile(preparado.pdf),
         save=False,
     )
     archivos_creados.append(artefacto.archivo.name)
@@ -227,16 +257,13 @@ def _crear_artefacto(
     return artefacto
 
 
-@transaction.atomic
 def generar_artefactos_contractuales(*, solicitud, actor=None):
-    solicitud = SolicitudFinanciacionEducativa.objects.select_for_update().get(
-        pk=solicitud.pk
-    )
+    solicitud = SolicitudFinanciacionEducativa.objects.get(pk=solicitud.pk)
     if solicitud.estado != EstadoSolicitudFinanciacion.PENDING_PROMISSORY_NOTE:
         raise ValidationError(
             'Los documentos contractuales solo se generan despues de la aprobacion.'
         )
-    fotografia = solicitud.fotografias_financieras.select_for_update().filter(
+    fotografia = solicitud.fotografias_financieras.filter(
         activa=True,
         bloqueada=True,
         es_legado=False,
@@ -245,24 +272,53 @@ def generar_artefactos_contractuales(*, solicitud, actor=None):
         raise ValidationError(
             'No existen condiciones financieras definitivas y bloqueadas.'
         )
-    contexto = _contexto_base(solicitud, fotografia)
-    archivos_creados = []
-    try:
-        pagare = _crear_artefacto(
+    existentes = {
+        artefacto.tipo: artefacto
+        for artefacto in ArtefactoContractualEducativo.objects.filter(
             solicitud=solicitud,
-            fotografia=fotografia,
+            vigente=True,
+            tipo__in={
+                TipoArtefactoContractualEducativo.PROMISSORY_NOTE,
+                TipoArtefactoContractualEducativo.ENROLLMENT_FORM,
+            },
+        )
+    }
+    pagare_existente = existentes.get(
+        TipoArtefactoContractualEducativo.PROMISSORY_NOTE
+    )
+    ficha_existente = existentes.get(
+        TipoArtefactoContractualEducativo.ENROLLMENT_FORM
+    )
+    if pagare_existente and ficha_existente:
+        if any(
+            artefacto.fotografia_financiera_id != fotografia.pk
+            for artefacto in (pagare_existente, ficha_existente)
+        ):
+            raise ValidationError(
+                'Existe un artefacto vigente asociado a otras condiciones.'
+            )
+        from financiacion_educativa.services.firma_zapsign import (
+            preparar_proceso_firma,
+        )
+
+        preparar_proceso_firma(artefacto=pagare_existente)
+        return ArtefactosContractualesGenerados(
+            pagare=pagare_existente,
+            ficha_matricula=ficha_existente,
+        )
+    contexto = _contexto_base(solicitud, fotografia)
+    preparados = {
+        TipoArtefactoContractualEducativo.PROMISSORY_NOTE: _preparar_artefacto(
+            solicitud=solicitud,
             tipo=TipoArtefactoContractualEducativo.PROMISSORY_NOTE,
             version_plantilla=(
                 f'PAGARE-2.0-EDU-{contexto["pagare_version_juridica"]}'
             ),
             plantilla='pagares/pagare_v2.0.html',
             contexto=contexto,
-            actor=actor,
-            archivos_creados=archivos_creados,
-        )
-        ficha = _crear_artefacto(
+        ),
+        TipoArtefactoContractualEducativo.ENROLLMENT_FORM: _preparar_artefacto(
             solicitud=solicitud,
-            fotografia=fotografia,
             tipo=TipoArtefactoContractualEducativo.ENROLLMENT_FORM,
             version_plantilla=VERSION_PLANTILLA_FICHA,
             plantilla='financiacion_educativa/documentos/ficha_matricula_pdf.html',
@@ -271,14 +327,52 @@ def generar_artefactos_contractuales(*, solicitud, actor=None):
                 'mapeo_ficha': construir_mapeo_ficha_matricula(solicitud),
                 'ficha': construir_datos_ficha_matricula(solicitud),
             },
-            actor=actor,
-            archivos_creados=archivos_creados,
-        )
-        from financiacion_educativa.services.firma_zapsign import (
-            preparar_proceso_firma,
-        )
+        ),
+    }
+    archivos_creados = []
+    try:
+        with transaction.atomic():
+            solicitud = (
+                SolicitudFinanciacionEducativa.objects.select_for_update().get(
+                    pk=solicitud.pk
+                )
+            )
+            if (
+                solicitud.estado
+                != EstadoSolicitudFinanciacion.PENDING_PROMISSORY_NOTE
+            ):
+                raise ValidationError(
+                    'Los documentos contractuales solo se generan despues de la aprobacion.'
+                )
+            fotografia = solicitud.fotografias_financieras.select_for_update().get(
+                pk=fotografia.pk,
+                activa=True,
+                bloqueada=True,
+                es_legado=False,
+            )
+            pagare = _persistir_artefacto(
+                solicitud=solicitud,
+                fotografia=fotografia,
+                preparado=preparados[
+                    TipoArtefactoContractualEducativo.PROMISSORY_NOTE
+                ],
+                actor=actor,
+                archivos_creados=archivos_creados,
+            )
+            ficha = _persistir_artefacto(
+                solicitud=solicitud,
+                fotografia=fotografia,
+                preparado=preparados[
+                    TipoArtefactoContractualEducativo.ENROLLMENT_FORM
+                ],
+                actor=actor,
+                archivos_creados=archivos_creados,
+            )
+            from financiacion_educativa.services.firma_zapsign import (
+                preparar_proceso_firma,
+            )
 
-        preparar_proceso_firma(artefacto=pagare)
+            preparar_proceso_firma(artefacto=pagare)
     except Exception:
         almacenamiento = ArtefactoContractualEducativo._meta.get_field(
             'archivo'

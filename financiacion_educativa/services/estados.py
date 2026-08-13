@@ -19,7 +19,6 @@ TRANSICIONES_PERMITIDAS = {
     Estado.PENDING_GUARDIAN: {Estado.PENDING_DOCUMENT, Estado.CANCELLED},
     Estado.PENDING_MANUAL_REVIEW: {
         Estado.CORRECTION_REQUIRED,
-        Estado.APPROVED,
         Estado.PENDING_PROMISSORY_NOTE,
         Estado.REJECTED,
         Estado.CANCELLED,
@@ -34,7 +33,6 @@ TRANSICIONES_PERMITIDAS = {
     Estado.PENDING_SIGNATURE: {
         Estado.PENDING_PROMISSORY_NOTE,
         Estado.APPROVED,
-        Estado.ACTIVE,
         Estado.CANCELLED,
     },
     Estado.ACTIVE: {Estado.PAYMENT_REPORTED, Estado.PAID},

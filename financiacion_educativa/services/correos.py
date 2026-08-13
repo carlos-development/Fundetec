@@ -157,6 +157,81 @@ def construir_correo_captura_movil(
     return mensaje
 
 
+def construir_correo_correccion_automatica(
+    *,
+    recipient,
+    requisitos,
+    connection=None,
+):
+    recipient = normalizar_destinatario(recipient)
+    requisitos_publicos = [str(item)[:80] for item in requisitos or []]
+    titulo = 'Necesitamos una correccion en tu solicitud educativa'
+    detalle = (
+        'Debes repetir o actualizar los documentos indicados antes de continuar.'
+    )
+    if requisitos_publicos:
+        detalle = f'{detalle} Requisitos: {", ".join(requisitos_publicos)}.'
+    contexto = {
+        'brand_name': 'Aprobado',
+        'decision_type': TipoDecisionRevisionEducativa.CORRECTION_REQUESTED,
+        'title': titulo,
+        'message': detalle,
+        'course_authorized': False,
+        'email_logo_url': str(
+            getattr(settings, 'EDUCATION_EMAIL_LOGO_URL', '')
+        ).strip(),
+    }
+    texto = render_to_string(
+        'emails/financiacion_educativa/decision_estado.txt', contexto
+    )
+    html = render_to_string(
+        'emails/financiacion_educativa/decision_estado.html', contexto
+    )
+    mensaje = EmailMultiAlternatives(
+        subject=titulo,
+        body=texto,
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        to=[recipient],
+        connection=connection,
+    )
+    mensaje.attach_alternative(html, 'text/html')
+    return mensaje
+
+
+def construir_correo_continuacion_automatica(*, recipient, connection=None):
+    recipient = normalizar_destinatario(recipient)
+    titulo = 'Tu expediente educativo esta listo para continuar a firma'
+    contexto = {
+        'brand_name': 'Aprobado',
+        'decision_type': TipoDecisionRevisionEducativa.APPROVED,
+        'title': titulo,
+        'message': (
+            'La validacion documental concluyo correctamente. Estamos '
+            'preparando el pagare y la solicitud seguira pendiente hasta '
+            'completar la firma.'
+        ),
+        'course_authorized': False,
+        'email_logo_url': str(
+            getattr(settings, 'EDUCATION_EMAIL_LOGO_URL', '')
+        ).strip(),
+    }
+    texto = render_to_string(
+        'emails/financiacion_educativa/decision_estado.txt', contexto
+    )
+    html = render_to_string(
+        'emails/financiacion_educativa/decision_estado.html', contexto
+    )
+    mensaje = EmailMultiAlternatives(
+        subject=titulo,
+        body=texto,
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        to=[recipient],
+        connection=connection,
+    )
+    mensaje.attach_alternative(html, 'text/html')
+    return mensaje
+
+
 def construir_correo_decision_educativa(
     *,
     recipient,

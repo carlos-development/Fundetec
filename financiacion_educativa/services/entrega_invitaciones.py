@@ -18,10 +18,7 @@ from financiacion_educativa.models import EntregaInvitacionContinuacion
 from financiacion_educativa.services.invitaciones import (
     registrar_evento_invitacion,
 )
-from financiacion_educativa.services.correos import (
-    clasificar_error_entrega,
-    normalizar_destinatario,
-)
+from financiacion_educativa.services.correos import normalizar_destinatario
 
 
 CODIGO_ERROR_ENTREGA = 'DELIVERY_BACKEND_ERROR'
@@ -53,7 +50,9 @@ def calcular_hmac_destinatario(correo):
 
 
 class DjangoEmailInvitationDeliveryBackend:
-    def deliver(self, *, recipient, continuation_url, expires_at):
+    def deliver(
+        self, *, recipient, continuation_url, expires_at, message_id=None
+    ):
         recipient = normalizar_destinatario(recipient)
         timeout = int(
             getattr(
@@ -84,6 +83,8 @@ class DjangoEmailInvitationDeliveryBackend:
             to=[recipient],
             connection=connection,
         )
+        if message_id:
+            message.extra_headers['Message-ID'] = message_id
         message.attach_alternative(html_body, 'text/html')
         if message.send(fail_silently=False) != 1:
             raise RuntimeError('No fue posible confirmar la entrega.')
@@ -200,22 +201,6 @@ def _marcar_entrega_fallida(entrega_id, *, codigo_error=''):
 
 
 def ejecutar_callback_entrega(*, entrega_id, continuation_url):
-    """Runs after commit and deliberately never propagates delivery failures."""
-    try:
-        entrega = _iniciar_entrega(entrega_id)
-        if entrega is None:
-            return
-        _delivery_backend().deliver(
-            recipient=entrega.solicitud.correo,
-            continuation_url=continuation_url,
-            expires_at=entrega.invitacion.vence_en,
-        )
-        _marcar_entrega_enviada(entrega_id)
-    except Exception as error:
-        try:
-            _marcar_entrega_fallida(
-                entrega_id,
-                codigo_error=clasificar_error_entrega(error),
-            )
-        except Exception:
-            pass
+    raise RuntimeError(
+        'La entrega directa fue retirada; procesa el outbox educativo.'
+    )

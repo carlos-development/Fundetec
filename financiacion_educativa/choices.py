@@ -290,6 +290,40 @@ class EstadoEntregaCorreoSolicitud(models.TextChoices):
     FAILED = 'FAILED', 'Fallido'
 
 
+class EstadoOutboxCorreoEducativo(models.TextChoices):
+    PENDING = 'PENDING', 'Pendiente'
+    SENDING = 'SENDING', 'En envio'
+    RETRYING = 'RETRYING', 'Pendiente de reintento'
+    SENT = 'SENT', 'Enviado'
+    FAILED = 'FAILED', 'Fallido'
+    AMBIGUOUS = 'AMBIGUOUS', 'Entrega ambigua'
+
+
+class TipoEventoCorreoEducativo(models.TextChoices):
+    INITIAL_INVITATION = 'INITIAL_INVITATION', 'Invitacion inicial'
+    INVITATION_REISSUE = 'INVITATION_REISSUE', 'Reemision de invitacion'
+    MOBILE_CAPTURE_LINK = 'MOBILE_CAPTURE_LINK', 'Enlace de captura movil'
+    DOSSIER_RECEIVED = 'DOSSIER_RECEIVED', 'Expediente recibido'
+    REVIEW_DECISION = 'REVIEW_DECISION', 'Decision de revision'
+    AUTOMATIC_CORRECTION = 'AUTOMATIC_CORRECTION', 'Correccion automatica'
+    AUTOMATIC_CONTINUATION = (
+        'AUTOMATIC_CONTINUATION',
+        'Continuacion automatica',
+    )
+
+
+class CodigoMensajeCorreoEducativo(models.TextChoices):
+    INVITATION = 'INVITATION', 'Invitacion de continuacion'
+    MOBILE_CAPTURE = 'MOBILE_CAPTURE', 'Captura movil'
+    DOSSIER_RECEIVED = 'DOSSIER_RECEIVED', 'Expediente recibido'
+    REVIEW_DECISION = 'REVIEW_DECISION', 'Decision de revision'
+    AUTOMATIC_CORRECTION = 'AUTOMATIC_CORRECTION', 'Correccion automatica'
+    AUTOMATIC_CONTINUATION = (
+        'AUTOMATIC_CONTINUATION',
+        'Continuacion automatica',
+    )
+
+
 class EstadoPublicoSolicitud(models.TextChoices):
     RECEIVED = 'RECEIVED', 'Recibida'
     ACTION_REQUIRED = 'ACTION_REQUIRED', 'Requiere accion del solicitante'
@@ -327,6 +361,104 @@ class EstadoEventoWebhookFirmaEducativa(models.TextChoices):
     PROCESSED = 'PROCESSED', 'Procesado'
     IGNORED = 'IGNORED', 'Ignorado'
     RETRYABLE_ERROR = 'RETRYABLE_ERROR', 'Fallo recuperable'
+
+
+class EstadoProcesoAutomatizacionEducativa(models.TextChoices):
+    QUEUED = 'QUEUED', 'En cola'
+    RUNNING = 'RUNNING', 'En ejecucion'
+    RETRYING = 'RETRYING', 'Pendiente de reintento'
+    CORRECTION_REQUIRED = 'CORRECTION_REQUIRED', 'Correccion requerida'
+    MANUAL_EXCEPTION = 'MANUAL_EXCEPTION', 'Excepcion manual'
+    PENDING_SIGNATURE = 'PENDING_SIGNATURE', 'Pendiente de firma'
+    COMPLETED = 'COMPLETED', 'Completado'
+    FAILED = 'FAILED', 'Fallido'
+
+
+class EtapaAutomatizacionEducativa(models.TextChoices):
+    SECURITY_SCAN = 'SECURITY_SCAN', 'Escaneo de seguridad'
+    DOCUMENT_VALIDATION = 'DOCUMENT_VALIDATION', 'Validacion documental'
+    DECISION = 'DECISION', 'Decision automatica'
+    FINANCIAL_SNAPSHOT = 'FINANCIAL_SNAPSHOT', 'Fotografia financiera'
+    CONTRACT_GENERATION = 'CONTRACT_GENERATION', 'Generacion contractual'
+    SIGNATURE_SEND = 'SIGNATURE_SEND', 'Envio a firma'
+    WAITING_SIGNATURE = 'WAITING_SIGNATURE', 'Espera de firma'
+    COMPLETED = 'COMPLETED', 'Proceso completado'
+
+
+class CodigoRazonAutomatizacionEducativa(models.TextChoices):
+    SECURITY_SCAN_COMPLETED = 'SECURITY_SCAN_COMPLETED', 'Escaneo completado'
+    MALWARE_DETECTED = 'MALWARE_DETECTED', 'Amenaza detectada'
+    SECURITY_SCAN_TEMPORARY_ERROR = (
+        'SECURITY_SCAN_TEMPORARY_ERROR',
+        'Fallo temporal de escaneo',
+    )
+    DOCUMENT_VALIDATION_COMPLETED = (
+        'DOCUMENT_VALIDATION_COMPLETED',
+        'Validacion documental completada',
+    )
+    DOCUMENT_AI_TEMPORARY_ERROR = (
+        'DOCUMENT_AI_TEMPORARY_ERROR',
+        'Fallo temporal de IA',
+    )
+    DOCUMENT_CORRECTION_REQUIRED = (
+        'DOCUMENT_CORRECTION_REQUIRED',
+        'Correccion documental requerida',
+    )
+    PDF_CONTENT_PROCESSING_REQUIRED = (
+        'PDF_CONTENT_PROCESSING_REQUIRED',
+        'Procesamiento de contenido PDF requerido',
+    )
+    DOCUMENT_VALIDATION_INCONCLUSIVE = (
+        'DOCUMENT_VALIDATION_INCONCLUSIVE',
+        'Validacion documental inconclusa',
+    )
+    DOCUMENT_RESULT_NOT_CONCLUSIVE = (
+        'DOCUMENT_RESULT_NOT_CONCLUSIVE',
+        'Resultado documental no concluyente',
+    )
+    AUTOMATIC_DECISION_CONTINUE = (
+        'AUTOMATIC_DECISION_CONTINUE',
+        'Decision automatica permite continuar',
+    )
+    FINANCIAL_SNAPSHOT_LOCKED = (
+        'FINANCIAL_SNAPSHOT_LOCKED',
+        'Fotografia financiera bloqueada',
+    )
+    CONTRACTS_GENERATED = 'CONTRACTS_GENERATED', 'Contratos generados'
+    PENDING_SIGNATURE = 'PENDING_SIGNATURE', 'Pendiente de firma'
+    SIGNATURE_SEND_AMBIGUOUS = (
+        'SIGNATURE_SEND_AMBIGUOUS',
+        'Envio a firma ambiguo',
+    )
+    SIGNATURE_SEND_RETRY_REQUIRED = (
+        'SIGNATURE_SEND_RETRY_REQUIRED',
+        'Reintento de firma requerido',
+    )
+    SIGNED_WEBHOOK_CONFIRMED = (
+        'SIGNED_WEBHOOK_CONFIRMED',
+        'Webhook firmado confirmado',
+    )
+    SIGNATURE_REFUSED = 'SIGNATURE_REFUSED', 'Firma rechazada'
+    SIGNATURE_CANCELLED = 'SIGNATURE_CANCELLED', 'Firma cancelada'
+    SIGNATURE_EXPIRED = 'SIGNATURE_EXPIRED', 'Firma vencida'
+    LEASE_EXPIRED = 'LEASE_EXPIRED', 'Lease vencido'
+    MAX_ATTEMPTS_EXCEEDED = (
+        'MAX_ATTEMPTS_EXCEEDED',
+        'Intentos agotados',
+    )
+    SCANNER_TIMEOUT = 'SCANNER_TIMEOUT', 'Timeout del escaner'
+    SCANNER_UNAVAILABLE = 'SCANNER_UNAVAILABLE', 'Escaner no disponible'
+    PROVIDER_TIMEOUT = 'PROVIDER_TIMEOUT', 'Timeout del proveedor'
+    PROVIDER_ERROR = 'PROVIDER_ERROR', 'Error temporal del proveedor'
+    SIGNED_FILE_RECOVERY_FAILED = (
+        'SIGNED_FILE_RECOVERY_FAILED',
+        'Fallo recuperando archivo firmado',
+    )
+    SIGNATURE_SEND_NOT_CONFIRMED = (
+        'SIGNATURE_SEND_NOT_CONFIRMED',
+        'Envio de firma no confirmado',
+    )
+    INTERNAL_ERROR = 'INTERNAL_ERROR', 'Error interno controlado'
 
 
 class EstadoVersionTerminos(models.TextChoices):

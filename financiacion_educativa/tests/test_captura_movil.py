@@ -13,16 +13,18 @@ from django.utils import timezone
 from financiacion_educativa.choices import (
     EstadoEnlaceCapturaMovil,
     EstadoEntregaCapturaMovil,
+    EstadoOutboxCorreoEducativo,
     EstadoSolicitudFinanciacion,
     RelacionEstudiante,
     RolParticipante,
     TipoDocumentoFinanciacion,
     TipoDocumentoIdentidad,
 )
-from financiacion_educativa.models import EnlaceCapturaMovil
+from financiacion_educativa.models import EnlaceCapturaMovil, OutboxCorreoEducativo
 from financiacion_educativa.services.captura_movil import (
     emitir_enlace_captura_movil,
 )
+from financiacion_educativa.services.outbox_correos import procesar_siguiente_correo
 from financiacion_educativa.services.participantes import (
     DatosParticipante,
     registrar_o_actualizar_participante,
@@ -107,8 +109,8 @@ class CapturaMovilTests(TestCase):
 
     def _emitir_desde_web(self):
         self.client.force_login(self.usuario)
-        with self.captureOnCommitCallbacks(execute=True):
-            respuesta = self.client.post(self.url_envio)
+        respuesta = self.client.post(self.url_envio)
+        procesar_siguiente_correo()
         return respuesta
 
     def _token_y_ruta(self, indice=-1):
@@ -309,14 +311,17 @@ class CapturaMovilTests(TestCase):
     def test_fallo_de_correo_no_convierte_post_en_error(self):
         estado_inicial = self.solicitud.estado
         self.client.force_login(self.usuario)
-        with self.captureOnCommitCallbacks(execute=True):
-            respuesta = self.client.post(self.url_envio)
-
+        respuesta = self.client.post(self.url_envio)
         self.assertEqual(respuesta.status_code, 302)
+        procesar_siguiente_correo()
+
         enlace = EnlaceCapturaMovil.objects.get()
         self.assertEqual(enlace.estado_entrega, EstadoEntregaCapturaMovil.FAILED)
         self.assertEqual(enlace.estado, EstadoEnlaceCapturaMovil.REVOKED)
-        self.assertEqual(enlace.codigo_ultimo_error, 'DELIVERY_BACKEND_ERROR')
+        self.assertEqual(
+            enlace.codigo_ultimo_error,
+            'SMTP_DELIVERY_AMBIGUOUS',
+        )
         self.assertFalse(
             EnlaceCapturaMovil.objects.filter(
                 estado=EstadoEnlaceCapturaMovil.ACTIVE
@@ -325,27 +330,23 @@ class CapturaMovilTests(TestCase):
         self.solicitud.refresh_from_db()
         self.assertEqual(self.solicitud.estado, estado_inicial)
         textos = [str(mensaje) for mensaje in get_messages(respuesta.wsgi_request)]
-        self.assertTrue(any('No fue posible enviar' in texto for texto in textos))
-        self.assertFalse(any('Enviamos el enlace' in texto for texto in textos))
+        self.assertTrue(any('Programamos el envio' in texto for texto in textos))
 
-    @mock.patch(
-        'financiacion_educativa.services.captura_movil.transaction.on_commit'
-    )
-    def test_mensaje_de_exito_solo_tras_entrega_confirmada(
-        self,
-        on_commit_mock,
-    ):
-        on_commit_mock.side_effect = lambda callback: callback()
+    def test_post_solo_programa_entrega_persistente(self):
         estado_inicial = self.solicitud.estado
         self.client.force_login(self.usuario)
 
         respuesta = self.client.post(self.url_envio)
 
         enlace = EnlaceCapturaMovil.objects.get()
-        self.assertEqual(enlace.estado_entrega, EstadoEntregaCapturaMovil.SENT)
+        self.assertEqual(enlace.estado_entrega, EstadoEntregaCapturaMovil.PENDING)
+        self.assertEqual(
+            OutboxCorreoEducativo.objects.get().estado,
+            EstadoOutboxCorreoEducativo.PENDING,
+        )
         textos = [str(mensaje) for mensaje in get_messages(respuesta.wsgi_request)]
-        self.assertTrue(any('Enviamos el enlace' in texto for texto in textos))
-        self.assertFalse(any('No fue posible enviar' in texto for texto in textos))
+        self.assertTrue(any('Programamos el envio' in texto for texto in textos))
+        self.assertFalse(RecordingMobileCaptureDeliveryBackend.deliveries)
         self.solicitud.refresh_from_db()
         self.assertEqual(self.solicitud.estado, estado_inicial)
 
@@ -400,11 +401,11 @@ class CapturaMovilTests(TestCase):
         self.assertNotContains(pagina, 'data-camera-capture')
         self.assertNotContains(pagina, 'Activar c&aacute;mara')
 
-        with self.captureOnCommitCallbacks(execute=True):
-            self.client.post(
-                self.url_envio,
-                {'destinatario': 'atacante@example.com'},
-            )
+        self.client.post(
+            self.url_envio,
+            {'destinatario': 'atacante@example.com'},
+        )
+        procesar_siguiente_correo()
         self.assertEqual(
             RecordingMobileCaptureDeliveryBackend.deliveries[-1]['recipient'],
             self.solicitud.correo,
@@ -537,8 +538,8 @@ class CapturaMovilTests(TestCase):
     )
     def test_configuracion_smtp_incompleta_revoca_enlace(self):
         self.client.force_login(self.usuario)
-        with self.captureOnCommitCallbacks(execute=True):
-            respuesta = self.client.post(self.url_envio)
+        respuesta = self.client.post(self.url_envio)
+        procesar_siguiente_correo()
 
         self.assertEqual(respuesta.status_code, 302)
         enlace = EnlaceCapturaMovil.objects.get()
@@ -556,8 +557,8 @@ class CapturaMovilTests(TestCase):
     )
     def test_backend_local_en_memoria_confirma_entrega(self):
         self.client.force_login(self.usuario)
-        with self.captureOnCommitCallbacks(execute=True):
-            respuesta = self.client.post(self.url_envio)
+        respuesta = self.client.post(self.url_envio)
+        procesar_siguiente_correo()
 
         enlace = EnlaceCapturaMovil.objects.get()
         self.assertEqual(respuesta.status_code, 302)
@@ -571,8 +572,8 @@ class CapturaMovilTests(TestCase):
     )
     def test_backend_no_smtp_falla_cerrado_fuera_de_desarrollo(self):
         self.client.force_login(self.usuario)
-        with self.captureOnCommitCallbacks(execute=True):
-            respuesta = self.client.post(self.url_envio)
+        respuesta = self.client.post(self.url_envio)
+        procesar_siguiente_correo()
 
         enlace = EnlaceCapturaMovil.objects.get()
         self.assertEqual(respuesta.status_code, 302)

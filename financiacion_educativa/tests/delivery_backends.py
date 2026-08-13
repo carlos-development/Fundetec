@@ -5,20 +5,26 @@ class RecordingInvitationDeliveryBackend:
     def reset(cls):
         cls.deliveries = []
 
-    def deliver(self, *, recipient, continuation_url, expires_at):
+    def deliver(
+        self, *, recipient, continuation_url, expires_at, message_id=None
+    ):
         self.__class__.deliveries.append({
             'recipient': recipient,
             'continuation_url': continuation_url,
             'expires_at': expires_at,
+            'message_id': message_id,
         })
 
 
 class FailingInvitationDeliveryBackend(RecordingInvitationDeliveryBackend):
-    def deliver(self, *, recipient, continuation_url, expires_at):
+    def deliver(
+        self, *, recipient, continuation_url, expires_at, message_id=None
+    ):
         super().deliver(
             recipient=recipient,
             continuation_url=continuation_url,
             expires_at=expires_at,
+            message_id=message_id,
         )
         raise RuntimeError('Fallo de entrega simulado.')
 
@@ -30,11 +36,14 @@ class RecordingMobileCaptureDeliveryBackend:
     def reset(cls):
         cls.deliveries = []
 
-    def deliver(self, *, recipient, continuation_url, expires_at):
+    def deliver(
+        self, *, recipient, continuation_url, expires_at, message_id=None
+    ):
         self.__class__.deliveries.append({
             'recipient': recipient,
             'continuation_url': continuation_url,
             'expires_at': expires_at,
+            'message_id': message_id,
         })
 
 

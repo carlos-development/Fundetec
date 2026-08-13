@@ -528,6 +528,76 @@ def siguiente_paso_view(request, solicitud_id):
     )
 
 
+MENSAJES_PROCESAMIENTO_PUBLICOS = {
+    'QUEUED': 'Tu expediente esta listo para ser procesado.',
+    'RUNNING': 'Estamos validando tu expediente de forma segura.',
+    'RETRYING': 'Una validacion temporal sera reintentada automaticamente.',
+    'CORRECTION_REQUIRED': 'Necesitamos que corrijas parte del expediente.',
+    'MANUAL_EXCEPTION': 'Tu expediente requiere una verificacion excepcional.',
+    'PENDING_SIGNATURE': 'El pagare fue enviado y esta pendiente de firma.',
+    'COMPLETED': 'La firma fue confirmada y el proceso termino.',
+    'FAILED': 'No fue posible completar el procesamiento automatico.',
+}
+
+ETAPAS_PROCESAMIENTO_PUBLICAS = {
+    'SECURITY_SCAN': 'SEGURIDAD_DOCUMENTAL',
+    'DOCUMENT_VALIDATION': 'VALIDACION_DOCUMENTAL',
+    'DECISION': 'DECISION_DOCUMENTAL',
+    'FINANCIAL_SNAPSHOT': 'CONDICIONES_FINANCIERAS',
+    'CONTRACT_GENERATION': 'DOCUMENTOS_CONTRACTUALES',
+    'SIGNATURE_SEND': 'ENVIO_A_FIRMA',
+    'WAITING_SIGNATURE': 'ESPERA_DE_FIRMA',
+    'COMPLETED': 'COMPLETADO',
+}
+
+
+@never_cache
+@login_required(login_url='/financiacion-educativa/acceso/')
+@require_GET
+def estado_procesamiento_view(request, solicitud_id):
+    solicitud = _solicitud_del_usuario(request, solicitud_id)
+    proceso = solicitud.procesos_automatizacion.order_by(
+        '-version_expediente'
+    ).first()
+    if proceso:
+        estado = proceso.estado
+        etapa = ETAPAS_PROCESAMIENTO_PUBLICAS.get(
+            proceso.etapa_actual,
+            'VALIDACION_DOCUMENTAL',
+        )
+        actualizada_en = proceso.actualizada_en
+        requisitos = list(proceso.requisitos_correccion or [])
+    else:
+        if solicitud.estado == EstadoSolicitudFinanciacion.CORRECTION_REQUIRED:
+            estado = 'CORRECTION_REQUIRED'
+            etapa = 'CORRECCION_DOCUMENTAL'
+        elif solicitud.estado == EstadoSolicitudFinanciacion.PENDING_SIGNATURE:
+            estado = 'PENDING_SIGNATURE'
+            etapa = 'ESPERA_DE_FIRMA'
+        elif solicitud.estado in {
+            EstadoSolicitudFinanciacion.APPROVED,
+            EstadoSolicitudFinanciacion.ACTIVE,
+            EstadoSolicitudFinanciacion.PAID,
+        }:
+            estado = 'COMPLETED'
+            etapa = 'COMPLETADO'
+        else:
+            estado = 'MANUAL_EXCEPTION'
+            etapa = 'REVISION_DE_CONTINGENCIA'
+        actualizada_en = solicitud.actualizada_en
+        requisitos = []
+    requiere_correccion = estado == 'CORRECTION_REQUIRED'
+    return JsonResponse({
+        'status': estado,
+        'public_stage': etapa,
+        'message': MENSAJES_PROCESAMIENTO_PUBLICOS[estado],
+        'requires_correction': requiere_correccion,
+        'correction_requirements': requisitos if requiere_correccion else [],
+        'can_resume': requiere_correccion,
+        'updated_at': actualizada_en.isoformat(),
+    })
+
+
 @never_cache
 @login_required(login_url='/financiacion-educativa/acceso/')
 @require_GET
@@ -923,6 +993,12 @@ def capturar_identidad_view(request, solicitud_id, persona):
             'documento_reverso': documentos.get(configuracion['reverso']),
             'requiere_reverso': 'reverso' in caras_requeridas,
             'captura_movil_autorizada': captura_movil_autorizada,
+            'captura_min_ancho': (
+                settings.FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_WIDTH
+            ),
+            'captura_min_alto': (
+                settings.FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_HEIGHT
+            ),
         },
     )
 
@@ -941,26 +1017,12 @@ def enviar_enlace_captura_movil_view(request, solicitud_id, persona):
     except ValidationError as error:
         messages.error(request, error.messages[0])
     else:
-        resultado.enlace.refresh_from_db(fields=['estado_entrega'])
-        if resultado.enlace.estado_entrega != EstadoEntregaCapturaMovil.SENT:
-            messages.error(
-                request,
-                (
-                    'No fue posible enviar el correo. Intenta nuevamente '
-                    'mas tarde.'
-                ),
-            )
-            return redirect(
-                'financiacion_educativa_web:capturar-identidad',
-                solicitud_id=solicitud.pk,
-                persona=persona,
-            )
         messages.success(
             request,
             (
-                'Enviamos el enlace al correo registrado. Revisa tambien la '
-                'carpeta de correo no deseado. El enlace vence en 30 minutos '
-                'y solo puede utilizarse una vez.'
+                'Programamos el envio al correo registrado. Revisa tambien '
+                'la carpeta de correo no deseado. El enlace sera personal, '
+                'temporal y de un solo uso.'
             ),
         )
     return redirect(

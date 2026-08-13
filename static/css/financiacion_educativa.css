@@ -2204,10 +2204,40 @@ body.education-flow-shell img {
 .edu-camera-stage {
     position: relative;
     width: 100%;
-    aspect-ratio: 16 / 10;
+    aspect-ratio: 1.586 / 1;
     overflow: hidden;
     border-radius: 6px;
     background: #071827;
+}
+
+.edu-camera-fallback {
+    display: grid;
+    gap: 0.45rem;
+    margin-top: 0.9rem;
+    color: var(--edu-muted);
+    font-size: 0.9rem;
+}
+
+.edu-camera-fallback input {
+    width: 100%;
+    padding: 0.65rem;
+    border: 1px solid var(--edu-line);
+    border-radius: 6px;
+    background: #fff;
+}
+
+.edu-camera-quality {
+    margin-top: 0.8rem;
+    padding: 0.75rem;
+    border-left: 3px solid var(--edu-warning);
+    background: #fff8dc;
+    color: #574711;
+}
+
+.edu-camera-quality.is-valid {
+    border-left-color: var(--edu-success);
+    background: #eef9f3;
+    color: #174f36;
 }
 
 .edu-camera-stage video,

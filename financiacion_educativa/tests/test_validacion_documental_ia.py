@@ -47,6 +47,7 @@ from financiacion_educativa.tests.ai_validation_backends import (
     BackendIAError,
     BackendIAInconsistente,
     BackendIAIlegible,
+    BackendIANulosConAltaConfianza,
     BackendIALadoIncorrecto,
     BackendIANoEsDocumento,
     BackendIAPasaporteConcluyente,
@@ -307,6 +308,30 @@ class ValidacionDocumentalIATests(TestCase):
         self.assertEqual(resultado.estado, EstadoValidacionIADocumento.MANUAL_REVIEW)
         self.assertEqual(documento.estado_validacion, EstadoValidacionDocumento.PENDING)
 
+    def test_campos_nulos_v3_generan_razones_explicitas_sin_aprobar(self):
+        documento = self.documento_seguro(
+            b'nulos-v3',
+            TipoDocumentoFinanciacion.STUDENT_ID_FRONT,
+        )
+
+        resultado = procesar_validacion_documental_ia(
+            documento=documento,
+            actor=self.operador,
+            backend=BackendIANulosConAltaConfianza(),
+        )
+
+        documento.refresh_from_db()
+        validacion = documento.validaciones_ia.get()
+        self.assertEqual(resultado.estado, EstadoValidacionIADocumento.MANUAL_REVIEW)
+        self.assertEqual(documento.estado_validacion, EstadoValidacionDocumento.PENDING)
+        self.assertIn('DATA_CONSISTENCY_INCONCLUSIVE', validacion.hallazgos)
+        self.assertIn('SIDE_INCONCLUSIVE', validacion.hallazgos)
+        self.assertIn('PHYSICAL_CAPTURE_INCONCLUSIVE', validacion.hallazgos)
+        self.assertIn(
+            'TAMPERING_ASSESSMENT_INCONCLUSIVE',
+            validacion.hallazgos,
+        )
+
     def test_hallazgo_de_identidad_no_rechaza_otro_tipo_documental(self):
         documento = self.documento_seguro(
             b'ingresos-no-identidad',
@@ -506,13 +531,22 @@ class AdaptadorOpenAIValidacionDocumentalTests(TestCase):
         'legibility_score': 0.97,
         'confidence': 0.99,
         'document_type_match': True,
-        'appears_real': True,
+        'document_type_confidence': 0.99,
+        'physical_document_capture': True,
+        'physical_capture_confidence': 0.98,
+        'visible_tampering_signals': False,
+        'tampering_confidence': 0.97,
         'data_consistent': True,
+        'data_match_confidence': 0.99,
+        'visual_integrity': True,
+        'visual_integrity_confidence': 0.98,
+        'legibility_confidence': 0.99,
         'finding_codes': [],
         'decision': 'ACCEPTED',
         'is_identity_document': True,
         'is_colombian_document': True,
         'side_matches': True,
+        'side_confidence': 0.99,
         'required_fields_visible': True,
         'is_blurred': False,
         'is_too_dark': False,
@@ -535,6 +569,9 @@ class AdaptadorOpenAIValidacionDocumentalTests(TestCase):
         self.assertEqual(resultado.tipo_documento_visible, 'CC')
         self.assertEqual(resultado.numero_documento_visible, '1000123456')
         self.assertEqual(resultado.nombres_visibles, ('ANA', 'PRUEBA'))
+        self.assertEqual(resultado.version_esquema, '3')
+        self.assertTrue(resultado.captura_documento_fisico)
+        self.assertFalse(resultado.senales_manipulacion_visible)
 
         with self.assertRaises(ErrorValidacionDocumentalIA):
             normalizar_resultado_validacion(
@@ -552,6 +589,32 @@ class AdaptadorOpenAIValidacionDocumentalTests(TestCase):
             normalizar_resultado_validacion(
                 {**self.payload, 'visible_document_number': {'raw': '100'}},
             )
+
+    def test_normalizacion_conserva_compatibilidad_con_esquema_v2(self):
+        payload_v2 = {
+            clave: valor
+            for clave, valor in self.payload.items()
+            if clave not in {
+                'document_type_confidence',
+                'physical_document_capture',
+                'physical_capture_confidence',
+                'visible_tampering_signals',
+                'tampering_confidence',
+                'data_match_confidence',
+                'visual_integrity',
+                'visual_integrity_confidence',
+                'legibility_confidence',
+                'side_confidence',
+            }
+        }
+        payload_v2['appears_real'] = True
+
+        resultado = normalizar_resultado_validacion(payload_v2)
+
+        self.assertEqual(resultado.version_esquema, '2')
+        self.assertTrue(resultado.captura_documento_fisico)
+        self.assertFalse(resultado.senales_manipulacion_visible)
+        self.assertTrue(resultado.integridad_visual)
 
     @override_settings(
         OPENAI_API_KEY='test-key-not-real',
@@ -595,5 +658,17 @@ class AdaptadorOpenAIValidacionDocumentalTests(TestCase):
             self.assertEqual(puntajes[0], 0)
             self.assertEqual(puntajes[-1], 1)
             self.assertIn(0.8, puntajes)
+        for campo in (
+            'document_type_confidence',
+            'side_confidence',
+            'legibility_confidence',
+            'visual_integrity_confidence',
+            'data_match_confidence',
+            'physical_capture_confidence',
+            'tampering_confidence',
+        ):
+            self.assertIn(campo, esquema['properties'])
+        self.assertNotIn('appears_real', esquema['properties'])
         instruccion = llamada['input'][0]['content'][0]['text']
         self.assertIn('ocho sobre diez es 0.80, no 8', instruccion)
+        self.assertIn('No afirmes autenticidad', instruccion)

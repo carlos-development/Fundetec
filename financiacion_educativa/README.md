@@ -258,10 +258,12 @@ La aprobacion visual no cambia las banderas `identidad_verificada` ni
 `relacion_verificada`; estas quedan reservadas para una verificacion fuerte o
 una decision humana que realmente pueda respaldarlas.
 
-Al guardar cada documento, una llamada explicita a `transaction.on_commit`
-programa escaneo e IA cuando la automatizacion esta activa. No hay una signal
-oculta ni se requiere ejecutar comandos en el recorrido normal. Los intentos y
-veredictos quedan auditados; los comandos se conservan para recuperacion.
+Al completar el expediente, el request crea de forma transaccional un proceso
+persistente en `QUEUED`. Un worker educativo independiente reclama una etapa a
+la vez con lease y `select_for_update(skip_locked=True)`. ClamAV, OpenAI,
+WeasyPrint y ZapSign no se ejecutan dentro del worker HTTP ni en callbacks
+`transaction.on_commit`. Los intentos y veredictos quedan auditados; los
+comandos se conservan para operacion, diagnostico y recuperacion.
 
 `POST .../documentacion/completar/` comprueba propiedad, CSRF, terminos,
 participantes y la politica documental unica. Cuando todos los soportes son
@@ -277,8 +279,11 @@ evidencias separadas: frente y reverso. En escritorio solo se ofrece enviar un
 enlace temporal al correo propietario. Los controles de `getUserMedia` se
 renderizan cuando existe un contexto movil consumido, vigente y ligado en
 servidor a usuario, solicitud y participante. La camara solicita
-`facingMode: environment`, no existe selector de archivos y una captura
-confirmada solo se reemplaza mediante confirmacion explicita. El backend exige
+`facingMode: environment` y ofrece un `input` movil con `capture=environment`
+como fallback cuando `getUserMedia` no esta disponible. Antes de confirmar, el
+navegador verifica resolucion minima, iluminacion y desenfoque de forma
+conservadora; no afirma autenticidad. Una captura confirmada solo se reemplaza
+mediante confirmacion explicita. El backend exige
 origen `CAMERA`, admite JPEG o PNG y bloquea la carga convencional para estos
 tipos. En produccion depende de HTTPS, permiso del navegador y una camara
 disponible.
@@ -382,10 +387,12 @@ Los estados publicos institucionales son `RECEIVED`, `ACTION_REQUIRED`,
 `APPROVED` y `course_authorized=true` autoriza activar el curso. No representa
 un desembolso.
 
-Cada decision programa un correo real mediante `transaction.on_commit` y deja
-una entrega auditable con HMAC del destinatario, intentos y codigo seguro de
-fallo. El correo no forma parte de la transaccion contractual: un fallo de
-entrega no revierte ni cambia la decision.
+Cada decision crea una intencion en el outbox educativo dentro de la misma
+transaccion que la decision. Un worker independiente reclama y entrega despues
+del commit, sin SMTP en el request ni en `transaction.on_commit`. Un fallo de
+correo no revierte ni cambia la decision. La semantica, recuperacion y limites
+de SMTP se documentan en
+`docs/interno/operaciones/OUTBOX_CORREOS_EDUCATIVOS.md`.
 
 El backend real de antivirus y el adaptador OpenAI se seleccionan por settings.
 Los dobles incluidos en `tests` estan bloqueados fuera del modo explicito de

@@ -19,6 +19,7 @@ from .models import (
     EntregaCorreoEstadoSolicitud,
     EnlaceCapturaMovil,
     EntregaInvitacionContinuacion,
+    EtapaProcesoAutomatizacionEducativa,
     EvidenciaMatricula,
     EventoInvitacionContinuacion,
     EventoEnlaceCapturaMovil,
@@ -29,6 +30,7 @@ from .models import (
     InvitacionContinuacionSolicitud,
     ParticipanteFinanciacion,
     ProcesoFirmaEducativa,
+    ProcesoAutomatizacionEducativa,
     EventoWebhookFirmaEducativa,
     ReaperturaEscaneoDocumento,
     RegistroIdempotenciaSolicitud,
@@ -1360,6 +1362,58 @@ class EventoSeguridadFinanciacionAdmin(admin.ModelAdmin):
     search_fields = ('solicitud__referencia_externa',)
     readonly_fields = tuple(
         field.name for field in EventoSeguridadFinanciacion._meta.fields
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(ProcesoAutomatizacionEducativa)
+class ProcesoAutomatizacionEducativaAdmin(admin.ModelAdmin):
+    list_display = (
+        'solicitud',
+        'version_expediente',
+        'estado',
+        'etapa_actual',
+        'intento_actual',
+        'actualizada_en',
+    )
+    list_filter = ('estado', 'etapa_actual', 'actualizada_en')
+    search_fields = ('solicitud__referencia_externa',)
+    readonly_fields = tuple(
+        field.name for field in ProcesoAutomatizacionEducativa._meta.fields
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(EtapaProcesoAutomatizacionEducativa)
+class EtapaProcesoAutomatizacionEducativaAdmin(admin.ModelAdmin):
+    list_display = (
+        'proceso',
+        'etapa',
+        'estado',
+        'intento',
+        'codigo_razon',
+        'finalizada_en',
+    )
+    list_filter = ('estado', 'etapa', 'finalizada_en')
+    search_fields = ('proceso__solicitud__referencia_externa',)
+    readonly_fields = tuple(
+        field.name for field in EtapaProcesoAutomatizacionEducativa._meta.fields
     )
 
     def has_add_permission(self, request):

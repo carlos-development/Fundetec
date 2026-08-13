@@ -32,6 +32,7 @@ from financiacion_educativa.services.matricula import (
     registrar_o_actualizar_evidencia_matricula,
     revisar_evidencia_matricula,
 )
+from financiacion_educativa.services.outbox_correos import procesar_siguiente_correo
 from financiacion_educativa.services.terminos import (
     publicar_version_terminos,
 )
@@ -147,6 +148,7 @@ class FlujoIntegralFinanciacionEducativaTests(APITestCase):
                 format='json',
                 **self._headers(),
             )
+        procesar_siguiente_correo()
         enlace = RecordingInvitationDeliveryBackend.deliveries[0][
             'continuation_url'
         ]
@@ -329,6 +331,7 @@ class FlujoIntegralFinanciacionEducativaTests(APITestCase):
                 format='json',
                 **headers,
             )
+        procesar_siguiente_correo()
         enlace = RecordingInvitationDeliveryBackend.deliveries[0][
             'continuation_url'
         ]

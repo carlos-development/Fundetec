@@ -7,12 +7,14 @@ from django.db import transaction
 from django.utils import timezone
 
 from financiacion_educativa.choices import (
+    EtapaAutomatizacionEducativa,
     EstadoEvidenciaMatricula,
     EstadoEscaneoDocumento,
     EstadoProcesoFirmaEducativa,
     EstadoSolicitudFinanciacion,
     EstadoValidacionDocumento,
     EstadoValidacionIADocumento,
+    EstadoProcesoAutomatizacionEducativa,
     OrigenIntentoEscaneoDocumento,
     OrigenValidacionIADocumento,
     TipoDocumentoFinanciacion,
@@ -33,6 +35,7 @@ from financiacion_educativa.services.estados import transicionar_solicitud
 from financiacion_educativa.services.firma_zapsign import (
     FirmaEducativaError,
     enviar_pagare_educativo,
+    marcar_envio_inconcluso_para_conciliacion,
 )
 from financiacion_educativa.services.politica_documental import (
     construir_politica_documental,
@@ -56,6 +59,14 @@ class ResultadoOrquestacionAutomatica:
     solicitud_id: object
     estado: str
     codigo: str
+
+
+@dataclass(frozen=True)
+class SalidaEtapaPersistente:
+    estado: str
+    codigo: str
+    siguiente_etapa: str = ''
+    requisitos_correccion: tuple[str, ...] = ()
 
 
 def _resultado(solicitud, codigo):
@@ -112,49 +123,22 @@ def _registrar_revision_manual_por_formato(documento):
 
 
 @transaction.atomic
-def _aceptar_soporte_matricula_pdf(documento):
+def _marcar_pdf_pendiente_de_procesamiento(documento):
     documento = type(documento).objects.select_for_update().get(pk=documento.pk)
-    if (
-        documento.tipo != TipoDocumentoFinanciacion.ENROLLMENT_EVIDENCE
-        or documento.content_type != 'application/pdf'
-        or documento.estado_escaneo != EstadoEscaneoDocumento.SAFE
-        or not documento.archivo
-        or not documento.sha256
-        or not documento.tamano_bytes
-    ):
-        _registrar_revision_manual_por_formato(documento)
-        return
-    evidencia = EvidenciaMatricula.objects.select_for_update().filter(
-        solicitud=documento.solicitud,
-        documento_soporte=documento,
-    ).first()
-    if not evidencia:
-        _registrar_revision_manual_por_formato(documento)
-        return
-    evidencia.full_clean()
     resumen = dict(documento.resultado_procesamiento or {})
     resumen['automatic_document_policy'] = {
-        'decision': 'AUTO_APPROVED',
-        'reason': 'OPTIONAL_ENROLLMENT_PDF_WITH_DECLARED_DATA_AND_CLEAN_SCAN',
+        'decision': 'MANUAL_EXCEPTION',
+        'reason': 'PDF_CONTENT_PROCESSING_REQUIRED',
         'content_type': documento.content_type,
     }
     documento.resultado_procesamiento = resumen
-    documento.estado_validacion = EstadoValidacionDocumento.APPROVED
-    documento.revisado_por = None
-    documento.revisado_en = timezone.now()
-    documento.motivo_rechazo = ''
     documento.observacion_revision = (
-        'Aceptacion automatica por politica de soporte opcional PDF, '
-        'datos de matricula declarados y escaneo limpio.'
+        'El PDF supero el escaneo de seguridad, pero requiere inspeccion '
+        'de contenido antes de cualquier aceptacion.'
     )
-    documento.full_clean()
     documento.save(
         update_fields=[
             'resultado_procesamiento',
-            'estado_validacion',
-            'revisado_por',
-            'revisado_en',
-            'motivo_rechazo',
             'observacion_revision',
             'actualizado_en',
         ]
@@ -182,7 +166,7 @@ def _procesar_seguridad_e_ia(solicitud):
         if documento.estado_validacion != EstadoValidacionDocumento.PENDING:
             continue
         if not documento_requiere_validacion_visual(documento):
-            _aceptar_soporte_matricula_pdf(documento)
+            _marcar_pdf_pendiente_de_procesamiento(documento)
             continue
         ultima = _ultima_validacion_ia(documento)
         if ultima and ultima.estado == EstadoValidacionIADocumento.MANUAL_REVIEW:
@@ -258,13 +242,17 @@ def procesar_documento_automaticamente_seguro(*, documento_id):
 def programar_procesamiento_documento_automatico(*, documento_id):
     if not settings.FINANCIACION_EDUCATIVA_AUTOMATION_ENABLED:
         return False
-    transaction.on_commit(
-        lambda: procesar_documento_automaticamente_seguro(
-            documento_id=documento_id
-        ),
-        robust=True,
+    documento = DocumentoFinanciacion.objects.filter(pk=documento_id).first()
+    if not documento:
+        return False
+    from financiacion_educativa.services.cola_automatizacion import (
+        encolar_proceso_automatizacion,
     )
-    return True
+
+    proceso, _ = encolar_proceso_automatizacion(
+        solicitud_id=documento.solicitud_id
+    )
+    return proceso is not None
 
 
 def _aceptar_evidencia_matricula_concluyente(solicitud):
@@ -328,6 +316,18 @@ def _aplicar_correccion_por_rechazo_automatico(solicitud):
             'course_authorized': False,
         },
     )
+    from financiacion_educativa.services.outbox_correos import (
+        crear_correo_correccion_automatica,
+    )
+
+    proceso = solicitud.procesos_automatizacion.order_by(
+        '-version_expediente'
+    ).first()
+    crear_correo_correccion_automatica(
+        solicitud=solicitud,
+        proceso_id=(proceso.pk if proceso else f'legacy-{solicitud.actualizada_en.isoformat()}'),
+        requisitos=rechazados,
+    )
     return solicitud, True
 
 
@@ -374,7 +374,14 @@ def _aprobar_expediente_concluyente(solicitud):
             'course_authorized': False,
         },
     )
-    generar_artefactos_contractuales(solicitud=solicitud)
+    from financiacion_educativa.services.outbox_correos import (
+        crear_correo_continuacion_automatica,
+    )
+
+    crear_correo_continuacion_automatica(
+        solicitud=solicitud,
+        fotografia_id=fotografia.pk,
+    )
     return solicitud
 
 
@@ -443,10 +450,201 @@ def ejecutar_orquestacion_automatica_segura(*, solicitud_id):
 def programar_orquestacion_automatica(*, solicitud_id):
     if not settings.FINANCIACION_EDUCATIVA_AUTOMATION_ENABLED:
         return False
-    transaction.on_commit(
-        lambda: ejecutar_orquestacion_automatica_segura(
-            solicitud_id=solicitud_id
-        ),
-        robust=True,
+    from financiacion_educativa.services.cola_automatizacion import (
+        encolar_proceso_automatizacion,
     )
-    return True
+
+    proceso, _ = encolar_proceso_automatizacion(solicitud_id=solicitud_id)
+    return proceso is not None
+
+
+def _salida_continuar(siguiente, codigo):
+    return SalidaEtapaPersistente(
+        estado=EstadoProcesoAutomatizacionEducativa.QUEUED,
+        codigo=codigo,
+        siguiente_etapa=siguiente,
+    )
+
+
+def _etapa_escaneo(solicitud):
+    documentos = _documentos_del_expediente(solicitud)
+    for documento in documentos:
+        if documento.estado_escaneo == EstadoEscaneoDocumento.PENDING_SECURITY_SCAN:
+            procesar_escaneo_documento(
+                documento=documento,
+                origen=OrigenIntentoEscaneoDocumento.AUTOMATIC,
+            )
+    documentos = _documentos_del_expediente(
+        SolicitudFinanciacionEducativa.objects.get(pk=solicitud.pk)
+    )
+    if any(d.estado_escaneo == EstadoEscaneoDocumento.BLOCKED for d in documentos):
+        return SalidaEtapaPersistente(
+            estado=EstadoProcesoAutomatizacionEducativa.MANUAL_EXCEPTION,
+            codigo='MALWARE_DETECTED',
+        )
+    if any(
+        d.estado_escaneo != EstadoEscaneoDocumento.SAFE for d in documentos
+    ):
+        return SalidaEtapaPersistente(
+            estado=EstadoProcesoAutomatizacionEducativa.RETRYING,
+            codigo='SECURITY_SCAN_TEMPORARY_ERROR',
+        )
+    return _salida_continuar(
+        EtapaAutomatizacionEducativa.DOCUMENT_VALIDATION,
+        'SECURITY_SCAN_COMPLETED',
+    )
+
+
+def _etapa_validacion(solicitud):
+    documentos = _documentos_del_expediente(solicitud)
+    hubo_error = False
+    for documento in documentos:
+        if documento.estado_validacion != EstadoValidacionDocumento.PENDING:
+            continue
+        if documento.content_type == 'application/pdf':
+            _marcar_pdf_pendiente_de_procesamiento(documento)
+            continue
+        if not documento_requiere_validacion_visual(documento):
+            continue
+        if documento.content_type not in TIPOS_IMAGEN:
+            _registrar_revision_manual_por_formato(documento)
+            continue
+        ultima = _ultima_validacion_ia(documento)
+        if ultima and ultima.estado in {
+            EstadoValidacionIADocumento.AUTO_APPROVED,
+            EstadoValidacionIADocumento.AUTO_REJECTED,
+            EstadoValidacionIADocumento.MANUAL_REVIEW,
+        }:
+            continue
+        resultado = procesar_validacion_documental_ia(
+            documento=documento,
+            origen=OrigenValidacionIADocumento.AUTOMATIC,
+        )
+        hubo_error = hubo_error or resultado.estado == 'ERROR'
+    if hubo_error:
+        return SalidaEtapaPersistente(
+            estado=EstadoProcesoAutomatizacionEducativa.RETRYING,
+            codigo='DOCUMENT_AI_TEMPORARY_ERROR',
+        )
+    return _salida_continuar(
+        EtapaAutomatizacionEducativa.DECISION,
+        'DOCUMENT_VALIDATION_COMPLETED',
+    )
+
+
+def _requisitos_por_documentos(documentos):
+    return tuple(sorted({documento.tipo for documento in documentos}))
+
+
+def _etapa_decision(solicitud):
+    documentos = _documentos_del_expediente(solicitud)
+    rechazados = [
+        documento
+        for documento in documentos
+        if documento.estado_validacion == EstadoValidacionDocumento.REJECTED
+        and (ultima := _ultima_validacion_ia(documento))
+        and ultima.estado == EstadoValidacionIADocumento.AUTO_REJECTED
+    ]
+    if rechazados:
+        solicitud, _ = _aplicar_correccion_por_rechazo_automatico(solicitud)
+        return SalidaEtapaPersistente(
+            estado=EstadoProcesoAutomatizacionEducativa.CORRECTION_REQUIRED,
+            codigo='DOCUMENT_CORRECTION_REQUIRED',
+            requisitos_correccion=_requisitos_por_documentos(rechazados),
+        )
+    pendientes_pdf = [
+        documento
+        for documento in documentos
+        if documento.content_type == 'application/pdf'
+        and documento.estado_validacion != EstadoValidacionDocumento.APPROVED
+    ]
+    if pendientes_pdf:
+        return SalidaEtapaPersistente(
+            estado=EstadoProcesoAutomatizacionEducativa.MANUAL_EXCEPTION,
+            codigo='PDF_CONTENT_PROCESSING_REQUIRED',
+            requisitos_correccion=_requisitos_por_documentos(pendientes_pdf),
+        )
+    manuales = [
+        documento
+        for documento in documentos
+        if (ultima := _ultima_validacion_ia(documento))
+        and ultima.estado == EstadoValidacionIADocumento.MANUAL_REVIEW
+    ]
+    if manuales:
+        return SalidaEtapaPersistente(
+            estado=EstadoProcesoAutomatizacionEducativa.MANUAL_EXCEPTION,
+            codigo='DOCUMENT_VALIDATION_INCONCLUSIVE',
+            requisitos_correccion=_requisitos_por_documentos(manuales),
+        )
+    if not documentos or any(not _documento_concluyente(d) for d in documentos):
+        return SalidaEtapaPersistente(
+            estado=EstadoProcesoAutomatizacionEducativa.MANUAL_EXCEPTION,
+            codigo='DOCUMENT_RESULT_NOT_CONCLUSIVE',
+        )
+    return _salida_continuar(
+        EtapaAutomatizacionEducativa.FINANCIAL_SNAPSHOT,
+        'AUTOMATIC_DECISION_CONTINUE',
+    )
+
+
+def ejecutar_etapa_persistente(*, solicitud_id, etapa):
+    solicitud = SolicitudFinanciacionEducativa.objects.get(pk=solicitud_id)
+    if etapa == EtapaAutomatizacionEducativa.SECURITY_SCAN:
+        return _etapa_escaneo(solicitud)
+    if etapa == EtapaAutomatizacionEducativa.DOCUMENT_VALIDATION:
+        return _etapa_validacion(solicitud)
+    if etapa == EtapaAutomatizacionEducativa.DECISION:
+        return _etapa_decision(solicitud)
+    if etapa == EtapaAutomatizacionEducativa.FINANCIAL_SNAPSHOT:
+        _aprobar_expediente_concluyente(solicitud)
+        return _salida_continuar(
+            EtapaAutomatizacionEducativa.CONTRACT_GENERATION,
+            'FINANCIAL_SNAPSHOT_LOCKED',
+        )
+    if etapa == EtapaAutomatizacionEducativa.CONTRACT_GENERATION:
+        generar_artefactos_contractuales(solicitud=solicitud)
+        return _salida_continuar(
+            EtapaAutomatizacionEducativa.SIGNATURE_SEND,
+            'CONTRACTS_GENERATED',
+        )
+    if etapa == EtapaAutomatizacionEducativa.SIGNATURE_SEND:
+        proceso_existente = solicitud.procesos_firma.order_by('-creado_en').first()
+        if (
+            proceso_existente
+            and proceso_existente.estado == EstadoProcesoFirmaEducativa.SENDING
+        ):
+            marcar_envio_inconcluso_para_conciliacion(
+                proceso=proceso_existente
+            )
+            return SalidaEtapaPersistente(
+                estado=EstadoProcesoAutomatizacionEducativa.MANUAL_EXCEPTION,
+                codigo='SIGNATURE_SEND_AMBIGUOUS',
+            )
+        if (
+            solicitud.estado == EstadoSolicitudFinanciacion.PENDING_SIGNATURE
+            and proceso_existente
+            and proceso_existente.estado == EstadoProcesoFirmaEducativa.SENT
+        ):
+            return SalidaEtapaPersistente(
+                estado=EstadoProcesoAutomatizacionEducativa.PENDING_SIGNATURE,
+                codigo='PENDING_SIGNATURE',
+                siguiente_etapa=EtapaAutomatizacionEducativa.WAITING_SIGNATURE,
+            )
+        resultado = _continuar_firma(solicitud)
+        if resultado.codigo == 'PENDING_SIGNATURE':
+            return SalidaEtapaPersistente(
+                estado=EstadoProcesoAutomatizacionEducativa.PENDING_SIGNATURE,
+                codigo='PENDING_SIGNATURE',
+                siguiente_etapa=EtapaAutomatizacionEducativa.WAITING_SIGNATURE,
+            )
+        proceso = solicitud.procesos_firma.order_by('-creado_en').first()
+        if proceso and proceso.codigo_ultimo_error == 'SIGNATURE_SEND_AMBIGUOUS':
+            return SalidaEtapaPersistente(
+                estado=EstadoProcesoAutomatizacionEducativa.MANUAL_EXCEPTION,
+                codigo='SIGNATURE_SEND_AMBIGUOUS',
+            )
+        return SalidaEtapaPersistente(
+            estado=EstadoProcesoAutomatizacionEducativa.RETRYING,
+            codigo='SIGNATURE_SEND_RETRY_REQUIRED',
+        )
+    raise ValidationError('La etapa de automatizacion no es valida.')

@@ -47,6 +47,11 @@ urlpatterns = [
         name='estado-solicitud',
     ),
     path(
+        'solicitudes/<uuid:solicitud_id>/procesamiento/estado/',
+        views.estado_procesamiento_view,
+        name='estado-procesamiento',
+    ),
+    path(
         'solicitudes/<uuid:solicitud_id>/siguiente/',
         views.siguiente_paso_view,
         name='siguiente',

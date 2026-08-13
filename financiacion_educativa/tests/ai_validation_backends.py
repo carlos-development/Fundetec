@@ -173,3 +173,38 @@ class BackendIAFallaUnaVez(BackendIAConcluyente):
         if type(self).intentos == 1:
             raise ErrorValidacionDocumentalIA('PROVIDER_TIMEOUT')
         return super().validar(**kwargs)
+
+
+class BackendIANulosConAltaConfianza(BackendIAConcluyente):
+    def validar(self, **kwargs):
+        return ResultadoValidacionDocumentalIA(
+            calidad=Decimal('0.9900'),
+            legibilidad=Decimal('0.9900'),
+            confianza=Decimal('0.9900'),
+            corresponde_tipo=True,
+            indicios_imagen_real=None,
+            datos_consistentes=None,
+            proveedor=self.proveedor,
+            modelo='test-model-v3',
+            decision='ACCEPTED',
+            es_documento_identidad=True,
+            es_documento_colombiano=True,
+            lado_correcto=None,
+            campos_visibles=True,
+            borrosa=False,
+            oscura=False,
+            reflejos=False,
+            recortada=False,
+            obstruida=False,
+            version_esquema='3',
+            captura_documento_fisico=None,
+            senales_manipulacion_visible=None,
+            integridad_visual=True,
+            confianza_tipo_documental=Decimal('0.9900'),
+            confianza_lado=Decimal('0.9900'),
+            confianza_legibilidad=Decimal('0.9900'),
+            confianza_integridad_visual=Decimal('0.9900'),
+            confianza_datos=Decimal('0.9900'),
+            confianza_captura_fisica=Decimal('0.9900'),
+            confianza_manipulacion=Decimal('0.9900'),
+        )

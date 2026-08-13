@@ -55,3 +55,19 @@ class AutomatizacionEducativaChecksTests(SimpleTestCase):
                 'financiacion_educativa.E071',
             },
         )
+
+    @override_settings(
+        FINANCIACION_EDUCATIVA_AUTOMATION_ENABLED=True,
+        FINANCIACION_EDUCATIVA_WORKER_LEASE_SECONDS=0,
+        FINANCIACION_EDUCATIVA_WORKER_MAX_ATTEMPTS=-1,
+        FINANCIACION_EDUCATIVA_WORKER_BACKOFF_BASE_SECONDS=60,
+        FINANCIACION_EDUCATIVA_WORKER_BACKOFF_MAX_SECONDS=30,
+    )
+    def test_parametros_del_worker_deben_ser_positivos_y_acotados(self):
+        self.assertTrue(
+            {
+                'financiacion_educativa.E072',
+                'financiacion_educativa.E073',
+                'financiacion_educativa.E076',
+            }.issubset(self.ids())
+        )

@@ -10,6 +10,13 @@
 - `docs/interno/operaciones/REANUDAR_PROYECTO.md`: reanudacion local segura.
 - `docs/interno/operaciones/MANTENIMIENTO_STAGING.md`: operacion segura de
   staging, correo y credenciales institucionales.
+- `docs/interno/operaciones/GUIA_REVISION_MANUAL_FINANCIACION_EDUCATIVA.md`:
+  procedimiento de contingencia manual; no describe el recorrido automatico
+  definitivo.
+- `docs/interno/operaciones/COLA_AUTOMATIZACION_EDUCATIVA.md`: estados,
+  reintentos y operacion de la cola educativa persistente.
+- `docs/interno/operaciones/OUTBOX_CORREOS_EDUCATIVOS.md`: atomicidad,
+  entrega, conciliacion y operacion de los correos educativos persistentes.
 
 ## Estado y trazabilidad
 

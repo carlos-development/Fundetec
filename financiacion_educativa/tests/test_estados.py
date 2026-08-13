@@ -54,3 +54,29 @@ class TransicionesEstadoTests(TestCase):
         self.solicitud.refresh_from_db()
         self.assertEqual(self.solicitud.estado, Estado.PENDING_USER_REGISTRATION)
         self.assertEqual(self.solicitud.historial_estados.count(), 1)
+
+    def test_revision_manual_no_puede_autorizar_el_curso_directamente(self):
+        self.solicitud.estado = Estado.PENDING_MANUAL_REVIEW
+        self.solicitud.save(update_fields=['estado'])
+
+        with self.assertRaises(ValidationError):
+            transicionar_solicitud(
+                solicitud=self.solicitud,
+                nuevo_estado=Estado.APPROVED,
+            )
+
+        self.solicitud.refresh_from_db()
+        self.assertEqual(self.solicitud.estado, Estado.PENDING_MANUAL_REVIEW)
+
+    def test_pendiente_de_firma_no_puede_convertirse_en_credito_activo(self):
+        self.solicitud.estado = Estado.PENDING_SIGNATURE
+        self.solicitud.save(update_fields=['estado'])
+
+        with self.assertRaises(ValidationError):
+            transicionar_solicitud(
+                solicitud=self.solicitud,
+                nuevo_estado=Estado.ACTIVE,
+            )
+
+        self.solicitud.refresh_from_db()
+        self.assertEqual(self.solicitud.estado, Estado.PENDING_SIGNATURE)

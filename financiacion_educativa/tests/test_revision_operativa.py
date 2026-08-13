@@ -1,5 +1,6 @@
 from datetime import date
 from tempfile import TemporaryDirectory
+from unittest import mock
 
 from django.contrib.auth import get_user_model
 from django.core import mail
@@ -12,6 +13,7 @@ from django.utils import timezone
 from financiacion_educativa.choices import (
     EstadoEnlaceCapturaMovil,
     EstadoEntregaCorreoSolicitud,
+    EstadoOutboxCorreoEducativo,
     EstadoEscaneoDocumento,
     EstadoEvidenciaMatricula,
     EstadoSolicitudFinanciacion,
@@ -34,6 +36,7 @@ from financiacion_educativa.models import (
     Consentimiento,
     DecisionRevisionEducativa,
     EntregaCorreoEstadoSolicitud,
+    OutboxCorreoEducativo,
     ProcesoFirmaEducativa,
     VersionTerminosFinanciacion,
 )
@@ -54,6 +57,7 @@ from financiacion_educativa.services.participantes import (
     registrar_o_actualizar_participante,
 )
 from financiacion_educativa.services.revision import decidir_solicitud
+from financiacion_educativa.services.outbox_correos import procesar_siguiente_correo
 from financiacion_educativa.services.firma_zapsign import (
     enviar_pagare_educativo,
 )
@@ -81,6 +85,7 @@ def jpeg(nombre, marca):
 
 
 @override_settings(
+    DEBUG=True,
     EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
     FINANCIACION_EDUCATIVA_ACREEDOR_RAZON_SOCIAL=(
         'APROBADO SOLUCIONES DIGITALES S.A.S.'
@@ -232,22 +237,24 @@ class RevisionOperativaTests(TestCase):
         )
         self.solicitud.save(update_fields=['estado'])
 
-    def _decidir(self, tipo, motivo, mensaje=''):
+    def _decidir(self, tipo, motivo, mensaje='', *, procesar_correo=True):
         requisitos = (
             [RequisitoCorreccionEducativa.STUDENT_ID_FRONT]
             if tipo == TipoDecisionRevisionEducativa.CORRECTION_REQUESTED
             else []
         )
-        with self.captureOnCommitCallbacks(execute=True):
-            return decidir_solicitud(
-                solicitud=self.solicitud,
-                actor=self.revisor,
-                tipo=tipo,
-                motivo=motivo,
-                mensaje_solicitante=mensaje,
-                observacion_interna='Nota interna que no debe salir por API.',
-                requisitos_pendientes=requisitos,
-            )
+        decision = decidir_solicitud(
+            solicitud=self.solicitud,
+            actor=self.revisor,
+            tipo=tipo,
+            motivo=motivo,
+            mensaje_solicitante=mensaje,
+            observacion_interna='Nota interna que no debe salir por API.',
+            requisitos_pendientes=requisitos,
+        )
+        if procesar_correo:
+            procesar_siguiente_correo()
+        return decision
 
     def test_aprobacion_bloquea_fotografia_y_genera_contratos(self):
         self.assertFalse(
@@ -354,8 +361,34 @@ class RevisionOperativaTests(TestCase):
         self.assertEqual(entrega.estado, EstadoEntregaCorreoSolicitud.FAILED)
         self.assertEqual(
             entrega.codigo_ultimo_error,
-            'DELIVERY_BACKEND_ERROR',
+            'SMTP_DELIVERY_AMBIGUOUS',
         )
+        self.assertEqual(
+            OutboxCorreoEducativo.objects.get(decision=decision).estado,
+            EstadoOutboxCorreoEducativo.AMBIGUOUS,
+        )
+
+    def test_fallo_al_crear_outbox_revierte_decision_y_transicion(self):
+        with mock.patch(
+            'financiacion_educativa.services.revision.crear_correo_decision',
+            side_effect=RuntimeError('fallo controlado'),
+        ):
+            with self.assertRaises(RuntimeError):
+                self._decidir(
+                    TipoDecisionRevisionEducativa.CORRECTION_REQUESTED,
+                    MotivoDecisionRevisionEducativa.UNREADABLE_DOCUMENT,
+                    'Repite la captura frontal.',
+                    procesar_correo=False,
+                )
+
+        self.solicitud.refresh_from_db()
+        self.assertEqual(
+            self.solicitud.estado,
+            EstadoSolicitudFinanciacion.PENDING_MANUAL_REVIEW,
+        )
+        self.assertFalse(DecisionRevisionEducativa.objects.exists())
+        self.assertFalse(EntregaCorreoEstadoSolicitud.objects.exists())
+        self.assertFalse(OutboxCorreoEducativo.objects.exists())
 
     def test_correccion_reabre_expediente_sin_exponer_nota_interna(self):
         decision = self._decidir(

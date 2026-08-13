@@ -473,4 +473,97 @@ def check_educational_automation_configuration(app_configs, **kwargs):
                     identifier,
                 )
             )
+    parametros_worker = (
+        ('FINANCIACION_EDUCATIVA_WORKER_LEASE_SECONDS', 'E072'),
+        ('FINANCIACION_EDUCATIVA_WORKER_MAX_ATTEMPTS', 'E073'),
+        ('FINANCIACION_EDUCATIVA_WORKER_BACKOFF_BASE_SECONDS', 'E074'),
+        ('FINANCIACION_EDUCATIVA_WORKER_BACKOFF_MAX_SECONDS', 'E075'),
+    )
+    for nombre, identifier in parametros_worker:
+        valor = getattr(settings, nombre, 0)
+        if not isinstance(valor, int) or isinstance(valor, bool) or valor <= 0:
+            errors.append(
+                _error(
+                    f'{nombre} debe ser un entero positivo.',
+                    identifier,
+                )
+            )
+    if (
+        getattr(
+            settings,
+            'FINANCIACION_EDUCATIVA_WORKER_BACKOFF_BASE_SECONDS',
+            0,
+        )
+        > getattr(
+            settings,
+            'FINANCIACION_EDUCATIVA_WORKER_BACKOFF_MAX_SECONDS',
+            0,
+        )
+    ):
+        errors.append(
+            _error(
+                'El backoff base no puede superar el backoff maximo.',
+                'E076',
+            )
+        )
+    if (
+        getattr(settings, 'DEPLOYMENT_ENVIRONMENT', 'local')
+        in {'staging', 'production'}
+        and 'postgresql' not in str(
+            settings.DATABASES.get('default', {}).get('ENGINE', '')
+        )
+    ):
+        errors.append(
+            _error(
+                'La cola educativa requiere PostgreSQL fuera del entorno local.',
+                'E077',
+            )
+        )
+    return errors
+
+
+@register()
+def check_educational_email_outbox_configuration(app_configs, **kwargs):
+    errors = []
+    parametros = (
+        ('FINANCIACION_EDUCATIVA_EMAIL_OUTBOX_LEASE_SECONDS', 'E084'),
+        ('FINANCIACION_EDUCATIVA_EMAIL_OUTBOX_MAX_ATTEMPTS', 'E085'),
+        ('FINANCIACION_EDUCATIVA_EMAIL_OUTBOX_BACKOFF_BASE_SECONDS', 'E086'),
+        ('FINANCIACION_EDUCATIVA_EMAIL_OUTBOX_BACKOFF_MAX_SECONDS', 'E087'),
+    )
+    for nombre, identifier in parametros:
+        valor = getattr(settings, nombre, 0)
+        if isinstance(valor, bool) or not isinstance(valor, int) or valor <= 0:
+            errors.append(
+                _error(f'{nombre} debe ser un entero positivo.', identifier)
+            )
+    base = getattr(
+        settings,
+        'FINANCIACION_EDUCATIVA_EMAIL_OUTBOX_BACKOFF_BASE_SECONDS',
+        0,
+    )
+    maximo = getattr(
+        settings,
+        'FINANCIACION_EDUCATIVA_EMAIL_OUTBOX_BACKOFF_MAX_SECONDS',
+        0,
+    )
+    if isinstance(base, int) and isinstance(maximo, int) and base > maximo:
+        errors.append(_error('El backoff de correo no es valido.', 'E088'))
+    lease = getattr(
+        settings,
+        'FINANCIACION_EDUCATIVA_EMAIL_OUTBOX_LEASE_SECONDS',
+        0,
+    )
+    timeout = getattr(settings, 'EMAIL_TIMEOUT', 0)
+    if (
+        isinstance(lease, int)
+        and isinstance(timeout, (int, float))
+        and lease <= timeout
+    ):
+        errors.append(
+            _error(
+                'El lease del outbox debe superar el timeout SMTP.',
+                'E089',
+            )
+        )
     return errors

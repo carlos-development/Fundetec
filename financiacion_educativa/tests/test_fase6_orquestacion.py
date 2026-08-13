@@ -17,6 +17,7 @@ from rest_framework.test import APITestCase
 from financiacion_educativa.choices import (
     EstadoEntregaInvitacion,
     EstadoInvitacionContinuacion,
+    EstadoOutboxCorreoEducativo,
     EstadoSolicitudFinanciacion,
     OrigenEntregaInvitacion,
     TipoConsentimiento,
@@ -26,6 +27,7 @@ from financiacion_educativa.models import (
     EntregaInvitacionContinuacion,
     EventoInvitacionContinuacion,
     InvitacionContinuacionSolicitud,
+    OutboxCorreoEducativo,
     RegistroIdempotenciaSolicitud,
     SolicitudFinanciacionEducativa,
     VersionTerminosFinanciacion,
@@ -42,6 +44,9 @@ from financiacion_educativa.services.invitaciones import (
 from financiacion_educativa.services.orquestacion import (
     programar_invitacion_inicial,
     reemitir_invitacion_orquestada,
+)
+from financiacion_educativa.services.outbox_correos import (
+    procesar_siguiente_correo,
 )
 from financiacion_educativa.services.solicitudes import (
     DatosSolicitudFinanciacion,
@@ -108,26 +113,41 @@ class OrquestacionInvitacionFase6Tests(APITestCase):
         )
         self.url = reverse('financiacion_educativa_api:solicitud-crear')
 
-    def _crear(self, *, clave='fase6-idem-001', payload=None):
-        return self.client.post(
+    def _crear(self, *, clave='fase6-idem-001', payload=None, procesar=True):
+        respuesta = self.client.post(
             self.url,
             data=payload or deepcopy(PAYLOAD),
             format='json',
             HTTP_AUTHORIZATION=f'ApiKey {self.credencial.token}',
             HTTP_IDEMPOTENCY_KEY=clave,
         )
+        if procesar:
+            procesar_siguiente_correo()
+        return respuesta
 
     @override_settings(
         FINANCIACION_EDUCATIVA_INVITATION_DELIVERY_BACKEND=BACKEND_FALLA,
     )
-    def test_fallo_del_callback_no_cambia_respuesta_202(self):
-        with self.captureOnCommitCallbacks(execute=True):
-            respuesta = self._crear()
+    def test_fallo_del_worker_no_cambia_respuesta_202(self):
+        respuesta = self._crear(procesar=False)
 
         self.assertEqual(respuesta.status_code, status.HTTP_202_ACCEPTED)
+        self.assertEqual(
+            OutboxCorreoEducativo.objects.get().estado,
+            EstadoOutboxCorreoEducativo.PENDING,
+        )
+        procesar_siguiente_correo()
+
         entrega = EntregaInvitacionContinuacion.objects.get()
         self.assertEqual(entrega.estado, EstadoEntregaInvitacion.FAILED)
-        self.assertEqual(entrega.codigo_ultimo_error, 'DELIVERY_BACKEND_ERROR')
+        self.assertEqual(
+            entrega.codigo_ultimo_error,
+            'SMTP_DELIVERY_AMBIGUOUS',
+        )
+        self.assertEqual(
+            OutboxCorreoEducativo.objects.get().estado,
+            EstadoOutboxCorreoEducativo.AMBIGUOUS,
+        )
         self.assertEqual(len(FailingInvitationDeliveryBackend.deliveries), 1)
 
     @override_settings(
@@ -163,7 +183,7 @@ class OrquestacionInvitacionFase6Tests(APITestCase):
         )
         self.assertEqual(segunda['Idempotent-Replayed'], 'true')
         self.assertEqual(SolicitudFinanciacionEducativa.objects.count(), 1)
-        self.assertEqual(InvitacionContinuacionSolicitud.objects.count(), 1)
+        self.assertEqual(InvitacionContinuacionSolicitud.objects.count(), 2)
         self.assertEqual(EntregaInvitacionContinuacion.objects.count(), 1)
         self.assertEqual(len(RecordingInvitationDeliveryBackend.deliveries), 1)
 
@@ -187,6 +207,7 @@ class OrquestacionInvitacionFase6Tests(APITestCase):
                     'procesar_entregas_invitacion',
                     stdout=StringIO(),
                 )
+            procesar_siguiente_correo()
 
         entregas = list(
             EntregaInvitacionContinuacion.objects.order_by('secuencia')
@@ -284,15 +305,16 @@ class OrquestacionInvitacionFase6Tests(APITestCase):
             'contenido',
         }.intersection(nombres_campos))
 
-    def test_representacion_del_callback_no_contiene_destinatario_ni_url(self):
+    def test_request_no_programa_callback_ni_persiste_url_o_token(self):
         with self.captureOnCommitCallbacks(execute=False) as callbacks:
-            self._crear()
+            self._crear(procesar=False)
 
-        self.assertEqual(len(callbacks), 1)
-        representacion = repr(callbacks[0])
-        self.assertNotIn(PAYLOAD['email'], representacion)
+        self.assertEqual(callbacks, [])
+        outbox = OutboxCorreoEducativo.objects.get()
+        representacion = repr(outbox.contexto)
         self.assertNotIn('credito.example.com', representacion)
         self.assertNotIn('/continuar/', representacion)
+        self.assertNotIn('token', representacion.lower())
 
     def test_solicitud_preexistente_no_se_procesa_al_repetir_api(self):
         datos = DatosSolicitudFinanciacion(
@@ -321,6 +343,7 @@ class OrquestacionInvitacionFase6Tests(APITestCase):
         self.assertEqual(respuesta['Idempotent-Replayed'], 'true')
         self.assertFalse(InvitacionContinuacionSolicitud.objects.exists())
         self.assertFalse(EntregaInvitacionContinuacion.objects.exists())
+        self.assertFalse(OutboxCorreoEducativo.objects.exists())
         self.assertFalse(RecordingInvitationDeliveryBackend.deliveries)
 
     def test_recorrido_api_registro_asociacion_y_terminos(self):
@@ -361,7 +384,8 @@ class OrquestacionInvitacionFase6Tests(APITestCase):
 
         solicitud.refresh_from_db()
         invitacion = InvitacionContinuacionSolicitud.objects.get(
-            solicitud=solicitud
+            solicitud=solicitud,
+            estado=EstadoInvitacionContinuacion.CONSUMED,
         )
         self.assertEqual(respuesta_api.status_code, status.HTTP_202_ACCEPTED)
         self.assertEqual(inicio.status_code, status.HTTP_302_FOUND)

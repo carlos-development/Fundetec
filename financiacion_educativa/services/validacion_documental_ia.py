@@ -46,7 +46,14 @@ HALLAZGOS_PERMITIDOS = frozenset({
     'MISSING_VISIBLE_FIELDS',
     'TYPE_MISMATCH',
     'POSSIBLY_NOT_REAL',
+    'VISIBLE_TAMPERING_SIGNALS',
     'DATA_MISMATCH',
+    'DOCUMENT_TYPE_INCONCLUSIVE',
+    'SIDE_INCONCLUSIVE',
+    'VISUAL_INTEGRITY_INCONCLUSIVE',
+    'DATA_CONSISTENCY_INCONCLUSIVE',
+    'PHYSICAL_CAPTURE_INCONCLUSIVE',
+    'TAMPERING_ASSESSMENT_INCONCLUSIVE',
     'INCONCLUSIVE',
 })
 DECISIONES_MODELO = frozenset({'ACCEPTED', 'REJECTED', 'MANUAL_REVIEW'})
@@ -98,6 +105,17 @@ class ResultadoValidacionDocumentalIA:
     tipo_documento_visible: str = ''
     numero_documento_visible: str = ''
     nombres_visibles: tuple[str, ...] = ()
+    version_esquema: str = '2'
+    captura_documento_fisico: bool | None = None
+    senales_manipulacion_visible: bool | None = None
+    integridad_visual: bool | None = None
+    confianza_tipo_documental: Decimal | None = None
+    confianza_lado: Decimal | None = None
+    confianza_legibilidad: Decimal | None = None
+    confianza_integridad_visual: Decimal | None = None
+    confianza_datos: Decimal | None = None
+    confianza_captura_fisica: Decimal | None = None
+    confianza_manipulacion: Decimal | None = None
 
 
 @dataclass(frozen=True)
@@ -146,6 +164,10 @@ class OpenAIDocumentAIValidationBackend:
                                 'text': (
                                     'Evalua solo evidencia visual. No afirmes autenticidad '
                                     'fisica, presencia, liveness ni consultas oficiales. '
+                                    'physical_document_capture solo describe si la imagen '
+                                    'parece una captura de un soporte fisico; '
+                                    'visible_tampering_signals solo registra senales '
+                                    'visibles y tampoco certifica autenticidad. '
                                     'Para identificaciones, comprueba si muestra una '
                                     'identificacion colombiana y el lado solicitado. Para '
                                     'otros tipos, evalua solo el tipo documental indicado. '
@@ -216,13 +238,22 @@ def _esquema_respuesta():
             'legibility_score',
             'confidence',
             'document_type_match',
-            'appears_real',
+            'document_type_confidence',
+            'physical_document_capture',
+            'physical_capture_confidence',
+            'visible_tampering_signals',
+            'tampering_confidence',
             'data_consistent',
+            'data_match_confidence',
+            'visual_integrity',
+            'visual_integrity_confidence',
+            'legibility_confidence',
             'finding_codes',
             'decision',
             'is_identity_document',
             'is_colombian_document',
             'side_matches',
+            'side_confidence',
             'required_fields_visible',
             'is_blurred',
             'is_too_dark',
@@ -248,8 +279,34 @@ def _esquema_respuesta():
                 'enum': PUNTAJES_RESPUESTA_PERMITIDOS,
             },
             'document_type_match': {'type': ['boolean', 'null']},
-            'appears_real': {'type': ['boolean', 'null']},
+            'document_type_confidence': {
+                'type': 'number',
+                'enum': PUNTAJES_RESPUESTA_PERMITIDOS,
+            },
+            'physical_document_capture': {'type': ['boolean', 'null']},
+            'physical_capture_confidence': {
+                'type': 'number',
+                'enum': PUNTAJES_RESPUESTA_PERMITIDOS,
+            },
+            'visible_tampering_signals': {'type': ['boolean', 'null']},
+            'tampering_confidence': {
+                'type': 'number',
+                'enum': PUNTAJES_RESPUESTA_PERMITIDOS,
+            },
             'data_consistent': {'type': ['boolean', 'null']},
+            'data_match_confidence': {
+                'type': 'number',
+                'enum': PUNTAJES_RESPUESTA_PERMITIDOS,
+            },
+            'visual_integrity': {'type': ['boolean', 'null']},
+            'visual_integrity_confidence': {
+                'type': 'number',
+                'enum': PUNTAJES_RESPUESTA_PERMITIDOS,
+            },
+            'legibility_confidence': {
+                'type': 'number',
+                'enum': PUNTAJES_RESPUESTA_PERMITIDOS,
+            },
             'finding_codes': {
                 'type': 'array',
                 'items': {'type': 'string', 'enum': sorted(HALLAZGOS_PERMITIDOS)},
@@ -258,6 +315,10 @@ def _esquema_respuesta():
             'is_identity_document': {'type': ['boolean', 'null']},
             'is_colombian_document': {'type': ['boolean', 'null']},
             'side_matches': {'type': ['boolean', 'null']},
+            'side_confidence': {
+                'type': 'number',
+                'enum': PUNTAJES_RESPUESTA_PERMITIDOS,
+            },
             'required_fields_visible': {'type': ['boolean', 'null']},
             'is_blurred': {'type': ['boolean', 'null']},
             'is_too_dark': {'type': ['boolean', 'null']},
@@ -310,7 +371,7 @@ def _booleano_nullable(valor):
 def normalizar_resultado_validacion(payload, *, proveedor='', modelo=''):
     if not isinstance(payload, dict):
         raise ErrorValidacionDocumentalIA('INVALID_RESPONSE')
-    required = {
+    required_v2 = {
         'quality_score',
         'legibility_score',
         'confidence',
@@ -333,9 +394,26 @@ def normalizar_resultado_validacion(payload, *, proveedor='', modelo=''):
         'visible_document_number',
         'visible_names',
     }
+    required_v3 = (required_v2 - {'appears_real'}) | {
+        'document_type_confidence',
+        'physical_document_capture',
+        'physical_capture_confidence',
+        'visible_tampering_signals',
+        'tampering_confidence',
+        'data_match_confidence',
+        'visual_integrity',
+        'visual_integrity_confidence',
+        'legibility_confidence',
+        'side_confidence',
+    }
+    if set(payload) == required_v3:
+        version_esquema = '3'
+    elif set(payload) == required_v2:
+        version_esquema = '2'
+    else:
+        raise ErrorValidacionDocumentalIA('INVALID_RESPONSE')
     if (
-        set(payload) != required
-        or not isinstance(payload['finding_codes'], list)
+        not isinstance(payload['finding_codes'], list)
         or not isinstance(payload['reason_codes'], list)
         or not isinstance(payload['visible_names'], list)
         or len(payload['visible_names']) > 8
@@ -365,12 +443,39 @@ def normalizar_resultado_validacion(payload, *, proveedor='', modelo=''):
     ))
     if any(code not in HALLAZGOS_PERMITIDOS for code in hallazgos):
         raise ErrorValidacionDocumentalIA('INVALID_RESPONSE')
+    confianza = _puntaje(payload['confidence'], 'confidence')
+    captura_fisica = _booleano_nullable(
+        payload[
+            'physical_document_capture'
+            if version_esquema == '3'
+            else 'appears_real'
+        ]
+    )
+    defectos_visuales = [
+        _booleano_nullable(payload[campo])
+        for campo in (
+            'is_blurred',
+            'is_too_dark',
+            'has_glare',
+            'is_cropped',
+            'is_obstructed',
+        )
+    ]
+    integridad_visual = (
+        _booleano_nullable(payload['visual_integrity'])
+        if version_esquema == '3'
+        else (
+            not any(defectos_visuales)
+            if all(valor is not None for valor in defectos_visuales)
+            else None
+        )
+    )
     return ResultadoValidacionDocumentalIA(
         calidad=_puntaje(payload['quality_score'], 'quality_score'),
         legibilidad=_puntaje(payload['legibility_score'], 'legibility_score'),
-        confianza=_puntaje(payload['confidence'], 'confidence'),
+        confianza=confianza,
         corresponde_tipo=_booleano_nullable(payload['document_type_match']),
-        indicios_imagen_real=_booleano_nullable(payload['appears_real']),
+        indicios_imagen_real=captura_fisica,
         datos_consistentes=_booleano_nullable(payload['data_consistent']),
         hallazgos=hallazgos,
         proveedor=_texto_controlado(proveedor, 60),
@@ -398,6 +503,68 @@ def normalizar_resultado_validacion(payload, *, proveedor='', modelo=''):
             _dato_visible(nombre, 100)
             for nombre in payload['visible_names']
             if _dato_visible(nombre, 100)
+        ),
+        version_esquema=version_esquema,
+        captura_documento_fisico=captura_fisica,
+        senales_manipulacion_visible=(
+            _booleano_nullable(payload['visible_tampering_signals'])
+            if version_esquema == '3'
+            else (
+                True
+                if 'POSSIBLY_NOT_REAL' in hallazgos
+                else False if captura_fisica is True else None
+            )
+        ),
+        integridad_visual=integridad_visual,
+        confianza_tipo_documental=(
+            _puntaje(
+                payload['document_type_confidence'],
+                'document_type_confidence',
+            )
+            if version_esquema == '3'
+            else confianza
+        ),
+        confianza_lado=(
+            _puntaje(payload['side_confidence'], 'side_confidence')
+            if version_esquema == '3'
+            else confianza
+        ),
+        confianza_legibilidad=(
+            _puntaje(
+                payload['legibility_confidence'],
+                'legibility_confidence',
+            )
+            if version_esquema == '3'
+            else confianza
+        ),
+        confianza_integridad_visual=(
+            _puntaje(
+                payload['visual_integrity_confidence'],
+                'visual_integrity_confidence',
+            )
+            if version_esquema == '3'
+            else confianza
+        ),
+        confianza_datos=(
+            _puntaje(payload['data_match_confidence'], 'data_match_confidence')
+            if version_esquema == '3'
+            else confianza
+        ),
+        confianza_captura_fisica=(
+            _puntaje(
+                payload['physical_capture_confidence'],
+                'physical_capture_confidence',
+            )
+            if version_esquema == '3'
+            else confianza
+        ),
+        confianza_manipulacion=(
+            _puntaje(
+                payload['tampering_confidence'],
+                'tampering_confidence',
+            )
+            if version_esquema == '3'
+            else confianza
         ),
     )
 
@@ -539,23 +706,94 @@ def _decision_modelo(resultado):
     return 'ACCEPTED' if not resultado.hallazgos else 'MANUAL_REVIEW'
 
 
+def _confianza_dimension(resultado, atributo):
+    return getattr(resultado, atributo, None) or resultado.confianza
+
+
+def _captura_fisica(resultado):
+    if resultado.captura_documento_fisico is not None:
+        return resultado.captura_documento_fisico
+    if resultado.version_esquema == '2':
+        return resultado.indicios_imagen_real
+    return None
+
+
+def _senales_manipulacion(resultado):
+    if resultado.senales_manipulacion_visible is not None:
+        return resultado.senales_manipulacion_visible
+    if resultado.version_esquema == '2':
+        if 'POSSIBLY_NOT_REAL' in resultado.hallazgos:
+            return True
+        if resultado.indicios_imagen_real is True:
+            return False
+    return None
+
+
+def _integridad_visual(resultado):
+    if resultado.integridad_visual is not None:
+        return resultado.integridad_visual
+    defectos = (
+        resultado.borrosa,
+        resultado.oscura,
+        resultado.reflejos,
+        resultado.recortada,
+        resultado.obstruida,
+    )
+    if resultado.version_esquema == '2' and all(
+        valor is not None for valor in defectos
+    ):
+        return not any(defectos)
+    return None
+
+
+def _razones_inconclusas(resultado, *, requiere_identidad):
+    razones = []
+    if resultado.corresponde_tipo is None:
+        razones.append('DOCUMENT_TYPE_INCONCLUSIVE')
+    if resultado.datos_consistentes is None:
+        razones.append('DATA_CONSISTENCY_INCONCLUSIVE')
+    if _integridad_visual(resultado) is None:
+        razones.append('VISUAL_INTEGRITY_INCONCLUSIVE')
+    if _senales_manipulacion(resultado) is None:
+        razones.append('TAMPERING_ASSESSMENT_INCONCLUSIVE')
+    if requiere_identidad:
+        if resultado.lado_correcto is None:
+            razones.append('SIDE_INCONCLUSIVE')
+        if _captura_fisica(resultado) is None:
+            razones.append('PHYSICAL_CAPTURE_INCONCLUSIVE')
+    return razones
+
+
 def _es_concluyente(
     resultado,
     *,
     requiere_identidad=False,
     requiere_documento_colombiano=False,
 ):
+    confianza_minima = Decimal(
+        settings.FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_CONFIDENCE
+    )
     concluyente = bool(
         _decision_modelo(resultado) == 'ACCEPTED'
-        and resultado.confianza
-        >= Decimal(settings.FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_CONFIDENCE)
+        and resultado.confianza >= confianza_minima
         and resultado.calidad
         >= Decimal(settings.FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_QUALITY)
         and resultado.legibilidad
         >= Decimal(settings.FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_LEGIBILITY)
+        and _confianza_dimension(resultado, 'confianza_tipo_documental')
+        >= confianza_minima
+        and _confianza_dimension(resultado, 'confianza_legibilidad')
+        >= confianza_minima
+        and _confianza_dimension(resultado, 'confianza_integridad_visual')
+        >= confianza_minima
+        and _confianza_dimension(resultado, 'confianza_datos')
+        >= confianza_minima
+        and _confianza_dimension(resultado, 'confianza_manipulacion')
+        >= confianza_minima
         and resultado.corresponde_tipo is True
-        and resultado.indicios_imagen_real is True
         and resultado.datos_consistentes is True
+        and _integridad_visual(resultado) is True
+        and _senales_manipulacion(resultado) is False
         and not resultado.hallazgos
     )
     if not concluyente or not requiere_identidad:
@@ -567,6 +805,11 @@ def _es_concluyente(
             or resultado.es_documento_colombiano is True
         )
         and resultado.lado_correcto is True
+        and _captura_fisica(resultado) is True
+        and _confianza_dimension(resultado, 'confianza_lado')
+        >= confianza_minima
+        and _confianza_dimension(resultado, 'confianza_captura_fisica')
+        >= confianza_minima
         and resultado.campos_visibles is True
         and resultado.borrosa is False
         and resultado.oscura is False
@@ -604,12 +847,43 @@ def _es_rechazo_concluyente(resultado, *, documento):
 
 def _resultado_estructurado(resultado):
     return {
-        'schema_version': '2',
+        'schema_version': resultado.version_esquema,
         'decision': _decision_modelo(resultado),
         'is_identity_document': resultado.es_documento_identidad,
         'is_colombian_document': resultado.es_documento_colombiano,
         'side_matches': resultado.lado_correcto,
+        'side_confidence': format(
+            _confianza_dimension(resultado, 'confianza_lado'),
+            'f',
+        ),
         'required_fields_visible': resultado.campos_visibles,
+        'visual_integrity': _integridad_visual(resultado),
+        'visual_integrity_confidence': format(
+            _confianza_dimension(resultado, 'confianza_integridad_visual'),
+            'f',
+        ),
+        'physical_document_capture': _captura_fisica(resultado),
+        'physical_capture_confidence': format(
+            _confianza_dimension(resultado, 'confianza_captura_fisica'),
+            'f',
+        ),
+        'visible_tampering_signals': _senales_manipulacion(resultado),
+        'tampering_confidence': format(
+            _confianza_dimension(resultado, 'confianza_manipulacion'),
+            'f',
+        ),
+        'document_type_confidence': format(
+            _confianza_dimension(resultado, 'confianza_tipo_documental'),
+            'f',
+        ),
+        'legibility_confidence': format(
+            _confianza_dimension(resultado, 'confianza_legibilidad'),
+            'f',
+        ),
+        'data_match_confidence': format(
+            _confianza_dimension(resultado, 'confianza_datos'),
+            'f',
+        ),
         'is_blurred': resultado.borrosa,
         'is_too_dark': resultado.oscura,
         'has_glare': resultado.reflejos,
@@ -667,6 +941,12 @@ def _finalizar_validacion(*, validacion_id, resultado=None, codigo_error=''):
         else:
             estado = EstadoValidacionIADocumento.MANUAL_REVIEW
         hallazgos = list(resultado.hallazgos)
+        for razon in _razones_inconclusas(
+            resultado,
+            requiere_identidad=documento.tipo in TIPOS_IDENTIDAD,
+        ):
+            if razon not in hallazgos:
+                hallazgos.append(razon)
         if not concluyente and not hallazgos:
             hallazgos = ['INCONCLUSIVE']
         valores.update(
@@ -674,6 +954,7 @@ def _finalizar_validacion(*, validacion_id, resultado=None, codigo_error=''):
             codigo_error='',
             proveedor=resultado.proveedor,
             modelo=resultado.modelo,
+            version_esquema=resultado.version_esquema,
             calidad=resultado.calidad,
             legibilidad=resultado.legibilidad,
             confianza=resultado.confianza,
@@ -692,7 +973,10 @@ def _finalizar_validacion(*, validacion_id, resultado=None, codigo_error=''):
             'legibility': format(resultado.legibilidad, 'f'),
             'confidence': format(resultado.confianza, 'f'),
             'document_type_match': resultado.corresponde_tipo,
-            'appears_real': resultado.indicios_imagen_real,
+            'physical_document_capture': _captura_fisica(resultado),
+            'visible_tampering_signals': (
+                _senales_manipulacion(resultado)
+            ),
             'data_consistent': resultado.datos_consistentes,
             'finding_codes': hallazgos,
             'structured_result': _resultado_estructurado(resultado),
