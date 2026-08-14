@@ -31,6 +31,7 @@ from .choices import (
     EstadoInvitacionContinuacion,
     EstadoIntentoEscaneoDocumento,
     EstadoValidacionIADocumento,
+    EstadoProcesamientoContenidoDocumento,
     EstadoVersionTerminos,
     EstadoArtefactoContractualEducativo,
     EstadoProcesoFirmaEducativa,
@@ -38,6 +39,8 @@ from .choices import (
     EstadoProcesoAutomatizacionEducativa,
     EtapaAutomatizacionEducativa,
     CodigoRazonAutomatizacionEducativa,
+    CategoriaContenidoDocumento,
+    MetodoExtraccionContenido,
     MetodoCalculoFinanciero,
     MotivoRechazoDocumento,
     OrigenEntregaInvitacion,
@@ -1532,6 +1535,161 @@ class ValidacionIADocumento(models.Model):
 
     def __str__(self):
         return f'{self.documento_id} - validacion IA {self.numero}'
+
+
+class ProcesamientoContenidoDocumentoQuerySet(models.QuerySet):
+    def update(self, **kwargs):
+        raise ValidationError(
+            'La traza de contenido solo puede finalizarla el servicio oficial.'
+        )
+
+    def bulk_update(self, objs, fields, batch_size=None):
+        raise ValidationError(
+            'La traza de contenido no admite actualizaciones masivas.'
+        )
+
+    def bulk_create(self, objs, batch_size=None, ignore_conflicts=False,
+                    update_conflicts=False, update_fields=None,
+                    unique_fields=None):
+        objetos = list(objs)
+        if any(
+            obj.estado != EstadoProcesamientoContenidoDocumento.STARTED
+            for obj in objetos
+        ):
+            raise ValidationError(
+                'Las trazas nuevas deben iniciar en estado STARTED.'
+            )
+        return super().bulk_create(
+            objetos,
+            batch_size=batch_size,
+            ignore_conflicts=ignore_conflicts,
+            update_conflicts=update_conflicts,
+            update_fields=update_fields,
+            unique_fields=unique_fields,
+        )
+
+    def delete(self):
+        raise ValidationError(
+            'Las trazas de contenido deben conservarse para auditoria.'
+        )
+
+
+class ProcesamientoContenidoDocumentoManager(
+    models.Manager.from_queryset(ProcesamientoContenidoDocumentoQuerySet)
+):
+    CAMPOS_FINALIZACION = frozenset({
+        'estado', 'numero_paginas', 'pdf_cifrado',
+        'contenido_activo_detectado', 'metodo_extraccion',
+        'paginas_analizadas', 'clasificacion', 'campos_estructurados',
+        'codigos_razon', 'confianzas', 'finalizado_en',
+    })
+
+    def finalizar_desde_servicio(self, *, pk, valores):
+        if not valores or set(valores) - self.CAMPOS_FINALIZACION:
+            raise ValidationError('La finalizacion contiene campos no permitidos.')
+        queryset = self.get_queryset().filter(
+            pk=pk,
+            estado=EstadoProcesamientoContenidoDocumento.STARTED,
+        )
+        return models.QuerySet.update(queryset, **valores)
+
+
+class ProcesamientoContenidoDocumento(models.Model):
+    """Traza versionada; una vez finalizada solo el servicio puede conservarla."""
+
+    objects = ProcesamientoContenidoDocumentoManager()
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    documento = models.ForeignKey(
+        DocumentoFinanciacion,
+        on_delete=models.PROTECT,
+        related_name='procesamientos_contenido',
+    )
+    numero = models.PositiveSmallIntegerField()
+    hash_original = models.CharField(max_length=64, validators=[hash_sha256_validator])
+    content_type = models.CharField(max_length=120)
+    tamano_bytes = models.PositiveBigIntegerField()
+    numero_paginas = models.PositiveSmallIntegerField(default=1)
+    pdf_cifrado = models.BooleanField(default=False)
+    contenido_activo_detectado = models.BooleanField(default=False)
+    metodo_extraccion = models.CharField(
+        max_length=30,
+        choices=MetodoExtraccionContenido.choices,
+        blank=True,
+    )
+    paginas_analizadas = models.JSONField(default=list, blank=True)
+    version_procesador = models.CharField(max_length=30, default='PDF_CONTENT_V1')
+    version_esquema = models.CharField(max_length=30, default='CONTENT_V1')
+    version_politica = models.CharField(max_length=40, default='EDU_CONTENT_V1')
+    estado = models.CharField(
+        max_length=30,
+        choices=EstadoProcesamientoContenidoDocumento.choices,
+        default=EstadoProcesamientoContenidoDocumento.STARTED,
+    )
+    clasificacion = models.CharField(
+        max_length=50,
+        choices=CategoriaContenidoDocumento.choices,
+        blank=True,
+    )
+    campos_estructurados = models.JSONField(default=dict, blank=True)
+    codigos_razon = models.JSONField(default=list, blank=True)
+    confianzas = models.JSONField(default=dict, blank=True)
+    iniciado_en = models.DateTimeField(default=timezone.now, editable=False)
+    finalizado_en = models.DateTimeField(null=True, blank=True, editable=False)
+
+    class Meta:
+        base_manager_name = 'objects'
+        ordering = ['documento', 'numero']
+        verbose_name = 'Procesamiento de contenido documental'
+        verbose_name_plural = 'Procesamientos de contenido documental'
+        permissions = [
+            (
+                'procesar_contenido_documento',
+                'Puede procesar contenido de documentos educativos',
+            ),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['documento', 'numero'],
+                name='uniq_proc_cont_doc_num',
+            ),
+            models.UniqueConstraint(
+                fields=['documento'],
+                condition=models.Q(
+                    estado=EstadoProcesamientoContenidoDocumento.STARTED
+                ),
+                name='uniq_proc_cont_doc_activo',
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=['estado', 'iniciado_en'],
+                name='proc_cont_estado_fecha',
+            ),
+            models.Index(
+                fields=['documento', 'hash_original'],
+                name='proc_cont_doc_hash',
+            ),
+        ]
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise ValidationError(
+                'La traza de contenido solo puede finalizarla el servicio oficial.'
+            )
+        if self.estado != EstadoProcesamientoContenidoDocumento.STARTED:
+            raise ValidationError(
+                'Las trazas nuevas deben iniciar en estado STARTED.'
+            )
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError(
+            'Los procesamientos de contenido deben conservarse para auditoria.'
+        )
+
+    def __str__(self):
+        return f'{self.documento_id} - contenido {self.numero}'
 
 
 class EvidenciaMatricula(models.Model):

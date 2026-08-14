@@ -15,6 +15,7 @@ from financiacion_educativa.choices import (
     EstadoValidacionDocumento,
     EstadoValidacionIADocumento,
     EstadoProcesoAutomatizacionEducativa,
+    EstadoProcesamientoContenidoDocumento,
     OrigenIntentoEscaneoDocumento,
     OrigenValidacionIADocumento,
     TipoDocumentoFinanciacion,
@@ -48,10 +49,24 @@ from financiacion_educativa.services.reglas_financieras import (
 from financiacion_educativa.services.validacion_documental_ia import (
     procesar_validacion_documental_ia,
 )
+from financiacion_educativa.services.clasificacion_contenido_documental import (
+    procesar_contenido_documental,
+)
 
 
 logger = logging.getLogger(__name__)
 TIPOS_IMAGEN = frozenset({'image/jpeg', 'image/png'})
+TIPOS_CLASIFICACION_CONTENIDO = frozenset({
+    TipoDocumentoFinanciacion.INCOME_CERTIFICATE,
+    TipoDocumentoFinanciacion.ENROLLMENT_EVIDENCE,
+})
+
+
+def _usa_clasificacion_contenido(documento):
+    return bool(
+        settings.FINANCIACION_EDUCATIVA_PDF_PROCESSING_ENABLED
+        and documento.tipo in TIPOS_CLASIFICACION_CONTENIDO
+    )
 
 
 @dataclass(frozen=True)
@@ -89,18 +104,24 @@ def _ultima_validacion_ia(documento):
     return documento.validaciones_ia.order_by('-numero').first()
 
 
+def _ultimo_procesamiento_contenido(documento):
+    return documento.procesamientos_contenido.order_by('-numero').first()
+
+
 def _documento_concluyente(documento):
     if (
         documento.estado_escaneo != EstadoEscaneoDocumento.SAFE
         or documento.estado_validacion != EstadoValidacionDocumento.APPROVED
     ):
         return False
-    if not documento_requiere_validacion_visual(documento):
-        decision = (documento.resultado_procesamiento or {}).get(
-            'automatic_document_policy',
-            {},
+    if _usa_clasificacion_contenido(documento):
+        ultimo = _ultimo_procesamiento_contenido(documento)
+        return bool(
+            ultimo
+            and ultimo.hash_original == documento.sha256
+            and ultimo.estado
+            == EstadoProcesamientoContenidoDocumento.ACCEPTED
         )
-        return decision.get('decision') == 'AUTO_APPROVED'
     ultima = _ultima_validacion_ia(documento)
     return bool(
         documento.content_type in TIPOS_IMAGEN
@@ -165,6 +186,9 @@ def _procesar_seguridad_e_ia(solicitud):
     for documento in documentos:
         if documento.estado_validacion != EstadoValidacionDocumento.PENDING:
             continue
+        if _usa_clasificacion_contenido(documento):
+            procesar_contenido_documental(documento=documento)
+            continue
         if not documento_requiere_validacion_visual(documento):
             _marcar_pdf_pendiente_de_procesamiento(documento)
             continue
@@ -207,6 +231,11 @@ def procesar_documento_automaticamente(*, documento_id):
     if documento.estado_escaneo != EstadoEscaneoDocumento.SAFE:
         return 'SECURITY_REVIEW_REQUIRED'
     if (
+        documento.estado_validacion == EstadoValidacionDocumento.PENDING
+        and _usa_clasificacion_contenido(documento)
+    ):
+        procesar_contenido_documental(documento=documento)
+    elif (
         documento.estado_validacion == EstadoValidacionDocumento.PENDING
         and documento_requiere_validacion_visual(documento)
         and documento.content_type in TIPOS_IMAGEN
@@ -297,10 +326,20 @@ def _aplicar_correccion_por_rechazo_automatico(solicitud):
     rechazados = []
     for documento in _documentos_del_expediente(solicitud):
         ultima = _ultima_validacion_ia(documento)
+        ultimo_contenido = _ultimo_procesamiento_contenido(documento)
         if (
             documento.estado_validacion == EstadoValidacionDocumento.REJECTED
-            and ultima
-            and ultima.estado == EstadoValidacionIADocumento.AUTO_REJECTED
+            and (
+                (
+                    ultima
+                    and ultima.estado == EstadoValidacionIADocumento.AUTO_REJECTED
+                )
+                or (
+                    ultimo_contenido
+                    and ultimo_contenido.estado
+                    == EstadoProcesamientoContenidoDocumento.CORRECTION_REQUIRED
+                )
+            )
         ):
             rechazados.append(documento.tipo)
     if not rechazados:
@@ -497,12 +536,17 @@ def _etapa_escaneo(solicitud):
 
 def _etapa_validacion(solicitud):
     documentos = _documentos_del_expediente(solicitud)
-    hubo_error = False
+    hubo_error_ia = False
+    hubo_error_contenido = False
     for documento in documentos:
         if documento.estado_validacion != EstadoValidacionDocumento.PENDING:
             continue
-        if documento.content_type == 'application/pdf':
-            _marcar_pdf_pendiente_de_procesamiento(documento)
+        if _usa_clasificacion_contenido(documento):
+            resultado = procesar_contenido_documental(documento=documento)
+            hubo_error_contenido = (
+                hubo_error_contenido
+                or resultado.estado == EstadoProcesamientoContenidoDocumento.RETRYING
+            )
             continue
         if not documento_requiere_validacion_visual(documento):
             continue
@@ -520,8 +564,13 @@ def _etapa_validacion(solicitud):
             documento=documento,
             origen=OrigenValidacionIADocumento.AUTOMATIC,
         )
-        hubo_error = hubo_error or resultado.estado == 'ERROR'
-    if hubo_error:
+        hubo_error_ia = hubo_error_ia or resultado.estado == 'ERROR'
+    if hubo_error_contenido:
+        return SalidaEtapaPersistente(
+            estado=EstadoProcesoAutomatizacionEducativa.RETRYING,
+            codigo='DOCUMENT_CONTENT_TEMPORARY_ERROR',
+        )
+    if hubo_error_ia:
         return SalidaEtapaPersistente(
             estado=EstadoProcesoAutomatizacionEducativa.RETRYING,
             codigo='DOCUMENT_AI_TEMPORARY_ERROR',
@@ -542,8 +591,17 @@ def _etapa_decision(solicitud):
         documento
         for documento in documentos
         if documento.estado_validacion == EstadoValidacionDocumento.REJECTED
-        and (ultima := _ultima_validacion_ia(documento))
-        and ultima.estado == EstadoValidacionIADocumento.AUTO_REJECTED
+        and (
+            (
+                (ultima := _ultima_validacion_ia(documento))
+                and ultima.estado == EstadoValidacionIADocumento.AUTO_REJECTED
+            )
+            or (
+                (contenido := _ultimo_procesamiento_contenido(documento))
+                and contenido.estado
+                == EstadoProcesamientoContenidoDocumento.CORRECTION_REQUIRED
+            )
+        )
     ]
     if rechazados:
         solicitud, _ = _aplicar_correccion_por_rechazo_automatico(solicitud)
@@ -552,23 +610,34 @@ def _etapa_decision(solicitud):
             codigo='DOCUMENT_CORRECTION_REQUIRED',
             requisitos_correccion=_requisitos_por_documentos(rechazados),
         )
-    pendientes_pdf = [
+    reintentables = [
         documento
         for documento in documentos
-        if documento.content_type == 'application/pdf'
-        and documento.estado_validacion != EstadoValidacionDocumento.APPROVED
+        if (contenido := _ultimo_procesamiento_contenido(documento))
+        and contenido.estado == EstadoProcesamientoContenidoDocumento.RETRYING
     ]
-    if pendientes_pdf:
+    if reintentables:
         return SalidaEtapaPersistente(
-            estado=EstadoProcesoAutomatizacionEducativa.MANUAL_EXCEPTION,
-            codigo='PDF_CONTENT_PROCESSING_REQUIRED',
-            requisitos_correccion=_requisitos_por_documentos(pendientes_pdf),
+            estado=EstadoProcesoAutomatizacionEducativa.RETRYING,
+            codigo='DOCUMENT_CONTENT_TEMPORARY_ERROR',
+            requisitos_correccion=_requisitos_por_documentos(reintentables),
         )
     manuales = [
         documento
         for documento in documentos
-        if (ultima := _ultima_validacion_ia(documento))
-        and ultima.estado == EstadoValidacionIADocumento.MANUAL_REVIEW
+        if (
+            (
+                (ultima := _ultima_validacion_ia(documento))
+                and ultima.estado == EstadoValidacionIADocumento.MANUAL_REVIEW
+            )
+            or (
+                (contenido := _ultimo_procesamiento_contenido(documento))
+                and contenido.estado in {
+                    EstadoProcesamientoContenidoDocumento.MANUAL_EXCEPTION,
+                    EstadoProcesamientoContenidoDocumento.FAILED,
+                }
+            )
+        )
     ]
     if manuales:
         return SalidaEtapaPersistente(

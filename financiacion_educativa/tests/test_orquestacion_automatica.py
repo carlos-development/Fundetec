@@ -35,11 +35,17 @@ from financiacion_educativa.models import (
     ProcesoFirmaEducativa,
     ValidacionIADocumento,
 )
-from financiacion_educativa.services.documentos import registrar_documento
+from financiacion_educativa.services.documentos import (
+    registrar_documento,
+    reemplazar_documento,
+)
 from financiacion_educativa.services.cola_automatizacion import (
     procesar_siguiente_trabajo,
 )
 from financiacion_educativa.services.estado_publico import obtener_resultado_publico
+from financiacion_educativa.services.escaneo_documentos import (
+    procesar_escaneo_documento,
+)
 from financiacion_educativa.services.matricula import (
     registrar_o_actualizar_evidencia_matricula,
 )
@@ -67,6 +73,8 @@ from financiacion_educativa.tests.signature_backends import (
     AmbiguousEducationalSignatureBackend,
     RecordingEducationalSignatureBackend,
 )
+from financiacion_educativa.tests.scan_backends import BackendLimpio
+from financiacion_educativa.tests.test_procesamiento_pdf import pdf_sintetico
 
 
 SCAN_CLEAN = 'financiacion_educativa.tests.scan_backends.BackendLimpio'
@@ -96,6 +104,14 @@ SIGNATURE = (
 SIGNATURE_AMBIGUOUS = (
     'financiacion_educativa.tests.signature_backends.'
     'AmbiguousEducationalSignatureBackend'
+)
+CONTENT_CONCLUSIVE = (
+    'financiacion_educativa.tests.content_validation_backends.'
+    'BackendContenidoConcluyente'
+)
+CONTENT_CONTRADICTORY = (
+    'financiacion_educativa.tests.content_validation_backends.'
+    'BackendContenidoContradictorio'
 )
 
 
@@ -321,6 +337,190 @@ class OrquestacionAutomaticaTests(TestCase):
         self.assertTrue(publico_final.curso_autorizado)
         self.assertIsNotNone(publico_final.condiciones_financieras)
         self.assertEqual(EventoWebhookFirmaEducativa.objects.count(), 1)
+
+    @override_settings(
+        FINANCIACION_EDUCATIVA_PDF_PROCESSING_ENABLED=True,
+        FINANCIACION_EDUCATIVA_CONTENT_AI_BACKEND=CONTENT_CONCLUSIVE,
+        FINANCIACION_EDUCATIVA_ALLOW_TEST_CONTENT_BACKENDS=True,
+        FINANCIACION_EDUCATIVA_CONTENT_HASH_HMAC_KEY='orchestration-content-key',
+        FINANCIACION_EDUCATIVA_PDF_USE_SUBPROCESS=False,
+    )
+    def test_e2e_adulto_con_certificado_pdf_avanza_a_firma(self):
+        solicitud = self._solicitud_base('AUTO-ADULTO-PDF-V2')
+        adulto = self._participante(solicitud)
+        self._documento(
+            solicitud, adulto, TipoDocumentoFinanciacion.STUDENT_ID_FRONT,
+            'adulto-pdf-frente',
+        )
+        self._documento(
+            solicitud, adulto, TipoDocumentoFinanciacion.STUDENT_ID_BACK,
+            'adulto-pdf-reverso',
+        )
+        ingresos = registrar_documento(
+            solicitud=solicitud,
+            participante=adulto,
+            tipo=TipoDocumentoFinanciacion.INCOME_CERTIFICATE,
+            origen_captura='USER_UPLOAD',
+            archivo=SimpleUploadedFile(
+                'ingresos.pdf',
+                pdf_sintetico(textos=(
+                    'CERTIFICADO DE INGRESOS ADULTO AUTOMATICO PERIODO 2026 VALORES',
+                )),
+                content_type='application/pdf',
+            ),
+            actor=self.usuario,
+        )
+        solicitud.estado = EstadoSolicitudFinanciacion.PENDING_MANUAL_REVIEW
+        solicitud.save(update_fields=['estado'])
+
+        resultado = ejecutar_orquestacion_automatica(solicitud_id=solicitud.pk)
+
+        solicitud.refresh_from_db()
+        ingresos.refresh_from_db()
+        self.assertEqual(resultado.codigo, 'PENDING_SIGNATURE')
+        self.assertEqual(solicitud.estado, EstadoSolicitudFinanciacion.PENDING_SIGNATURE)
+        self.assertEqual(ingresos.estado_validacion, EstadoValidacionDocumento.APPROVED)
+        self.assertEqual(
+            ingresos.procesamientos_contenido.get().estado,
+            'ACCEPTED',
+        )
+        self.assertIsNone(obtener_resultado_publico(solicitud).condiciones_financieras)
+
+    @override_settings(
+        FINANCIACION_EDUCATIVA_PDF_PROCESSING_ENABLED=True,
+        FINANCIACION_EDUCATIVA_CONTENT_AI_BACKEND=CONTENT_CONCLUSIVE,
+        FINANCIACION_EDUCATIVA_ALLOW_TEST_CONTENT_BACKENDS=True,
+        FINANCIACION_EDUCATIVA_CONTENT_HASH_HMAC_KEY='orchestration-content-key',
+        FINANCIACION_EDUCATIVA_PDF_USE_SUBPROCESS=False,
+    )
+    def test_e2e_menor_con_certificado_pdf_del_tutor_avanza_a_firma(self):
+        solicitud = self._solicitud_base('AUTO-MENOR-PDF-V2')
+        estudiante = self._participante(solicitud, menor=True)
+        tutor = self._participante(solicitud, tutor=True)
+        for participante, tipo, sufijo in (
+            (estudiante, TipoDocumentoFinanciacion.STUDENT_ID_FRONT, 'menor-pdf-frente'),
+            (estudiante, TipoDocumentoFinanciacion.STUDENT_ID_BACK, 'menor-pdf-reverso'),
+            (tutor, TipoDocumentoFinanciacion.GUARDIAN_ID_FRONT, 'tutor-pdf-frente'),
+            (tutor, TipoDocumentoFinanciacion.GUARDIAN_ID_BACK, 'tutor-pdf-reverso'),
+        ):
+            self._documento(solicitud, participante, tipo, sufijo)
+        registrar_documento(
+            solicitud=solicitud,
+            participante=tutor,
+            tipo=TipoDocumentoFinanciacion.INCOME_CERTIFICATE,
+            origen_captura='USER_UPLOAD',
+            archivo=SimpleUploadedFile(
+                'ingresos-tutor.pdf',
+                pdf_sintetico(textos=(
+                    'CERTIFICADO DE INGRESOS TUTOR AUTOMATICO PERIODO 2026 VALORES',
+                )),
+                content_type='application/pdf',
+            ),
+            actor=self.usuario,
+        )
+        solicitud.estado = EstadoSolicitudFinanciacion.PENDING_MANUAL_REVIEW
+        solicitud.save(update_fields=['estado'])
+
+        resultado = ejecutar_orquestacion_automatica(solicitud_id=solicitud.pk)
+
+        solicitud.refresh_from_db()
+        self.assertEqual(resultado.codigo, 'PENDING_SIGNATURE')
+        self.assertEqual(solicitud.estado, EstadoSolicitudFinanciacion.PENDING_SIGNATURE)
+        self.assertEqual(
+            RecordingEducationalSignatureBackend.submissions[0]['firmante'].pk,
+            tutor.pk,
+        )
+
+    @override_settings(
+        FINANCIACION_EDUCATIVA_PDF_PROCESSING_ENABLED=True,
+        FINANCIACION_EDUCATIVA_PDF_USE_SUBPROCESS=False,
+        FINANCIACION_EDUCATIVA_CONTENT_AI_BACKEND=CONTENT_CONTRADICTORY,
+        FINANCIACION_EDUCATIVA_ALLOW_TEST_CONTENT_BACKENDS=True,
+        FINANCIACION_EDUCATIVA_CONTENT_HASH_HMAC_KEY='orchestration-content-key',
+    )
+    def test_correccion_pdf_es_consolidada_y_no_duplica_outbox(self):
+        solicitud = self._solicitud_base('AUTO-PDF-CORRECCION')
+        adulto = self._participante(solicitud)
+        self._documento(
+            solicitud, adulto, TipoDocumentoFinanciacion.STUDENT_ID_FRONT,
+            'correccion-pdf-frente',
+        )
+        self._documento(
+            solicitud, adulto, TipoDocumentoFinanciacion.STUDENT_ID_BACK,
+            'correccion-pdf-reverso',
+        )
+        registrar_documento(
+            solicitud=solicitud,
+            participante=adulto,
+            tipo=TipoDocumentoFinanciacion.INCOME_CERTIFICATE,
+            origen_captura='USER_UPLOAD',
+            archivo=SimpleUploadedFile(
+                'ingresos-incorrectos.pdf',
+                pdf_sintetico(textos=('DOCUMENTO AJENO PERSONA DISTINTA 2026',)),
+                content_type='application/pdf',
+            ),
+            actor=self.usuario,
+        )
+        solicitud.estado = EstadoSolicitudFinanciacion.PENDING_MANUAL_REVIEW
+        solicitud.save(update_fields=['estado'])
+
+        primero = ejecutar_orquestacion_automatica(solicitud_id=solicitud.pk)
+        segundo = ejecutar_orquestacion_automatica(solicitud_id=solicitud.pk)
+
+        solicitud.refresh_from_db()
+        self.assertEqual(primero.codigo, 'DOCUMENT_CORRECTION_REQUIRED')
+        self.assertEqual(segundo.codigo, 'STATE_NOT_AUTOMATABLE')
+        self.assertEqual(solicitud.estado, EstadoSolicitudFinanciacion.CORRECTION_REQUIRED)
+        self.assertEqual(
+            OutboxCorreoEducativo.objects.filter(
+                solicitud=solicitud,
+                codigo_mensaje='AUTOMATIC_CORRECTION',
+            ).count(),
+            1,
+        )
+
+        anterior = solicitud.documentos.get(
+            tipo=TipoDocumentoFinanciacion.INCOME_CERTIFICATE,
+            activo=True,
+        )
+        reemplazo = reemplazar_documento(
+            documento=anterior,
+            archivo=SimpleUploadedFile(
+                'ingresos-corregidos.pdf',
+                pdf_sintetico(textos=(
+                    'CERTIFICADO INGRESOS ADULTO AUTOMATICO PERIODO 2026 VALORES',
+                )),
+                content_type='application/pdf',
+            ),
+            actor=self.usuario,
+        )
+        procesar_escaneo_documento(
+            documento=reemplazo,
+            origen='AUTOMATIC',
+            backend=BackendLimpio(),
+        )
+        solicitud.refresh_from_db()
+        with patch(
+            'financiacion_educativa.services.requisitos_documentales.'
+            'terminos_obligatorios_aceptados',
+            return_value=True,
+        ):
+            completar_fase_documental(solicitud=solicitud, actor=self.usuario)
+        with override_settings(
+            FINANCIACION_EDUCATIVA_CONTENT_AI_BACKEND=CONTENT_CONCLUSIVE
+        ):
+            for _ in range(7):
+                procesar_siguiente_trabajo()
+
+        solicitud.refresh_from_db()
+        self.assertEqual(solicitud.estado, EstadoSolicitudFinanciacion.PENDING_SIGNATURE)
+        self.assertEqual(
+            OutboxCorreoEducativo.objects.filter(
+                solicitud=solicitud,
+                codigo_mensaje='AUTOMATIC_CORRECTION',
+            ).count(),
+            1,
+        )
 
     def test_menor_envia_como_unico_firmante_al_tutor(self):
         solicitud, estudiante, tutor = self._menor_listo()

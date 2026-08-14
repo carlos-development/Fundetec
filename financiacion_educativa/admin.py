@@ -31,6 +31,7 @@ from .models import (
     ParticipanteFinanciacion,
     ProcesoFirmaEducativa,
     ProcesoAutomatizacionEducativa,
+    ProcesamientoContenidoDocumento,
     EventoWebhookFirmaEducativa,
     ReaperturaEscaneoDocumento,
     RegistroIdempotenciaSolicitud,
@@ -939,6 +940,34 @@ class ValidacionIADocumentoAdmin(admin.ModelAdmin):
     search_fields = ('documento__solicitud__referencia_externa',)
     readonly_fields = tuple(
         field.name for field in ValidacionIADocumento._meta.fields
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(ProcesamientoContenidoDocumento)
+class ProcesamientoContenidoDocumentoAdmin(admin.ModelAdmin):
+    list_display = (
+        'documento',
+        'numero',
+        'estado',
+        'clasificacion',
+        'metodo_extraccion',
+        'numero_paginas',
+        'iniciado_en',
+        'finalizado_en',
+    )
+    list_filter = ('estado', 'clasificacion', 'metodo_extraccion', 'iniciado_en')
+    search_fields = ('documento__solicitud__referencia_externa', 'hash_original')
+    readonly_fields = tuple(
+        field.name for field in ProcesamientoContenidoDocumento._meta.fields
     )
 
     def has_add_permission(self, request):

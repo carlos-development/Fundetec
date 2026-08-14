@@ -399,3 +399,29 @@ staging_manage procesar_orquestacion_educativa \
 Los comandos de escaneo, IA y firma individuales se conservan para diagnostico
 puntual. No son parte obligatoria del recorrido exitoso cuando la automatizacion
 esta activa.
+## Procesamiento de contenido PDF educativo
+
+El bloque permanece deshabilitado durante el primer despliegue. Antes de
+activarlo deben instalarse las dependencias de `requirements.txt`, aplicar la
+migracion `0020`, ejecutar `manage.py check` y validar con documentos sinteticos.
+
+Variables:
+
+- `FINANCIACION_EDUCATIVA_PDF_PROCESSING_ENABLED=False`
+- `FINANCIACION_EDUCATIVA_CONTENT_AI_BACKEND`: backend cerrado de clasificacion.
+- `FINANCIACION_EDUCATIVA_CONTENT_HASH_HMAC_KEY`: secreto independiente.
+- `FINANCIACION_EDUCATIVA_PDF_MAX_BYTES`, `PDF_MAX_PAGES`,
+  `PDF_MAX_OBJECTS`, `PDF_MAX_OBJECT_BYTES`, `PDF_MAX_PIXELS_PER_PAGE`,
+  `PDF_MAX_AI_PAGES`, `PDF_MAX_EXTRACTED_CHARACTERS` y
+  `PDF_PROCESSING_TIMEOUT_SECONDS`: limites de recursos.
+- `FINANCIACION_EDUCATIVA_PDF_USE_SUBPROCESS=True` y
+  `PDF_MAX_MEMORY_MB`: aislamiento descartable, timeout de pared y limite de
+  memoria cuando el sistema operativo lo soporta.
+- `FINANCIACION_EDUCATIVA_CONTENT_MIN_CONFIDENCE`,
+  `CONTENT_MIN_LEGIBILITY` y `CONTENT_MIN_COMPLETENESS`: umbrales entre 0 y 1.
+- `FINANCIACION_EDUCATIVA_CONTENT_PROCESSOR_VERSION`,
+  `CONTENT_SCHEMA_VERSION` y `CONTENT_POLICY_VERSION`: versiones de auditoria.
+
+No active esta funcion si ClamAV, el worker educativo, el backend IA o la clave
+HMAC no estan listos. La activacion no procesa solicitudes historicas al iniciar
+Django; solo actua sobre trabajos educativos encolados posteriormente.

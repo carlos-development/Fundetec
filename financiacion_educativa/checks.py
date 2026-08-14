@@ -28,6 +28,14 @@ DISABLED_EDUCATIONAL_SIGNATURE_BACKEND = (
     'financiacion_educativa.services.firma_zapsign.'
     'DisabledEducationalSignatureBackend'
 )
+DISABLED_CONTENT_BACKEND = (
+    'financiacion_educativa.services.clasificacion_contenido_documental.'
+    'DisabledContentDocumentClassificationBackend'
+)
+OPENAI_CONTENT_BACKEND = (
+    'financiacion_educativa.services.clasificacion_contenido_documental.'
+    'OpenAIContentDocumentClassificationBackend'
+)
 
 
 def _error(message, identifier):
@@ -268,6 +276,155 @@ def check_document_ai_configuration(app_configs, **kwargs):
             errors.append(_error('El modelo de IA documental es obligatorio.', 'E030'))
         if not str(getattr(settings, 'OPENAI_API_KEY', '') or '').strip():
             errors.append(_error('La credencial del proveedor IA es obligatoria.', 'E031'))
+    return errors
+
+
+@register()
+def check_document_content_configuration(app_configs, **kwargs):
+    errors = []
+    limites = (
+        ('FINANCIACION_EDUCATIVA_PDF_MAX_BYTES', 'E090'),
+        ('FINANCIACION_EDUCATIVA_PDF_MAX_PAGES', 'E091'),
+        ('FINANCIACION_EDUCATIVA_PDF_MAX_OBJECTS', 'E092'),
+        ('FINANCIACION_EDUCATIVA_PDF_MAX_OBJECT_BYTES', 'E115'),
+        ('FINANCIACION_EDUCATIVA_PDF_MAX_PIXELS_PER_PAGE', 'E093'),
+        ('FINANCIACION_EDUCATIVA_PDF_MAX_AI_PAGES', 'E094'),
+        ('FINANCIACION_EDUCATIVA_PDF_MAX_EXTRACTED_CHARACTERS', 'E095'),
+        ('FINANCIACION_EDUCATIVA_CONTENT_STALE_SECONDS', 'E096'),
+        ('FINANCIACION_EDUCATIVA_CONTENT_MAX_ATTEMPTS', 'E121'),
+        ('FINANCIACION_EDUCATIVA_PDF_MAX_MEMORY_MB', 'E116'),
+    )
+    valores = {}
+    for nombre, identificador in limites:
+        valor = getattr(settings, nombre, None)
+        valores[nombre] = valor
+        if isinstance(valor, bool) or not isinstance(valor, int) or valor <= 0:
+            errors.append(_error(f'{nombre} debe ser un entero positivo.', identificador))
+    timeout = getattr(
+        settings, 'FINANCIACION_EDUCATIVA_PDF_PROCESSING_TIMEOUT_SECONDS', None
+    )
+    if (
+        isinstance(timeout, bool)
+        or not isinstance(timeout, (int, float))
+        or not math.isfinite(timeout)
+        or timeout <= 0
+    ):
+        errors.append(_error('El timeout de procesamiento PDF no es valido.', 'E097'))
+    for nombre, identificador in (
+        ('FINANCIACION_EDUCATIVA_CONTENT_MIN_CONFIDENCE', 'E098'),
+        ('FINANCIACION_EDUCATIVA_CONTENT_MIN_LEGIBILITY', 'E099'),
+        ('FINANCIACION_EDUCATIVA_CONTENT_MIN_COMPLETENESS', 'E100'),
+    ):
+        try:
+            valor = Decimal(str(getattr(settings, nombre, '')))
+        except (InvalidOperation, TypeError, ValueError):
+            valor = None
+        if valor is None or not valor.is_finite() or not 0 <= valor <= 1:
+            errors.append(_error(f'{nombre} debe estar entre 0 y 1.', identificador))
+    if not errors:
+        if valores['FINANCIACION_EDUCATIVA_PDF_MAX_BYTES'] > getattr(
+            settings, 'FINANCIACION_EDUCATIVA_DOCUMENT_MAX_BYTES', 0
+        ):
+            errors.append(_error('El limite PDF no puede superar el limite documental.', 'E101'))
+        if valores['FINANCIACION_EDUCATIVA_PDF_MAX_AI_PAGES'] > valores[
+            'FINANCIACION_EDUCATIVA_PDF_MAX_PAGES'
+        ]:
+            errors.append(_error('Las paginas IA no pueden superar el maximo PDF.', 'E102'))
+        if valores['FINANCIACION_EDUCATIVA_PDF_MAX_PAGES'] > 100:
+            errors.append(_error('El limite de paginas PDF es excesivo.', 'E103'))
+        if valores['FINANCIACION_EDUCATIVA_PDF_MAX_PIXELS_PER_PAGE'] > 40_000_000:
+            errors.append(_error('El limite de pixeles PDF es excesivo.', 'E104'))
+        if valores['FINANCIACION_EDUCATIVA_PDF_MAX_MEMORY_MB'] > 2048:
+            errors.append(_error('El limite de memoria PDF es excesivo.', 'E117'))
+        if valores['FINANCIACION_EDUCATIVA_PDF_MAX_OBJECT_BYTES'] > valores[
+            'FINANCIACION_EDUCATIVA_PDF_MAX_BYTES'
+        ]:
+            errors.append(_error(
+                'El limite por objeto PDF no puede superar el limite del archivo.',
+                'E122',
+            ))
+        if valores['FINANCIACION_EDUCATIVA_CONTENT_MAX_ATTEMPTS'] > 10:
+            errors.append(_error(
+                'El numero de intentos de contenido es excesivo.',
+                'E123',
+            ))
+        if valores[
+            'FINANCIACION_EDUCATIVA_PDF_MAX_EXTRACTED_CHARACTERS'
+        ] > 1_000_000:
+            errors.append(_error(
+                'El limite de texto extraido es excesivo.',
+                'E124',
+            ))
+    if isinstance(timeout, (int, float)) and not isinstance(timeout, bool):
+        if math.isfinite(timeout) and timeout > 120:
+            errors.append(_error(
+                'El timeout de procesamiento PDF es excesivo.',
+                'E125',
+            ))
+
+    usar_subproceso = getattr(
+        settings, 'FINANCIACION_EDUCATIVA_PDF_USE_SUBPROCESS', None
+    )
+    if not isinstance(usar_subproceso, bool):
+        errors.append(_error(
+            'FINANCIACION_EDUCATIVA_PDF_USE_SUBPROCESS debe ser booleano.',
+            'E126',
+        ))
+
+    backend_path = str(
+        getattr(settings, 'FINANCIACION_EDUCATIVA_CONTENT_AI_BACKEND', '') or ''
+    ).strip()
+    if not backend_path:
+        errors.append(_error('El backend de contenido no puede estar vacio.', 'E105'))
+    else:
+        try:
+            backend_class = import_string(backend_path)
+        except (ImportError, AttributeError, ValueError):
+            errors.append(_error('El backend de contenido no puede importarse.', 'E106'))
+        else:
+            if not callable(getattr(backend_class, 'clasificar', None)):
+                errors.append(_error('El backend de contenido no implementa clasificar().', 'E107'))
+            if (
+                backend_path.startswith('financiacion_educativa.tests.')
+                and not getattr(
+                    settings, 'FINANCIACION_EDUCATIVA_ALLOW_TEST_CONTENT_BACKENDS', False
+                )
+            ):
+                errors.append(_error('El backend de prueba requiere habilitacion.', 'E108'))
+
+    if getattr(settings, 'FINANCIACION_EDUCATIVA_PDF_PROCESSING_ENABLED', False):
+        try:
+            import pypdf  # noqa: F401
+            import pypdfium2  # noqa: F401
+        except ImportError:
+            errors.append(_error('Faltan dependencias para procesar PDF.', 'E109'))
+        if backend_path == DISABLED_CONTENT_BACKEND:
+            errors.append(_error('El procesamiento PDF requiere clasificador habilitado.', 'E110'))
+        if not str(
+            getattr(settings, 'FINANCIACION_EDUCATIVA_CONTENT_HASH_HMAC_KEY', '') or ''
+        ):
+            errors.append(_error('La clave HMAC de contenido es obligatoria.', 'E111'))
+        if not getattr(settings, 'DEBUG', False) and usar_subproceso is not True:
+            errors.append(_error(
+                'El procesamiento PDF requiere aislamiento por subproceso fuera de DEBUG.',
+                'E127',
+            ))
+    if backend_path == OPENAI_CONTENT_BACKEND:
+        if not getattr(settings, 'FINANCIACION_EDUCATIVA_DOCUMENT_AI_ENABLED', False):
+            errors.append(_error('La IA documental debe habilitarse para contenido.', 'E118'))
+        if not str(
+            getattr(settings, 'FINANCIACION_EDUCATIVA_DOCUMENT_AI_MODEL', '') or ''
+        ).strip():
+            errors.append(_error('El modelo IA de contenido es obligatorio.', 'E119'))
+        if not str(getattr(settings, 'OPENAI_API_KEY', '') or '').strip():
+            errors.append(_error('La credencial IA de contenido es obligatoria.', 'E120'))
+    for nombre, identificador in (
+        ('FINANCIACION_EDUCATIVA_CONTENT_PROCESSOR_VERSION', 'E112'),
+        ('FINANCIACION_EDUCATIVA_CONTENT_SCHEMA_VERSION', 'E113'),
+        ('FINANCIACION_EDUCATIVA_CONTENT_POLICY_VERSION', 'E114'),
+    ):
+        if not str(getattr(settings, nombre, '') or '').strip():
+            errors.append(_error(f'{nombre} no puede estar vacio.', identificador))
     return errors
 
 

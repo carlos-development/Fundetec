@@ -104,6 +104,37 @@ class EstadoValidacionIADocumento(models.TextChoices):
     ERROR = 'ERROR', 'Fallo tecnico'
 
 
+class EstadoProcesamientoContenidoDocumento(models.TextChoices):
+    STARTED = 'STARTED', 'Iniciado'
+    ACCEPTED = 'ACCEPTED', 'Aceptado'
+    CORRECTION_REQUIRED = 'CORRECTION_REQUIRED', 'Correccion requerida'
+    RETRYING = 'RETRYING', 'Pendiente de reintento'
+    MANUAL_EXCEPTION = 'MANUAL_EXCEPTION', 'Excepcion manual'
+    FAILED = 'FAILED', 'Fallido'
+    OBSOLETE = 'OBSOLETE', 'Version obsoleta'
+
+
+class CategoriaContenidoDocumento(models.TextChoices):
+    EMPLOYMENT_CERTIFICATE = 'EMPLOYMENT_CERTIFICATE', 'Certificado laboral'
+    INCOME_CERTIFICATE = 'INCOME_CERTIFICATE', 'Certificado de ingresos'
+    INCOME_AND_WITHHOLDING_CERTIFICATE = (
+        'INCOME_AND_WITHHOLDING_CERTIFICATE',
+        'Certificado de ingresos y retenciones',
+    )
+    BANK_STATEMENT = 'BANK_STATEMENT', 'Extracto bancario'
+    PAYSLIP = 'PAYSLIP', 'Desprendible de nomina'
+    ENROLLMENT_EVIDENCE = 'ENROLLMENT_EVIDENCE', 'Soporte de matricula'
+    UNRELATED = 'UNRELATED', 'Documento ajeno'
+    INCONCLUSIVE = 'INCONCLUSIVE', 'No concluyente'
+
+
+class MetodoExtraccionContenido(models.TextChoices):
+    IMAGE = 'IMAGE', 'Imagen original'
+    PDF_TEXT = 'PDF_TEXT', 'Texto PDF'
+    PDF_RENDER = 'PDF_RENDER', 'Paginas PDF renderizadas'
+    PDF_HYBRID = 'PDF_HYBRID', 'Texto y paginas renderizadas'
+
+
 class OrigenValidacionIADocumento(models.TextChoices):
     ADMIN = 'ADMIN', 'Administrador'
     COMMAND = 'COMMAND', 'Comando operativo'
@@ -399,6 +430,14 @@ class CodigoRazonAutomatizacionEducativa(models.TextChoices):
     DOCUMENT_AI_TEMPORARY_ERROR = (
         'DOCUMENT_AI_TEMPORARY_ERROR',
         'Fallo temporal de IA',
+    )
+    DOCUMENT_CONTENT_TEMPORARY_ERROR = (
+        'DOCUMENT_CONTENT_TEMPORARY_ERROR',
+        'Fallo temporal procesando contenido',
+    )
+    DOCUMENT_CONTENT_PERMANENT_ERROR = (
+        'DOCUMENT_CONTENT_PERMANENT_ERROR',
+        'Fallo permanente procesando contenido',
     )
     DOCUMENT_CORRECTION_REQUIRED = (
         'DOCUMENT_CORRECTION_REQUIRED',

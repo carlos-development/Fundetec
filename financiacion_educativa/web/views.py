@@ -530,7 +530,7 @@ def siguiente_paso_view(request, solicitud_id):
 
 MENSAJES_PROCESAMIENTO_PUBLICOS = {
     'QUEUED': 'Tu expediente esta listo para ser procesado.',
-    'RUNNING': 'Estamos validando tu expediente de forma segura.',
+    'RUNNING': 'Estamos validando la informacion de tu expediente.',
     'RETRYING': 'Una validacion temporal sera reintentada automaticamente.',
     'CORRECTION_REQUIRED': 'Necesitamos que corrijas parte del expediente.',
     'MANUAL_EXCEPTION': 'Tu expediente requiere una verificacion excepcional.',
@@ -538,6 +538,28 @@ MENSAJES_PROCESAMIENTO_PUBLICOS = {
     'COMPLETED': 'La firma fue confirmada y el proceso termino.',
     'FAILED': 'No fue posible completar el procesamiento automatico.',
 }
+
+
+def _mensaje_procesamiento_publico(*, proceso, estado):
+    if not proceso:
+        return MENSAJES_PROCESAMIENTO_PUBLICOS[estado]
+    if estado in {'QUEUED', 'RUNNING'}:
+        if proceso.etapa_actual == 'SECURITY_SCAN':
+            return 'Estamos verificando los archivos de forma segura.'
+        if proceso.etapa_actual == 'DOCUMENT_VALIDATION':
+            tiene_pdf = proceso.solicitud.documentos.filter(
+                activo=True,
+                content_type='application/pdf',
+                estado_validacion='PENDING',
+            ).exists()
+            return (
+                'Estamos procesando los documentos PDF.'
+                if tiene_pdf
+                else 'Estamos validando la informacion del expediente.'
+            )
+        if proceso.etapa_actual == 'DECISION':
+            return 'El expediente fue validado y estamos consolidando el resultado.'
+    return MENSAJES_PROCESAMIENTO_PUBLICOS[estado]
 
 ETAPAS_PROCESAMIENTO_PUBLICAS = {
     'SECURITY_SCAN': 'SEGURIDAD_DOCUMENTAL',
@@ -590,7 +612,10 @@ def estado_procesamiento_view(request, solicitud_id):
     return JsonResponse({
         'status': estado,
         'public_stage': etapa,
-        'message': MENSAJES_PROCESAMIENTO_PUBLICOS[estado],
+        'message': _mensaje_procesamiento_publico(
+            proceso=proceso,
+            estado=estado,
+        ),
         'requires_correction': requiere_correccion,
         'correction_requirements': requisitos if requiere_correccion else [],
         'can_resume': requiere_correccion,

@@ -252,8 +252,12 @@ La IA valida contenido y calidad visual; no prueba autenticidad fisica ni
 liveness. Una contradiccion visual concluyente, como un objeto que no es una
 identificacion o el lado incorrecto, solicita una nueva captura. Baja confianza,
 posible imagen no real, inconsistencia o fallo tecnico pasa a revision manual y
-nunca equivale a aprobacion. Los PDF que requieren inspeccion de contenido
-tambien pasan explicitamente a revision manual si el backend no los soporta.
+nunca equivale a aprobacion. Cuando el procesamiento de contenido esta
+habilitado, los PDF de ingresos y matricula se validan estructuralmente,
+extraen texto y renderizan solo paginas limitadas antes de clasificarse. Un PDF
+seguro y concluyente puede continuar; un formato corregible solicita reemplazo,
+un fallo temporal se reintenta y una ambiguedad real queda como excepcion
+manual. Con la funcion deshabilitada se conserva el comportamiento anterior.
 La aprobacion visual no cambia las banderas `identidad_verificada` ni
 `relacion_verificada`; estas quedan reservadas para una verificacion fuerte o
 una decision humana que realmente pueda respaldarlas.
@@ -296,10 +300,17 @@ controles tecnicos adicionales y revision humana.
 
 El certificado de ingresos es una carga privada obligatoria en PDF, JPEG o
 PNG. Corresponde al estudiante deudor cuando es adulto y al tutor deudor cuando
-el estudiante es menor. Siempre requiere escaneo tecnico. Una imagen puede
-recibir validacion visual automatica; un PDF, una respuesta incierta o un fallo
-tecnico requiere revision manual explicita. Su aceptacion solo comprueba el
-soporte documental: no genera score ni una decision de solvencia.
+el estudiante es menor. Siempre requiere escaneo tecnico. JPEG, PNG y PDF se
+clasifican por contenido cuando el procesador esta habilitado. Se admiten
+certificado laboral, certificado de ingresos, ingresos y retenciones, extracto
+bancario y desprendible de nomina; no se exige ingreso minimo, no se calcula
+score y no se persisten movimientos ni numeros de cuenta completos.
+
+El procesamiento PDF usa `pypdf` para estructura y texto, y `pypdfium2` para
+renderizado en memoria. Rechaza cifrado, corrupcion, contenido activo, adjuntos
+y limites excedidos. La traza `ProcesamientoContenidoDocumento` conserva hash,
+versiones, paginas, clasificacion, campos minimos y razones controladas, nunca
+el PDF duplicado, imagenes renderizadas, prompts o respuestas completas.
 
 Los PDF, JPEG y PNG se pueden previsualizar desde un visor modal. El endpoint
 privado comprueba sesion, propiedad de la solicitud, pertenencia del documento,
