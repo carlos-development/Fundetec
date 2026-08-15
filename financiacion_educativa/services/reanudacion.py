@@ -39,7 +39,7 @@ MAPA_REANUDACION = {
         True,
     ),
     Estado.PENDING_MANUAL_REVIEW: DestinoReanudacion(
-        'financiacion_educativa_web:estado-solicitud',
+        'financiacion_educativa_web:procesamiento',
         'Expediente en revision',
         'Consultar estado',
         True,
@@ -51,13 +51,13 @@ MAPA_REANUDACION = {
         True,
     ),
     Estado.PENDING_PROMISSORY_NOTE: DestinoReanudacion(
-        'financiacion_educativa_web:estado-solicitud',
+        'financiacion_educativa_web:procesamiento',
         'Documentos contractuales en preparacion',
         'Consultar estado',
         True,
     ),
     Estado.PENDING_SIGNATURE: DestinoReanudacion(
-        'financiacion_educativa_web:estado-solicitud',
+        'financiacion_educativa_web:procesamiento',
         'Firma pendiente',
         'Consultar firma',
         True,

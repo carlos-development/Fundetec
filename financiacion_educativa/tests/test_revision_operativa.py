@@ -11,9 +11,11 @@ from django.urls import reverse
 from django.utils import timezone
 
 from financiacion_educativa.choices import (
+    EtapaAutomatizacionEducativa,
     EstadoEnlaceCapturaMovil,
     EstadoEntregaCorreoSolicitud,
     EstadoOutboxCorreoEducativo,
+    EstadoProcesoAutomatizacionEducativa,
     EstadoEscaneoDocumento,
     EstadoEvidenciaMatricula,
     EstadoSolicitudFinanciacion,
@@ -37,6 +39,7 @@ from financiacion_educativa.models import (
     DecisionRevisionEducativa,
     EntregaCorreoEstadoSolicitud,
     OutboxCorreoEducativo,
+    ProcesoAutomatizacionEducativa,
     ProcesoFirmaEducativa,
     VersionTerminosFinanciacion,
 )
@@ -450,6 +453,75 @@ class RevisionOperativaTests(TestCase):
         self.assertEqual(
             solicitud.estado,
             EstadoSolicitudFinanciacion.PENDING_MANUAL_REVIEW,
+        )
+
+    @override_settings(FINANCIACION_EDUCATIVA_AUTOMATION_ENABLED=True)
+    def test_reemplazo_final_reanuda_loader_y_crea_nueva_version(self):
+        decidir_solicitud(
+            solicitud=self.solicitud,
+            actor=self.revisor,
+            tipo=TipoDecisionRevisionEducativa.CORRECTION_REQUESTED,
+            motivo=MotivoDecisionRevisionEducativa.OTHER,
+            mensaje_solicitante='Carga nuevamente el certificado de ingresos.',
+            requisitos_pendientes=[
+                RequisitoCorreccionEducativa.INCOME_CERTIFICATE
+            ],
+        )
+        self.solicitud.refresh_from_db()
+        ProcesoAutomatizacionEducativa.objects.create(
+            solicitud=self.solicitud,
+            version_expediente=1,
+            estado=EstadoProcesoAutomatizacionEducativa.CORRECTION_REQUIRED,
+            etapa_actual=EtapaAutomatizacionEducativa.DOCUMENT_VALIDATION,
+            requisitos_correccion=[
+                RequisitoCorreccionEducativa.INCOME_CERTIFICATE
+            ],
+        )
+        ingreso = self.solicitud.documentos.get(
+            tipo=TipoDocumentoFinanciacion.INCOME_CERTIFICATE,
+            activo=True,
+        )
+        self.client.force_login(self.propietario)
+        url = reverse(
+            'financiacion_educativa_web:documento-reemplazar',
+            kwargs={
+                'solicitud_id': self.solicitud.pk,
+                'documento_id': ingreso.pk,
+            },
+        )
+
+        with self.captureOnCommitCallbacks(execute=True):
+            respuesta = self.client.post(
+                url,
+                {'archivo': jpeg('ingresos-corregidos.jpg', b'ingresos-ok')},
+            )
+
+        self.solicitud.refresh_from_db()
+        self.assertRedirects(
+            respuesta,
+            reverse(
+                'financiacion_educativa_web:procesamiento',
+                kwargs={'solicitud_id': self.solicitud.pk},
+            ),
+            fetch_redirect_response=False,
+        )
+        self.assertEqual(
+            self.solicitud.estado,
+            EstadoSolicitudFinanciacion.PENDING_MANUAL_REVIEW,
+        )
+        self.assertEqual(
+            ProcesoAutomatizacionEducativa.objects.filter(
+                solicitud=self.solicitud,
+            ).count(),
+            2,
+        )
+        self.assertSetEqual(
+            set(
+                ProcesoAutomatizacionEducativa.objects.filter(
+                    solicitud=self.solicitud,
+                ).values_list('version_expediente', flat=True)
+            ),
+            {1, 2},
         )
 
     def test_rechazo_es_final_y_no_autoriza_curso(self):

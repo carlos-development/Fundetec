@@ -21,6 +21,7 @@ from financiacion_educativa.choices import (
 from financiacion_educativa.models import (
     Consentimiento,
     HistorialEstadoSolicitud,
+    ProcesoAutomatizacionEducativa,
     VersionTerminosFinanciacion,
 )
 from financiacion_educativa.services.documentos import (
@@ -271,6 +272,7 @@ class ExpedienteVerificableIteracionTests(TestCase):
             'Esto no impide enviar el expediente',
         )
 
+    @override_settings(FINANCIACION_EDUCATIVA_AUTOMATION_ENABLED=True)
     def test_envio_completo_transiciona_y_reintento_es_idempotente(self):
         estudiante = sincronizar_estudiante_desde_solicitud(
             solicitud=self.solicitud,
@@ -280,22 +282,30 @@ class ExpedienteVerificableIteracionTests(TestCase):
         self._aceptar_matricula()
         self.client.force_login(self.usuario)
 
-        primera = self.client.post(
-            self._url('documentacion-completar'),
-            follow=True,
-        )
-        segunda = self.client.post(
-            self._url('documentacion-completar'),
-            follow=True,
-        )
+        with self.captureOnCommitCallbacks(execute=True):
+            primera = self.client.post(
+                self._url('documentacion-completar'),
+                follow=True,
+            )
+        with self.captureOnCommitCallbacks(execute=True):
+            segunda = self.client.post(
+                self._url('documentacion-completar'),
+                follow=True,
+            )
 
         self.solicitud.refresh_from_db()
         self.assertEqual(
             self.solicitud.estado,
             EstadoSolicitudFinanciacion.PENDING_MANUAL_REVIEW,
         )
-        self.assertContains(primera, 'Expediente enviado a revision')
+        self.assertContains(primera, 'Estamos procesando tu expediente')
         self.assertEqual(segunda.status_code, 200)
+        self.assertEqual(
+            ProcesoAutomatizacionEducativa.objects.filter(
+                solicitud=self.solicitud,
+            ).count(),
+            1,
+        )
         self.assertEqual(
             HistorialEstadoSolicitud.objects.filter(
                 solicitud=self.solicitud,

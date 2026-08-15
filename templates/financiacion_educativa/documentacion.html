@@ -277,7 +277,7 @@
                             </div>
                         {% endif %}
                         <div class="edu-form-actions">
-                            <form class="edu-form" method="post" action="{% url 'financiacion_educativa_web:documentacion-completar' solicitud.id %}">
+                            <form class="edu-form" method="post" action="{% url 'financiacion_educativa_web:documentacion-completar' solicitud.id %}" data-submit-once>
                                 {% csrf_token %}
                                 <button class="edu-button" type="submit">Enviar expediente a revisi&oacute;n</button>
                             </form>

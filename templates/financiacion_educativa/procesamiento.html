@@ -1,0 +1,113 @@
+{% extends "financiacion_educativa/_base.html" %}
+{% load financiacion_format %}
+
+{% block title %}Procesamiento del expediente | {{ education_brand.name|default:"Aprobado" }}{% endblock %}
+
+{% block content %}
+<section class="edu-processing-page">
+    <div class="edu-processing-shell">
+        <article
+            class="edu-processing-surface"
+            data-education-processing
+            data-status-url="{{ estado_url }}"
+            data-initial-status="{{ progreso.status }}"
+            aria-labelledby="processing-title"
+        >
+            <header class="edu-processing-heading">
+                <p class="edu-eyebrow">Expediente educativo</p>
+                <div class="edu-processing-indicator" data-processing-indicator aria-hidden="true">
+                    <span></span><span></span><span></span>
+                </div>
+                <h1 id="processing-title" data-processing-title>
+                    {% if progreso.status == "CORRECTION_REQUIRED" %}
+                        Necesitamos una correcci&oacute;n
+                    {% elif progreso.status == "PENDING_SIGNATURE" %}
+                        Tu pagar&eacute; est&aacute; listo para firmar
+                    {% elif progreso.status == "COMPLETED" %}
+                        Proceso completado
+                    {% elif progreso.status == "MANUAL_EXCEPTION" %}
+                        Verificaci&oacute;n adicional
+                    {% elif progreso.status == "FAILED" %}
+                        No pudimos terminar la verificaci&oacute;n
+                    {% else %}
+                        Estamos procesando tu expediente
+                    {% endif %}
+                </h1>
+                <p
+                    class="edu-processing-message"
+                    data-processing-message
+                    role="status"
+                    aria-live="polite"
+                    aria-atomic="true"
+                >{{ progreso.message }}</p>
+                <p class="edu-processing-time" data-processing-time>
+                    Este proceso puede tardar algunos minutos. Puedes cerrar esta p&aacute;gina y volver desde tu cuenta.
+                </p>
+            </header>
+
+            <ol class="edu-processing-steps" data-processing-steps aria-label="Progreso del expediente">
+                {% for paso in progreso.steps %}
+                    <li class="is-{{ paso.state }}" data-step-key="{{ paso.key }}">
+                        <span class="edu-processing-step-marker" aria-hidden="true">
+                            <i class="bi {% if paso.state == 'complete' %}bi-check-lg{% elif paso.state == 'action' %}bi-exclamation-lg{% else %}bi-circle-fill{% endif %}"></i>
+                        </span>
+                        <span>{{ paso.label }}</span>
+                    </li>
+                {% endfor %}
+            </ol>
+
+            <section
+                class="edu-processing-corrections"
+                data-processing-corrections-section
+                {% if not progreso.requires_correction %}hidden{% endif %}
+                aria-labelledby="processing-corrections-title"
+            >
+                <h2 id="processing-corrections-title">Elementos que debes actualizar</h2>
+                <ul data-processing-corrections>
+                    {% for requisito in progreso.correction_requirements %}
+                        <li>
+                            <span>{{ requisito.message }}</span>
+                            <a href="{{ requisito.action.url }}">{{ requisito.action.label }}</a>
+                        </li>
+                    {% endfor %}
+                </ul>
+            </section>
+
+            <section
+                class="edu-processing-financial"
+                data-processing-financial
+                {% if not progreso.financial_terms %}hidden{% endif %}
+                aria-labelledby="processing-financial-title"
+            >
+                <h2 id="processing-financial-title">Condiciones autorizadas</h2>
+                <dl>
+                    <div><dt>Monto solicitado</dt><dd data-financial-requested>{% if progreso.financial_terms %}{{ progreso.financial_terms.requested_amount|cop }}{% endif %}</dd></div>
+                    <div><dt>Capital financiado</dt><dd data-financial-financed>{% if progreso.financial_terms %}{{ progreso.financial_terms.financed_amount|cop }}{% endif %}</dd></div>
+                    <div><dt>Plazo</dt><dd data-financial-term>{% if progreso.financial_terms %}{{ progreso.financial_terms.term_months }} meses{% endif %}</dd></div>
+                    <div><dt>Cuota estimada</dt><dd data-financial-installment>{% if progreso.financial_terms %}{{ progreso.financial_terms.estimated_installment|cop }}{% endif %}</dd></div>
+                </dl>
+            </section>
+
+            <div class="edu-processing-actions">
+                <button
+                    class="edu-button-secondary"
+                    type="button"
+                    data-processing-retry
+                    {% if progreso.status != "PENDING_SIGNATURE" %}hidden{% endif %}
+                >
+                    <i class="bi bi-arrow-clockwise" aria-hidden="true"></i>
+                    Consultar nuevamente
+                </button>
+                <a
+                    class="edu-button"
+                    data-processing-action
+                    {% if progreso.action %}href="{{ progreso.action.url }}"{% else %}hidden{% endif %}
+                >{% if progreso.action %}{{ progreso.action.label }}{% endif %}</a>
+                <a class="edu-button-quiet" href="{% url 'financiacion_educativa_web:reanudar-solicitudes' %}">
+                    Volver a mis solicitudes
+                </a>
+            </div>
+        </article>
+    </div>
+</section>
+{% endblock %}

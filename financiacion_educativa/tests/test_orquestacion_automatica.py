@@ -16,6 +16,7 @@ from financiacion_educativa.choices import (
     EstadoEvidenciaMatricula,
     EstadoOutboxCorreoEducativo,
     EstadoEscaneoDocumento,
+    EstadoProcesoAutomatizacionEducativa,
     EstadoProcesoFirmaEducativa,
     EstadoSolicitudFinanciacion,
     EstadoValidacionDocumento,
@@ -40,6 +41,7 @@ from financiacion_educativa.services.documentos import (
     reemplazar_documento,
 )
 from financiacion_educativa.services.cola_automatizacion import (
+    encolar_proceso_automatizacion,
     procesar_siguiente_trabajo,
 )
 from financiacion_educativa.services.estado_publico import obtener_resultado_publico
@@ -601,7 +603,8 @@ class OrquestacionAutomaticaTests(TestCase):
         self.assertFalse(documento.validaciones_ia.exists())
         self.assertFalse(CondicionesFinancieras.objects.exists())
 
-    def test_pdf_que_requiere_validacion_de_contenido_pasa_a_revision_manual(self):
+    @override_settings(FINANCIACION_EDUCATIVA_PDF_PROCESSING_ENABLED=False)
+    def test_pdf_deshabilitado_cierra_en_excepcion_manual(self):
         solicitud = self._solicitud_base('AUTO-INGRESOS-PDF')
         adulto = self._participante(solicitud)
         self._documento(
@@ -621,18 +624,35 @@ class OrquestacionAutomaticaTests(TestCase):
             participante=adulto,
             tipo=TipoDocumentoFinanciacion.INCOME_CERTIFICATE,
             origen_captura='USER_UPLOAD',
-            archivo=pdf('certificado-ingresos'),
+            archivo=SimpleUploadedFile(
+                'certificado-ingresos.pdf',
+                pdf_sintetico(textos=(
+                    'CERTIFICADO INGRESOS ADULTO AUTOMATICO PERIODO 2026 VALORES',
+                )),
+                content_type='application/pdf',
+            ),
             actor=self.usuario,
         )
         solicitud.estado = EstadoSolicitudFinanciacion.PENDING_MANUAL_REVIEW
         solicitud.save(update_fields=['estado'])
 
-        resultado = ejecutar_orquestacion_automatica(solicitud_id=solicitud.pk)
+        proceso, creado = encolar_proceso_automatizacion(
+            solicitud_id=solicitud.pk
+        )
+        self.assertTrue(creado)
+        for _ in range(3):
+            resultado = procesar_siguiente_trabajo()
+            self.assertTrue(resultado.procesado)
 
         solicitud.refresh_from_db()
+        proceso.refresh_from_db()
         ingresos.refresh_from_db()
         decision = ingresos.resultado_procesamiento['automatic_document_policy']
-        self.assertEqual(resultado.codigo, 'MANUAL_REVIEW_REQUIRED')
+        self.assertEqual(
+            proceso.estado,
+            EstadoProcesoAutomatizacionEducativa.MANUAL_EXCEPTION,
+        )
+        self.assertEqual(proceso.codigo_razon, 'DOCUMENT_RESULT_NOT_CONCLUSIVE')
         self.assertEqual(solicitud.estado, EstadoSolicitudFinanciacion.PENDING_MANUAL_REVIEW)
         self.assertEqual(ingresos.estado_escaneo, EstadoEscaneoDocumento.SAFE)
         self.assertEqual(ingresos.estado_validacion, EstadoValidacionDocumento.PENDING)

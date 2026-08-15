@@ -83,6 +83,10 @@ from financiacion_educativa.services.politica_documental import (
 from financiacion_educativa.services.requisitos_documentales import (
     calcular_requisitos_documentales,
     completar_fase_documental,
+    reanudar_fase_documental_corregida,
+)
+from financiacion_educativa.services.progreso_publico import (
+    obtener_progreso_publico,
 )
 from financiacion_educativa.services.proyecciones_financieras import (
     proyectar_abono_capital,
@@ -421,6 +425,24 @@ def _estado_documental_editable(solicitud):
     }
 
 
+def _reanudar_correccion_completa(*, solicitud, actor):
+    try:
+        return reanudar_fase_documental_corregida(
+            solicitud=solicitud,
+            actor=actor,
+        )
+    except ValidationError:
+        return False
+
+
+def _destino_documental(solicitud, reanudada):
+    nombre = 'procesamiento' if reanudada else 'documentacion'
+    return reverse(
+        f'financiacion_educativa_web:{nombre}',
+        kwargs={'solicitud_id': solicitud.pk},
+    )
+
+
 def _captura_movil_autorizada(request, solicitud, persona):
     grant = request.session.get(SESSION_CAPTURA_MOVIL_GRANT)
     if not isinstance(grant, dict) or not _es_contexto_movil(request):
@@ -528,99 +550,37 @@ def siguiente_paso_view(request, solicitud_id):
     )
 
 
-MENSAJES_PROCESAMIENTO_PUBLICOS = {
-    'QUEUED': 'Tu expediente esta listo para ser procesado.',
-    'RUNNING': 'Estamos validando la informacion de tu expediente.',
-    'RETRYING': 'Una validacion temporal sera reintentada automaticamente.',
-    'CORRECTION_REQUIRED': 'Necesitamos que corrijas parte del expediente.',
-    'MANUAL_EXCEPTION': 'Tu expediente requiere una verificacion excepcional.',
-    'PENDING_SIGNATURE': 'El pagare fue enviado y esta pendiente de firma.',
-    'COMPLETED': 'La firma fue confirmada y el proceso termino.',
-    'FAILED': 'No fue posible completar el procesamiento automatico.',
-}
-
-
-def _mensaje_procesamiento_publico(*, proceso, estado):
-    if not proceso:
-        return MENSAJES_PROCESAMIENTO_PUBLICOS[estado]
-    if estado in {'QUEUED', 'RUNNING'}:
-        if proceso.etapa_actual == 'SECURITY_SCAN':
-            return 'Estamos verificando los archivos de forma segura.'
-        if proceso.etapa_actual == 'DOCUMENT_VALIDATION':
-            tiene_pdf = proceso.solicitud.documentos.filter(
-                activo=True,
-                content_type='application/pdf',
-                estado_validacion='PENDING',
-            ).exists()
-            return (
-                'Estamos procesando los documentos PDF.'
-                if tiene_pdf
-                else 'Estamos validando la informacion del expediente.'
-            )
-        if proceso.etapa_actual == 'DECISION':
-            return 'El expediente fue validado y estamos consolidando el resultado.'
-    return MENSAJES_PROCESAMIENTO_PUBLICOS[estado]
-
-ETAPAS_PROCESAMIENTO_PUBLICAS = {
-    'SECURITY_SCAN': 'SEGURIDAD_DOCUMENTAL',
-    'DOCUMENT_VALIDATION': 'VALIDACION_DOCUMENTAL',
-    'DECISION': 'DECISION_DOCUMENTAL',
-    'FINANCIAL_SNAPSHOT': 'CONDICIONES_FINANCIERAS',
-    'CONTRACT_GENERATION': 'DOCUMENTOS_CONTRACTUALES',
-    'SIGNATURE_SEND': 'ENVIO_A_FIRMA',
-    'WAITING_SIGNATURE': 'ESPERA_DE_FIRMA',
-    'COMPLETED': 'COMPLETADO',
-}
-
-
 @never_cache
 @login_required(login_url='/financiacion-educativa/acceso/')
 @require_GET
 def estado_procesamiento_view(request, solicitud_id):
     solicitud = _solicitud_del_usuario(request, solicitud_id)
-    proceso = solicitud.procesos_automatizacion.order_by(
-        '-version_expediente'
-    ).first()
-    if proceso:
-        estado = proceso.estado
-        etapa = ETAPAS_PROCESAMIENTO_PUBLICAS.get(
-            proceso.etapa_actual,
-            'VALIDACION_DOCUMENTAL',
-        )
-        actualizada_en = proceso.actualizada_en
-        requisitos = list(proceso.requisitos_correccion or [])
-    else:
-        if solicitud.estado == EstadoSolicitudFinanciacion.CORRECTION_REQUIRED:
-            estado = 'CORRECTION_REQUIRED'
-            etapa = 'CORRECCION_DOCUMENTAL'
-        elif solicitud.estado == EstadoSolicitudFinanciacion.PENDING_SIGNATURE:
-            estado = 'PENDING_SIGNATURE'
-            etapa = 'ESPERA_DE_FIRMA'
-        elif solicitud.estado in {
-            EstadoSolicitudFinanciacion.APPROVED,
-            EstadoSolicitudFinanciacion.ACTIVE,
-            EstadoSolicitudFinanciacion.PAID,
-        }:
-            estado = 'COMPLETED'
-            etapa = 'COMPLETADO'
-        else:
-            estado = 'MANUAL_EXCEPTION'
-            etapa = 'REVISION_DE_CONTINGENCIA'
-        actualizada_en = solicitud.actualizada_en
-        requisitos = []
-    requiere_correccion = estado == 'CORRECTION_REQUIRED'
-    return JsonResponse({
-        'status': estado,
-        'public_stage': etapa,
-        'message': _mensaje_procesamiento_publico(
-            proceso=proceso,
-            estado=estado,
-        ),
-        'requires_correction': requiere_correccion,
-        'correction_requirements': requisitos if requiere_correccion else [],
-        'can_resume': requiere_correccion,
-        'updated_at': actualizada_en.isoformat(),
-    })
+    respuesta = JsonResponse(obtener_progreso_publico(solicitud))
+    respuesta['Cache-Control'] = 'private, no-store, max-age=0'
+    respuesta['Pragma'] = 'no-cache'
+    return respuesta
+
+
+@never_cache
+@login_required(login_url='/financiacion-educativa/acceso/')
+@require_GET
+def procesamiento_view(request, solicitud_id):
+    solicitud = _solicitud_del_usuario(request, solicitud_id)
+    respuesta = render(
+        request,
+        'financiacion_educativa/procesamiento.html',
+        {
+            'solicitud': solicitud,
+            'progreso': obtener_progreso_publico(solicitud),
+            'estado_url': reverse(
+                'financiacion_educativa_web:estado-procesamiento',
+                kwargs={'solicitud_id': solicitud.pk},
+            ),
+        },
+    )
+    respuesta['Cache-Control'] = 'private, no-store, max-age=0'
+    respuesta['Pragma'] = 'no-cache'
+    return respuesta
 
 
 @never_cache
@@ -814,8 +774,13 @@ def participante_view(request, solicitud_id, participante_id=None):
             _agregar_error_formulario(form, error)
         else:
             return redirect(
-                'financiacion_educativa_web:documentacion',
-                solicitud_id=solicitud.pk,
+                _destino_documental(
+                    solicitud,
+                    _reanudar_correccion_completa(
+                        solicitud=solicitud,
+                        actor=request.user,
+                    ),
+                )
             )
     return render(
         request,
@@ -857,8 +822,13 @@ def cargar_documento_view(request, solicitud_id):
             _agregar_error_formulario(form, error)
         else:
             return redirect(
-                'financiacion_educativa_web:documentacion',
-                solicitud_id=solicitud.pk,
+                _destino_documental(
+                    solicitud,
+                    _reanudar_correccion_completa(
+                        solicitud=solicitud,
+                        actor=request.user,
+                    ),
+                )
             )
     return render(
         request,
@@ -992,11 +962,18 @@ def capturar_identidad_view(request, solicitud_id, persona):
             == len(tipos_requeridos)
         ):
             request.session.pop(SESSION_CAPTURA_MOVIL_GRANT, None)
+        reanudada = _reanudar_correccion_completa(
+            solicitud=solicitud,
+            actor=request.user,
+        )
         return JsonResponse({
             'ok': True,
             'lado': lado,
             'documento_id': str(documento.pk),
             'estado': documento.get_estado_validacion_display(),
+            'processing_url': (
+                _destino_documental(solicitud, True) if reanudada else None
+            ),
         })
 
     documentos = {
@@ -1145,8 +1122,13 @@ def reemplazar_documento_view(request, solicitud_id, documento_id):
             _agregar_error_formulario(form, error)
         else:
             return redirect(
-                'financiacion_educativa_web:documentacion',
-                solicitud_id=solicitud.pk,
+                _destino_documental(
+                    solicitud,
+                    _reanudar_correccion_completa(
+                        solicitud=solicitud,
+                        actor=request.user,
+                    ),
+                )
             )
     return render(
         request,
@@ -1268,8 +1250,13 @@ def matricula_view(request, solicitud_id):
             _agregar_error_formulario(form, error)
         else:
             return redirect(
-                'financiacion_educativa_web:documentacion',
-                solicitud_id=solicitud.pk,
+                _destino_documental(
+                    solicitud,
+                    _reanudar_correccion_completa(
+                        solicitud=solicitud,
+                        actor=request.user,
+                    ),
+                )
             )
     return render(
         request,
@@ -1387,6 +1374,7 @@ def descargar_artefacto_firmado_view(
 @require_http_methods(['POST'])
 def completar_documentacion_view(request, solicitud_id):
     solicitud = _solicitud_del_usuario(request, solicitud_id)
+    enviada = False
     try:
         resultado = completar_fase_documental(
             solicitud=solicitud,
@@ -1409,6 +1397,7 @@ def completar_documentacion_view(request, solicitud_id):
             ),
         )
     else:
+        enviada = True
         messages.success(
             request,
             (
@@ -1423,8 +1412,7 @@ def completar_documentacion_view(request, solicitud_id):
             ),
         )
     return redirect(
-        'financiacion_educativa_web:documentacion',
-        solicitud_id=solicitud.pk,
+        _destino_documental(solicitud, enviada)
     )
 
 

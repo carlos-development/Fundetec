@@ -4,6 +4,7 @@ from tempfile import TemporaryDirectory
 from urllib.parse import urlparse
 
 from django.contrib.auth import get_user_model
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import override_settings
 from django.urls import reverse
 from rest_framework import status
@@ -26,7 +27,9 @@ from financiacion_educativa.models import (
     ArtefactoContractualEducativo,
     CondicionesFinancieras,
     EventoWebhookFirmaEducativa,
+    HistorialEstadoSolicitud,
     OutboxCorreoEducativo,
+    ProcesoAutomatizacionEducativa,
     ProcesoFirmaEducativa,
     SolicitudFinanciacionEducativa,
     VersionTerminosFinanciacion,
@@ -47,6 +50,7 @@ from financiacion_educativa.tests.factories import (
 from financiacion_educativa.tests.signature_backends import (
     RecordingEducationalSignatureBackend,
 )
+from financiacion_educativa.tests.test_procesamiento_pdf import pdf_sintetico
 from instituciones.models import Institucion
 from instituciones.services.credenciales import crear_credencial_api
 
@@ -62,6 +66,10 @@ AI_BACKEND = (
 SIGNATURE_BACKEND = (
     'financiacion_educativa.tests.signature_backends.'
     'RecordingEducationalSignatureBackend'
+)
+CONTENT_BACKEND = (
+    'financiacion_educativa.tests.content_validation_backends.'
+    'BackendContenidoConcluyente'
 )
 PAYLOAD = {
     'external_reference': 'E2E-AUTOMATICO-001',
@@ -95,6 +103,13 @@ PAYLOAD = {
     FINANCIACION_EDUCATIVA_DOCUMENT_AI_BACKEND=AI_BACKEND,
     FINANCIACION_EDUCATIVA_DOCUMENT_AI_ENABLED=True,
     FINANCIACION_EDUCATIVA_ALLOW_TEST_AI_BACKENDS=True,
+    FINANCIACION_EDUCATIVA_PDF_PROCESSING_ENABLED=True,
+    FINANCIACION_EDUCATIVA_ALLOW_TEST_CONTENT_BACKENDS=True,
+    FINANCIACION_EDUCATIVA_CONTENT_AI_BACKEND=CONTENT_BACKEND,
+    FINANCIACION_EDUCATIVA_CONTENT_HASH_HMAC_KEY=(
+        'local-content-hmac-only-for-e2e'
+    ),
+    FINANCIACION_EDUCATIVA_PDF_USE_SUBPROCESS=False,
     FINANCIACION_EDUCATIVA_ZAPSIGN_BACKEND=SIGNATURE_BACKEND,
     FINANCIACION_EDUCATIVA_ALLOW_TEST_SIGNATURE_BACKENDS=True,
     FINANCIACION_EDUCATIVA_ZAPSIGN_WEBHOOK_SECRET='e2e-webhook-secret',
@@ -150,7 +165,15 @@ class FlujoAutomaticoE2ETests(APITestCase):
             'HTTP_IDEMPOTENCY_KEY': 'e2e-automatico-idempotency',
         }
 
-    def _registrar_documento(self, *, solicitud, participante, tipo, nombre):
+    def _registrar_documento(
+        self,
+        *,
+        solicitud,
+        participante,
+        tipo,
+        nombre,
+        archivo=None,
+    ):
         with self.captureOnCommitCallbacks(execute=True):
             documento = registrar_documento(
                 solicitud=solicitud,
@@ -164,7 +187,10 @@ class FlujoAutomaticoE2ETests(APITestCase):
                     }
                     else OrigenCapturaDocumento.USER_UPLOAD
                 ),
-                archivo=imagen_jpeg_prueba(f'{nombre}.jpg', nombre),
+                archivo=(
+                    archivo
+                    or imagen_jpeg_prueba(f'{nombre}.jpg', nombre)
+                ),
                 actor=solicitud.usuario,
             )
         documento.refresh_from_db()
@@ -233,11 +259,22 @@ class FlujoAutomaticoE2ETests(APITestCase):
             (TipoDocumentoFinanciacion.STUDENT_ID_BACK, 'e2e-reverso'),
             (TipoDocumentoFinanciacion.INCOME_CERTIFICATE, 'e2e-ingresos'),
         ):
+            archivo = None
+            if tipo == TipoDocumentoFinanciacion.INCOME_CERTIFICATE:
+                archivo = SimpleUploadedFile(
+                    'e2e-ingresos.pdf',
+                    pdf_sintetico(textos=(
+                        'CERTIFICADO DE INGRESOS CAMILA ANDREA ROJAS DIAZ '
+                        '1000123456 PERIODO 2026 VALORES',
+                    )),
+                    content_type='application/pdf',
+                )
             self._registrar_documento(
                 solicitud=solicitud,
                 participante=estudiante,
                 tipo=tipo,
                 nombre=nombre,
+                archivo=archivo,
             )
 
         with self.captureOnCommitCallbacks(execute=True):
@@ -248,10 +285,33 @@ class FlujoAutomaticoE2ETests(APITestCase):
                 )
         )
         self.assertEqual(completar.status_code, status.HTTP_302_FOUND)
+        self.assertEqual(
+            completar.url,
+            reverse(
+                'financiacion_educativa_web:procesamiento',
+                kwargs={'solicitud_id': solicitud.pk},
+            ),
+        )
+        recarga = self.client.get(completar.url)
+        self.assertEqual(recarga.status_code, status.HTTP_200_OK)
+        self.assertContains(recarga, 'data-education-processing')
         resultado_correo = procesar_siguiente_correo()
         self.assertTrue(resultado_correo.procesado)
 
-        for _ in range(10):
+        primer_trabajo = procesar_siguiente_trabajo()
+        self.assertTrue(primer_trabajo.procesado)
+        progreso_validacion = self.client.get(
+            reverse(
+                'financiacion_educativa_web:estado-procesamiento',
+                kwargs={'solicitud_id': solicitud.pk},
+            )
+        )
+        self.assertEqual(
+            progreso_validacion.json()['public_stage'],
+            'VALIDACION_DOCUMENTAL',
+        )
+
+        for _ in range(9):
             resultado_worker = procesar_siguiente_trabajo()
             self.assertTrue(resultado_worker.procesado)
             if (
@@ -270,6 +330,15 @@ class FlujoAutomaticoE2ETests(APITestCase):
         )
         self.assertEqual(proceso.estado, EstadoProcesoFirmaEducativa.SENT)
         self.assertEqual(len(RecordingEducationalSignatureBackend.submissions), 1)
+        progreso_firma = self.client.get(
+            reverse(
+                'financiacion_educativa_web:estado-procesamiento',
+                kwargs={'solicitud_id': solicitud.pk},
+            )
+        ).json()
+        self.assertEqual(progreso_firma['status'], 'PENDING_SIGNATURE')
+        self.assertTrue(progreso_firma['should_poll'])
+        self.assertIsNone(progreso_firma['financial_terms'])
         resultado_correo = procesar_siguiente_correo()
         self.assertTrue(resultado_correo.procesado)
         self.assertEqual(
@@ -316,13 +385,36 @@ class FlujoAutomaticoE2ETests(APITestCase):
             content_type='application/json',
             HTTP_X_EDUCATIONAL_SIGNATURE_SECRET='e2e-webhook-secret',
         )
+        self.assertEqual(webhook.status_code, status.HTTP_200_OK)
+        detalle_primera_firma = self.client.get(
+            reverse(
+                'financiacion_educativa_api:solicitud-detalle',
+                kwargs={'application_id': solicitud.pk},
+            ),
+            HTTP_AUTHORIZATION=f'ApiKey {self.credencial.token}',
+        )
+        self.assertEqual(
+            detalle_primera_firma.status_code,
+            status.HTTP_200_OK,
+        )
+        self.assertIsNotNone(detalle_primera_firma.data['financial_terms'])
+        pagare_primera_firma = ArtefactoContractualEducativo.objects.get(
+            solicitud=solicitud,
+            tipo=TipoArtefactoContractualEducativo.PROMISSORY_NOTE,
+            vigente=True,
+        )
+        archivo_firmado_nombre = pagare_primera_firma.archivo_firmado.name
+        archivo_firmado_hash = pagare_primera_firma.hash_firmado_sha256
+        terminos_primera_firma = deepcopy(
+            detalle_primera_firma.data['financial_terms']
+        )
+
         repetido = self.client.post(
             webhook_url,
             data=json.dumps(payload_webhook),
             content_type='application/json',
             HTTP_X_EDUCATIONAL_SIGNATURE_SECRET='e2e-webhook-secret',
         )
-        self.assertEqual(webhook.status_code, status.HTTP_200_OK)
         self.assertEqual(repetido.status_code, status.HTTP_200_OK)
 
         solicitud.refresh_from_db()
@@ -339,7 +431,42 @@ class FlujoAutomaticoE2ETests(APITestCase):
             EstadoArtefactoContractualEducativo.SIGNED,
         )
         self.assertTrue(pagare.archivo_firmado)
+        self.assertEqual(len(RecordingEducationalSignatureBackend.downloads), 1)
+        self.assertEqual(pagare.archivo_firmado.name, archivo_firmado_nombre)
+        self.assertEqual(pagare.hash_firmado_sha256, archivo_firmado_hash)
         self.assertEqual(EventoWebhookFirmaEducativa.objects.count(), 1)
+        self.assertEqual(
+            ProcesoAutomatizacionEducativa.objects.filter(
+                solicitud=solicitud,
+                estado=EstadoProcesoAutomatizacionEducativa.COMPLETED,
+            ).count(),
+            1,
+        )
+        self.assertEqual(
+            ArtefactoContractualEducativo.objects.filter(
+                solicitud=solicitud,
+                tipo=TipoArtefactoContractualEducativo.PROMISSORY_NOTE,
+            ).count(),
+            1,
+        )
+        self.assertEqual(
+            ArtefactoContractualEducativo.objects.filter(
+                solicitud=solicitud,
+                tipo=TipoArtefactoContractualEducativo.ENROLLMENT_FORM,
+            ).count(),
+            1,
+        )
+        self.assertEqual(
+            HistorialEstadoSolicitud.objects.filter(
+                solicitud=solicitud,
+                estado_nuevo=EstadoSolicitudFinanciacion.APPROVED,
+            ).count(),
+            1,
+        )
+        self.assertEqual(
+            CondicionesFinancieras.objects.filter(solicitud=solicitud).count(),
+            1,
+        )
         estudiante.refresh_from_db()
         self.assertFalse(estudiante.identidad_verificada)
         self.assertFalse(estudiante.relacion_verificada)
@@ -355,3 +482,18 @@ class FlujoAutomaticoE2ETests(APITestCase):
         self.assertEqual(detalle_final.data['status'], 'APPROVED')
         self.assertTrue(detalle_final.data['course_authorized'])
         self.assertIsNotNone(detalle_final.data['financial_terms'])
+        self.assertEqual(
+            detalle_final.data['financial_terms'],
+            terminos_primera_firma,
+        )
+        progreso_final = self.client.get(
+            reverse(
+                'financiacion_educativa_web:estado-procesamiento',
+                kwargs={'solicitud_id': solicitud.pk},
+            )
+        ).json()
+        self.assertEqual(progreso_final['status'], 'COMPLETED')
+        self.assertEqual(
+            progreso_final['financial_terms'],
+            detalle_final.data['financial_terms'],
+        )

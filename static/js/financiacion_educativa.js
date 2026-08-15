@@ -448,6 +448,10 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (!response.ok || !result.ok) {
                     throw new Error(result.error || 'La captura fue rechazada.');
                 }
+                if (result.processing_url) {
+                    window.location.assign(result.processing_url);
+                    return;
+                }
                 const status = document.querySelector(
                     '[data-side-status="' + savedSide + '"]'
                 );

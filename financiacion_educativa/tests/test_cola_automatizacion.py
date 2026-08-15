@@ -338,9 +338,14 @@ class ColaAutomatizacionEducativaTests(TestCase):
                 'status',
                 'public_stage',
                 'message',
+                'steps',
                 'requires_correction',
                 'correction_requirements',
                 'can_resume',
+                'action',
+                'should_poll',
+                'is_terminal',
+                'financial_terms',
                 'updated_at',
             },
         )
@@ -356,7 +361,8 @@ class ColaAutomatizacionEducativaTests(TestCase):
 
         respuesta = self.client.get(url)
 
-        self.assertEqual(respuesta.json()['status'], 'COMPLETED')
+        self.assertEqual(respuesta.json()['status'], 'MANUAL_EXCEPTION')
+        self.assertIsNone(respuesta.json()['financial_terms'])
 
     def test_comandos_diagnostican_y_procesan_sin_exponer_solicitud(self):
         encolar_proceso_automatizacion(solicitud_id=self.solicitud.pk)

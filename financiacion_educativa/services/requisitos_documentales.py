@@ -246,3 +246,14 @@ def completar_fase_documental(*, solicitud, actor):
     crear_correo_expediente_recibido(solicitud=solicitud)
     programar_orquestacion_automatica(solicitud_id=solicitud.pk)
     return solicitud
+
+
+def reanudar_fase_documental_corregida(*, solicitud, actor):
+    """Reanuda una correccion solo cuando todos sus requisitos ya cambiaron."""
+    solicitud.refresh_from_db()
+    if solicitud.estado != EstadoSolicitudFinanciacion.CORRECTION_REQUIRED:
+        return False
+    if not fase_documental_completa(solicitud):
+        return False
+    completar_fase_documental(solicitud=solicitud, actor=actor)
+    return True
