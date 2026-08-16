@@ -68,6 +68,7 @@ class ConcurrenciaEscaneoPostgreSQLTests(TransactionTestCase):
         solicitud = crear_solicitud(
             usuario=self.usuario,
             referencia='PG-SCAN-001',
+            correo='pg-scan-owner@example.test',
         )
         solicitud.estado = EstadoSolicitudFinanciacion.PENDING_DOCUMENT
         solicitud.save(update_fields=['estado'])

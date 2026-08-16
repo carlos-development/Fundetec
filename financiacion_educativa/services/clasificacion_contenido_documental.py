@@ -617,9 +617,11 @@ def _paginas_para_clasificacion(paginas):
 
 def _iniciar(documento):
     with transaction.atomic():
-        documento = DocumentoFinanciacion.objects.select_for_update().select_related(
-            'solicitud__institucion', 'participante'
-        ).get(pk=documento.pk)
+        documento = (
+            DocumentoFinanciacion.objects.select_for_update(of=('self',))
+            .select_related('solicitud__institucion', 'participante')
+            .get(pk=documento.pk)
+        )
         existente = documento.procesamientos_contenido.order_by('-numero').first()
         if existente and existente.hash_original == documento.sha256:
             if existente.estado == EstadoProcesamientoContenidoDocumento.STARTED:

@@ -412,7 +412,11 @@ class ConcurrenciaColaPostgreSQLTests(TransactionTestCase):
             username='cola-pg@example.com',
             password='Clave-2026',
         )
-        solicitud = crear_solicitud(usuario=usuario, referencia='COLA-PG-001')
+        solicitud = crear_solicitud(
+            usuario=usuario,
+            referencia='COLA-PG-001',
+            correo='cola-pg@example.test',
+        )
         solicitud.estado = EstadoSolicitudFinanciacion.PENDING_MANUAL_REVIEW
         solicitud.save(update_fields=['estado'])
         proceso, _ = encolar_proceso_automatizacion(solicitud_id=solicitud.pk)
@@ -437,6 +441,7 @@ class ConcurrenciaColaPostgreSQLTests(TransactionTestCase):
         for hilo in hilos:
             hilo.join(10)
 
+        self.assertTrue(all(not hilo.is_alive() for hilo in hilos))
         self.assertEqual(errores, [])
         self.assertEqual(reclamados.count(proceso.pk), 1)
         self.assertEqual(reclamados.count(None), 1)

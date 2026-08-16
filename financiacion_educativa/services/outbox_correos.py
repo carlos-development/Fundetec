@@ -282,11 +282,15 @@ def _invocar_backend(backend, *, message_id, **kwargs):
 
 @transaction.atomic
 def _preparar_enlace_personal(*, outbox_id, lease_id):
-    outbox = OutboxCorreoEducativo.objects.select_for_update().select_related(
-        'entrega_invitacion__invitacion',
-        'entrega_invitacion__solicitud',
-        'enlace_captura__solicitud',
-    ).get(pk=outbox_id)
+    outbox = (
+        OutboxCorreoEducativo.objects.select_for_update(of=('self',))
+        .select_related(
+            'entrega_invitacion__invitacion',
+            'entrega_invitacion__solicitud',
+            'enlace_captura__solicitud',
+        )
+        .get(pk=outbox_id)
+    )
     if outbox.estado != EstadoOutboxCorreoEducativo.SENDING or outbox.lease_id != lease_id:
         raise EntregaCorreoNoIniciada()
     if outbox.codigo_mensaje == CodigoMensajeCorreoEducativo.INVITATION:

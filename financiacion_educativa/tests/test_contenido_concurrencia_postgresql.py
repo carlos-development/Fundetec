@@ -53,7 +53,11 @@ class ConcurrenciaContenidoPostgreSQLTests(TransactionTestCase):
             username='pg-content@example.com',
             email='pg-content@example.com',
         )
-        solicitud = crear_solicitud(usuario=usuario, referencia='PG-CONTENT')
+        solicitud = crear_solicitud(
+            usuario=usuario,
+            referencia='PG-CONTENT',
+            correo='pg-content@example.test',
+        )
         solicitud.estado = EstadoSolicitudFinanciacion.PENDING_DOCUMENT
         solicitud.save(update_fields=['estado'])
         participante = registrar_o_actualizar_participante(
@@ -94,6 +98,7 @@ class ConcurrenciaContenidoPostgreSQLTests(TransactionTestCase):
         liberar = threading.Event()
         llamadas = []
         resultados = []
+        errores = []
 
         class BackendLento:
             enabled = True
@@ -114,6 +119,8 @@ class ConcurrenciaContenidoPostgreSQLTests(TransactionTestCase):
                     documento=self.documento,
                     backend=BackendLento(),
                 ).estado)
+            except Exception as error:  # pragma: no cover - diagnostico de hilo
+                errores.append(error)
             finally:
                 close_old_connections()
 
@@ -128,6 +135,7 @@ class ConcurrenciaContenidoPostgreSQLTests(TransactionTestCase):
 
         self.assertFalse(primero.is_alive())
         self.assertFalse(segundo.is_alive())
+        self.assertEqual(errores, [])
         self.assertEqual(llamadas, [1])
         self.assertCountEqual(resultados, ['IN_PROGRESS', 'ACCEPTED'])
         self.assertEqual(self.documento.procesamientos_contenido.count(), 1)

@@ -285,9 +285,12 @@ def programar_procesamiento_documento_automatico(*, documento_id):
 
 
 def _aceptar_evidencia_matricula_concluyente(solicitud):
-    evidencia = EvidenciaMatricula.objects.select_for_update().select_related(
-        'documento_soporte'
-    ).filter(solicitud=solicitud).first()
+    evidencia = (
+        EvidenciaMatricula.objects.select_for_update(of=('self',))
+        .select_related('documento_soporte')
+        .filter(solicitud=solicitud)
+        .first()
+    )
     if not evidencia or not evidencia.documento_soporte_id:
         return
     if evidencia.estado == EstadoEvidenciaMatricula.ACCEPTED:

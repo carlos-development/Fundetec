@@ -35,6 +35,15 @@ def crear_solicitud(
     correo=None,
 ):
     institucion = institucion or crear_institucion()
+    correo_solicitud = correo or (
+        usuario.email if usuario is not None and usuario.email else ''
+    )
+    if not correo_solicitud and usuario is not None:
+        huella_referencia = hashlib.sha256(
+            referencia.encode('utf-8')
+        ).hexdigest()[:16]
+        correo_solicitud = f'solicitud-{huella_referencia}@example.test'
+    correo_solicitud = correo_solicitud or 'ana@example.com'
     return crear_solicitud_financiacion(
         institucion=institucion,
         usuario=usuario,
@@ -43,9 +52,7 @@ def crear_solicitud(
             nombres='ANA MARIA',
             apellidos='PEREZ LOPEZ',
             celular='3001234567',
-            correo=correo or (
-                usuario.email if usuario is not None else 'ana@example.com'
-            ),
+            correo=correo_solicitud,
             direccion='Calle 10 # 20-30',
             valor_plan=Decimal('1000000.00'),
             plazo_meses=12,

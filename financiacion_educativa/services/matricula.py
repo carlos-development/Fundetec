@@ -143,9 +143,11 @@ def revisar_evidencia_matricula(
         )
     ):
         raise ValidationError('No tiene permiso para revisar documentos.')
-    evidencia = EvidenciaMatricula.objects.select_for_update().select_related(
-        'documento_soporte'
-    ).get(pk=evidencia.pk)
+    evidencia = (
+        EvidenciaMatricula.objects.select_for_update(of=('self',))
+        .select_related('documento_soporte')
+        .get(pk=evidencia.pk)
+    )
     destino = (
         EstadoEvidenciaMatricula.ACCEPTED
         if aceptar
