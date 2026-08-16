@@ -109,33 +109,12 @@ En staging y produccion, activar la automatizacion exige PostgreSQL. El check de
 Django tambien valida que todos los parametros sean enteros positivos y que el
 backoff base no supere el maximo.
 
-## Plantilla de servicio para staging
+## Servicio systemd de staging
 
-Esta plantilla es documental. No debe instalarse sin revisar usuario, rutas,
-variables, endurecimiento y rollback del despliegue real.
+La plantilla versionada y fuente unica es:
 
-```ini
-[Unit]
-Description=Worker de automatizacion educativa (staging)
-After=network.target postgresql.service
-
-[Service]
-Type=simple
-User=fundetec-staging
-Group=fundetec-staging
-WorkingDirectory=/var/www/fundetec-staging/current
-EnvironmentFile=/var/www/fundetec-staging/shared/staging.env
-ExecStart=/var/www/fundetec-staging/shared/venv/bin/python manage.py procesar_cola_educativa
-Restart=on-failure
-RestartSec=5
-NoNewPrivileges=true
-PrivateTmp=true
-ProtectSystem=strict
-ProtectHome=true
-ReadWritePaths=/var/www/fundetec-staging/shared/private /var/www/fundetec-staging/shared/media
-
-[Install]
-WantedBy=multi-user.target
+```text
+deploy/systemd/fundetec-staging-educational-worker.service
 ```
 
 Antes de activarla: migraciones en cero pendientes, `manage.py check`, backends

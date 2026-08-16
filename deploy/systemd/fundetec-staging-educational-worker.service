@@ -1,0 +1,21 @@
+[Unit]
+Description=Worker de automatizacion educativa Fundetec (staging)
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=fundetec-staging
+Group=fundetec-staging
+WorkingDirectory=/var/www/fundetec-staging/current
+EnvironmentFile=/var/www/fundetec-staging/shared/staging.env
+ExecStart=/var/www/fundetec-staging/shared/venv/bin/python manage.py procesar_cola_educativa
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/www/fundetec-staging/shared/private /var/www/fundetec-staging/shared/media
+
+[Install]
+WantedBy=multi-user.target

@@ -96,6 +96,19 @@ FINANCIACION_EDUCATIVA_EMAIL_OUTBOX_BACKOFF_MAX_SECONDS=600
 de `SafeRoutingEmailBackend` siguen aplicando. El outbox no habilita entregas
 reales ni relaja la configuracion por ambiente.
 
+## Servicio systemd de staging
+
+La plantilla versionada y fuente unica es:
+
+```text
+deploy/systemd/fundetec-staging-email-outbox.service
+```
+
+Antes de iniciarla se ejecuta `diagnosticar_outbox_educativo`. El comando
+muestra conteos agregados de `PENDING`, `RETRYING`, `FAILED`, `AMBIGUOUS` y los
+demas estados sin imprimir destinatarios ni datos de solicitudes. Cualquier
+`AMBIGUOUS` debe conciliarse; nunca se reenvia automaticamente.
+
 ## Riesgos fuera de este bloque
 
 - Un `SIGKILL` despues de escribir un archivo privado y antes de persistir su

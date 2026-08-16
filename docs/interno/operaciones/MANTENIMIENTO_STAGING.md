@@ -425,3 +425,80 @@ Variables:
 No active esta funcion si ClamAV, el worker educativo, el backend IA o la clave
 HMAC no estan listos. La activacion no procesa solicitudes historicas al iniciar
 Django; solo actua sobre trabajos educativos encolados posteriormente.
+
+## Unidades systemd educativas
+
+Nombres exactos:
+
+```text
+fundetec-staging-educational-worker.service
+fundetec-staging-email-outbox.service
+```
+
+Instalacion inicial detenida y deshabilitada:
+
+```bash
+test ! -e /etc/systemd/system/fundetec-staging-educational-worker.service
+test ! -e /etc/systemd/system/fundetec-staging-email-outbox.service
+install -o root -g root -m 0644 \
+  /var/www/fundetec-staging/current/deploy/systemd/fundetec-staging-educational-worker.service \
+  /etc/systemd/system/fundetec-staging-educational-worker.service
+install -o root -g root -m 0644 \
+  /var/www/fundetec-staging/current/deploy/systemd/fundetec-staging-email-outbox.service \
+  /etc/systemd/system/fundetec-staging-email-outbox.service
+systemd-analyze verify \
+  /etc/systemd/system/fundetec-staging-educational-worker.service \
+  /etc/systemd/system/fundetec-staging-email-outbox.service
+systemctl daemon-reload
+systemctl disable --now \
+  fundetec-staging-educational-worker.service \
+  fundetec-staging-email-outbox.service
+```
+
+Antes de activar el outbox:
+
+```bash
+staging_manage diagnosticar_outbox_educativo
+```
+
+Revisar expresamente `PENDING`, `RETRYING`, `FAILED` y `AMBIGUOUS`. El
+diagnostico no muestra PII. No iniciar con un `AMBIGUOUS` sin conciliar ni sin
+haber validado SMTP y `SafeRoutingEmailBackend`.
+
+Inicio, parada y habilitacion al arranque:
+
+```bash
+systemctl start fundetec-staging-email-outbox.service
+systemctl start fundetec-staging-educational-worker.service
+systemctl stop fundetec-staging-educational-worker.service
+systemctl stop fundetec-staging-email-outbox.service
+systemctl enable fundetec-staging-email-outbox.service
+systemctl enable fundetec-staging-educational-worker.service
+```
+
+Estado y logs:
+
+```bash
+systemctl status \
+  fundetec-staging-educational-worker.service \
+  fundetec-staging-email-outbox.service --no-pager
+journalctl -u fundetec-staging-educational-worker.service \
+  -u fundetec-staging-email-outbox.service --since '10 minutes ago' --no-pager
+```
+
+Rollback exclusivo de las unidades:
+
+```bash
+systemctl disable --now \
+  fundetec-staging-educational-worker.service \
+  fundetec-staging-email-outbox.service
+rm -f \
+  /etc/systemd/system/fundetec-staging-educational-worker.service \
+  /etc/systemd/system/fundetec-staging-email-outbox.service
+systemctl daemon-reload
+systemctl reset-failed
+```
+
+El worker solo se inicia despues de activar y validar
+`FINANCIACION_EDUCATIVA_AUTOMATION_ENABLED=true`. El outbox es independiente de
+ese flag y puede entregar correo real tan pronto se inicia.
