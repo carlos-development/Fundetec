@@ -4,7 +4,7 @@ import hmac
 import json
 import re
 import unicodedata
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from decimal import Decimal, InvalidOperation
 from io import BytesIO
 
@@ -34,6 +34,7 @@ from financiacion_educativa.services.procesamiento_pdf import (
     PaginaExtraida,
     procesar_pdf_seguro,
 )
+from financiacion_educativa.services.metricas_openai import extraer_metricas_uso
 
 
 CATEGORIAS_INGRESOS = frozenset({
@@ -115,6 +116,7 @@ class ResultadoClasificacionContenido:
     resultado_general: str
     proveedor: str = ''
     modelo: str = ''
+    metricas_uso: dict = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -216,6 +218,7 @@ class OpenAIContentDocumentClassificationBackend:
             payload,
             proveedor=self.proveedor,
             modelo=self.modelo,
+            metricas_uso=extraer_metricas_uso(respuesta),
         )
 
 
@@ -314,7 +317,13 @@ def _minimizar_texto_proveedor(texto):
     return texto
 
 
-def normalizar_clasificacion(payload, *, proveedor='', modelo=''):
+def normalizar_clasificacion(
+    payload,
+    *,
+    proveedor='',
+    modelo='',
+    metricas_uso=None,
+):
     if not isinstance(payload, dict):
         raise ErrorClasificacionContenido('INVALID_RESPONSE')
     campos_payload = {
@@ -405,6 +414,7 @@ def normalizar_clasificacion(payload, *, proveedor='', modelo=''):
         resultado_general=resultado,
         proveedor=_texto(proveedor, 60),
         modelo=_texto(modelo, 80),
+        metricas_uso=dict(metricas_uso or {}),
     )
 
 

@@ -2,7 +2,7 @@ import base64
 import json
 import re
 import unicodedata
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from io import BytesIO
 
@@ -28,6 +28,7 @@ from financiacion_educativa.models import (
     DocumentoFinanciacion,
     ValidacionIADocumento,
 )
+from financiacion_educativa.services.metricas_openai import extraer_metricas_uso
 
 
 HALLAZGOS_PERMITIDOS = frozenset({
@@ -116,6 +117,7 @@ class ResultadoValidacionDocumentalIA:
     confianza_datos: Decimal | None = None
     confianza_captura_fisica: Decimal | None = None
     confianza_manipulacion: Decimal | None = None
+    metricas_uso: dict = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -226,6 +228,7 @@ class OpenAIDocumentAIValidationBackend:
             payload,
             proveedor=self.proveedor,
             modelo=self.modelo,
+            metricas_uso=extraer_metricas_uso(response),
         )
 
 
@@ -368,7 +371,13 @@ def _booleano_nullable(valor):
     raise ErrorValidacionDocumentalIA('INVALID_RESPONSE')
 
 
-def normalizar_resultado_validacion(payload, *, proveedor='', modelo=''):
+def normalizar_resultado_validacion(
+    payload,
+    *,
+    proveedor='',
+    modelo='',
+    metricas_uso=None,
+):
     if not isinstance(payload, dict):
         raise ErrorValidacionDocumentalIA('INVALID_RESPONSE')
     required_v2 = {
@@ -566,6 +575,7 @@ def normalizar_resultado_validacion(payload, *, proveedor='', modelo=''):
             if version_esquema == '3'
             else confianza
         ),
+        metricas_uso=dict(metricas_uso or {}),
     )
 
 

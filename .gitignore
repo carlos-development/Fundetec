@@ -157,6 +157,9 @@ Aplicacion_Ley_Libranza.md
 
 # Reportes y archivos operativos locales
 reports/
+calibration_datasets/
+calibration_reports/
+calibration_private_context*.json
 *.tmp
 *.bak
 Creditos_Cargar_*.xlsx
