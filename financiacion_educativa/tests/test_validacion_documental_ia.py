@@ -1,4 +1,5 @@
 from copy import deepcopy
+from dataclasses import replace
 from datetime import date, timedelta
 from decimal import Decimal
 from io import BytesIO, StringIO
@@ -40,7 +41,11 @@ from financiacion_educativa.services.validacion_documental_ia import (
     DisabledDocumentAIValidationBackend,
     ErrorValidacionDocumentalIA,
     IDENTITY_POLICY_VERSION,
+    LEGACY_IDENTITY_POLICY_VERSION,
     OpenAIDocumentAIValidationBackend,
+    PREVIOUS_IDENTITY_POLICY_VERSION,
+    _es_concluyente,
+    _resultado_estructurado,
     normalizar_resultado_validacion,
     procesar_validacion_documental_ia,
 )
@@ -750,6 +755,129 @@ class AdaptadorOpenAIValidacionDocumentalTests(TestCase):
             '0.80',
         )
 
+    def test_sin_senales_con_confianza_alta_es_concluyente(self):
+        resultado = normalizar_resultado_validacion(
+            self.payload,
+            tipo_esperado=TipoDocumentoFinanciacion.STUDENT_ID_FRONT,
+            contexto={
+                'tipo_documento': 'CC',
+                'numero_documento': '1000123456',
+                'nombres': 'ANA',
+                'apellidos': 'PRUEBA',
+            },
+        )
+
+        self.assertFalse(resultado.senales_manipulacion_visible)
+        self.assertEqual(resultado.confianza_manipulacion, Decimal('0.9700'))
+        self.assertTrue(
+            _es_concluyente(
+                resultado,
+                requiere_identidad=True,
+                requiere_documento_colombiano=True,
+            )
+        )
+
+    def test_senales_observadas_con_confianza_alta_nunca_autoaprueban(self):
+        resultado = normalizar_resultado_validacion(
+            {
+                **self.payload,
+                'visible_tampering_signals': True,
+                'tampering_confidence': 0.97,
+            },
+            tipo_esperado=TipoDocumentoFinanciacion.STUDENT_ID_FRONT,
+            contexto={
+                'tipo_documento': 'CC',
+                'numero_documento': '1000123456',
+                'nombres': 'ANA',
+                'apellidos': 'PRUEBA',
+            },
+        )
+
+        self.assertTrue(resultado.senales_manipulacion_visible)
+        self.assertEqual(resultado.confianza_manipulacion, Decimal('0.9700'))
+        self.assertFalse(
+            _es_concluyente(
+                resultado,
+                requiere_identidad=True,
+                requiere_documento_colombiano=True,
+            )
+        )
+
+    def test_evaluacion_de_manipulacion_incierta_permanece_en_revision(self):
+        resultado = normalizar_resultado_validacion(
+            {
+                **self.payload,
+                'visible_tampering_signals': None,
+                'tampering_confidence': 0.20,
+                'decision': 'MANUAL_REVIEW',
+            },
+            tipo_esperado=TipoDocumentoFinanciacion.STUDENT_ID_FRONT,
+            contexto={
+                'tipo_documento': 'CC',
+                'numero_documento': '1000123456',
+                'nombres': 'ANA',
+                'apellidos': 'PRUEBA',
+            },
+        )
+
+        self.assertIsNone(resultado.senales_manipulacion_visible)
+        self.assertEqual(resultado.confianza_manipulacion, Decimal('0.2000'))
+        self.assertEqual(resultado.decision, 'MANUAL_REVIEW')
+        self.assertFalse(
+            _es_concluyente(
+                resultado,
+                requiere_identidad=True,
+                requiere_documento_colombiano=True,
+            )
+        )
+
+    def test_confianza_de_manipulacion_no_se_invierte(self):
+        resultado = normalizar_resultado_validacion(
+            {
+                **self.payload,
+                'visible_tampering_signals': False,
+                'tampering_confidence': 0.05,
+            },
+        )
+
+        self.assertFalse(resultado.senales_manipulacion_visible)
+        self.assertEqual(resultado.confianza_manipulacion, Decimal('0.0500'))
+        self.assertNotEqual(resultado.confianza_manipulacion, Decimal('0.9500'))
+        self.assertFalse(_es_concluyente(resultado))
+
+    def test_versiones_historicas_no_se_reinterpretan(self):
+        resultado = normalizar_resultado_validacion(self.payload)
+
+        for version in (
+            LEGACY_IDENTITY_POLICY_VERSION,
+            PREVIOUS_IDENTITY_POLICY_VERSION,
+        ):
+            with self.subTest(version=version):
+                historico = replace(resultado, version_politica=version)
+                self.assertEqual(
+                    _resultado_estructurado(historico)['policy_version'],
+                    version,
+                )
+
+    def test_resultado_nuevo_registra_politica_v3(self):
+        resultado = normalizar_resultado_validacion(
+            self.payload,
+            tipo_esperado=TipoDocumentoFinanciacion.STUDENT_ID_FRONT,
+            contexto={
+                'tipo_documento': 'CC',
+                'numero_documento': '1000123456',
+                'nombres': 'ANA',
+                'apellidos': 'PRUEBA',
+            },
+        )
+
+        self.assertEqual(IDENTITY_POLICY_VERSION, 'EDU_IDENTITY_V3')
+        self.assertEqual(resultado.version_politica, 'EDU_IDENTITY_V3')
+        self.assertEqual(
+            _resultado_estructurado(resultado)['policy_version'],
+            'EDU_IDENTITY_V3',
+        )
+
     @override_settings(
         OPENAI_API_KEY='test-key-not-real',
         FINANCIACION_EDUCATIVA_DOCUMENT_AI_MODEL='test-model',
@@ -812,6 +940,22 @@ class AdaptadorOpenAIValidacionDocumentalTests(TestCase):
         self.assertIn('ocho sobre diez es 0.80, no 8', instruccion)
         self.assertIn('No afirmes autenticidad', instruccion)
         self.assertIn('STUDENT_ID_FRONT es el frente', instruccion)
+        self.assertIn(
+            'tampering_confidence NO es la probabilidad de manipulacion',
+            instruccion,
+        )
+        self.assertIn(
+            'confianza en que la evaluacion booleana',
+            instruccion,
+        )
+        self.assertIn(
+            'senales visuales observables de alteracion',
+            esquema['properties']['visible_tampering_signals']['description'],
+        )
+        self.assertIn(
+            'no es probabilidad de manipulacion',
+            esquema['properties']['tampering_confidence']['description'],
+        )
         datos_usuario = json.loads(llamada['input'][1]['content'][0]['text'])
         self.assertEqual(
             datos_usuario['politica_validacion']['version'],

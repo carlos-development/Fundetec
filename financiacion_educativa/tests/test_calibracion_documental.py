@@ -372,6 +372,10 @@ class CalibracionDocumentalCommandTests(TestCase):
             report['configuration']['identity_policy_version'],
             IDENTITY_POLICY_VERSION,
         )
+        self.assertEqual(
+            report['configuration']['identity_policy_version'],
+            'EDU_IDENTITY_V3',
+        )
 
     def test_content_case_uses_content_policy_and_usage_metrics(self):
         case = self._content_case()

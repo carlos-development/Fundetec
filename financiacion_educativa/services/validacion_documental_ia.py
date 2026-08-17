@@ -73,8 +73,9 @@ LADO_IDENTIDAD = {
     TipoDocumentoFinanciacion.GUARDIAN_ID_FRONT: 'front',
     TipoDocumentoFinanciacion.GUARDIAN_ID_BACK: 'back',
 }
-IDENTITY_POLICY_VERSION = 'EDU_IDENTITY_V2'
 LEGACY_IDENTITY_POLICY_VERSION = 'EDU_IDENTITY_V1'
+PREVIOUS_IDENTITY_POLICY_VERSION = 'EDU_IDENTITY_V2'
+IDENTITY_POLICY_VERSION = 'EDU_IDENTITY_V3'
 
 
 class ErrorValidacionDocumentalIA(Exception):
@@ -173,7 +174,16 @@ class OpenAIDocumentAIValidationBackend:
                                     'physical_document_capture solo describe si la imagen '
                                     'parece una captura de un soporte fisico; '
                                     'visible_tampering_signals solo registra senales '
-                                    'visibles y tampoco certifica autenticidad. '
+                                    'visuales observables de alteracion y tampoco '
+                                    'certifica autenticidad. tampering_confidence NO '
+                                    'es la probabilidad de manipulacion: es la confianza '
+                                    'en que la evaluacion booleana de '
+                                    'visible_tampering_signals es correcta. Si no '
+                                    'observas senales y estas seguro de esa evaluacion, '
+                                    'devuelve false con tampering_confidence alto. Si no '
+                                    'puedes evaluarlo con certeza suficiente, devuelve '
+                                    'null para visible_tampering_signals y MANUAL_REVIEW; '
+                                    'no inventes certeza. '
                                     'Para identificaciones, comprueba si muestra una '
                                     'identificacion colombiana y el lado solicitado. Para '
                                     'otros tipos, evalua solo el tipo documental indicado. '
@@ -313,10 +323,22 @@ def _esquema_respuesta():
                 'type': 'number',
                 'enum': PUNTAJES_RESPUESTA_PERMITIDOS,
             },
-            'visible_tampering_signals': {'type': ['boolean', 'null']},
+            'visible_tampering_signals': {
+                'type': ['boolean', 'null'],
+                'description': (
+                    'Indica si existen senales visuales observables de alteracion. '
+                    'Usa null si la evaluacion no es suficientemente cierta.'
+                ),
+            },
             'tampering_confidence': {
                 'type': 'number',
                 'enum': PUNTAJES_RESPUESTA_PERMITIDOS,
+                'description': (
+                    'Confianza en que la evaluacion de '
+                    'visible_tampering_signals es correcta; no es probabilidad de '
+                    'manipulacion. Debe ser alta cuando el valor es false y existe '
+                    'alta certeza de no observar senales.'
+                ),
             },
             'data_consistent': {'type': ['boolean', 'null']},
             'data_match_confidence': {
