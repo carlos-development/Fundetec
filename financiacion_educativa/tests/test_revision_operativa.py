@@ -20,8 +20,10 @@ from financiacion_educativa.choices import (
     EstadoEvidenciaMatricula,
     EstadoSolicitudFinanciacion,
     EstadoValidacionDocumento,
+    EstadoValidacionIADocumento,
     MotivoDecisionRevisionEducativa,
     OrigenCapturaDocumento,
+    OrigenValidacionIADocumento,
     RequisitoCorreccionEducativa,
     RelacionEstudiante,
     RolParticipante,
@@ -41,6 +43,7 @@ from financiacion_educativa.models import (
     OutboxCorreoEducativo,
     ProcesoAutomatizacionEducativa,
     ProcesoFirmaEducativa,
+    ValidacionIADocumento,
     VersionTerminosFinanciacion,
 )
 from financiacion_educativa.services.documentos import (
@@ -598,6 +601,37 @@ class RevisionOperativaTests(TestCase):
         self.assertContains(pagina, 'Revision de solicitud educativa')
         self.assertEqual(respuesta.status_code, 302)
         self.assertTrue(DecisionRevisionEducativa.objects.exists())
+
+    def test_admin_renderiza_booleanos_ia_sin_entidades_escapadas(self):
+        ValidacionIADocumento.objects.create(
+            documento=self.documentos[0],
+            numero=1,
+            estado=EstadoValidacionIADocumento.MANUAL_REVIEW,
+            origen=OrigenValidacionIADocumento.ADMIN,
+            resultado_estructurado={
+                'decision': 'MANUAL_REVIEW',
+                'is_identity_document': True,
+                'is_colombian_document': True,
+                'side_matches': True,
+                'required_fields_visible': True,
+            },
+        )
+        self.client.force_login(self.revisor)
+
+        pagina = self.client.get(
+            reverse(
+                'admin:financiacion_educativa_solicitud_revision',
+                args=[self.solicitud.pk],
+            )
+        )
+        contenido = pagina.content.decode('utf-8')
+
+        self.assertEqual(pagina.status_code, 200)
+        self.assertIn('Documento de identidad: Sí', contenido)
+        self.assertIn('Documento colombiano: Sí', contenido)
+        self.assertIn('Campos visibles: Sí', contenido)
+        self.assertNotIn('S&amp;iacute;', contenido)
+        self.assertNotIn('S&iacute;', contenido)
 
     def test_api_mantiene_curso_bloqueado_hasta_la_firma(self):
         self._decidir(

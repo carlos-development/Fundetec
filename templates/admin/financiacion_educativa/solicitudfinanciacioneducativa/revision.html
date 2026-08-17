@@ -37,10 +37,10 @@
                                 {% if validacion.resultado_estructurado %}
                                     {% with resultado=validacion.resultado_estructurado %}
                                         {% if resultado.decision %}<br>Decisi&oacute;n del modelo: {{ resultado.decision }}{% endif %}
-                                        {% if resultado.is_identity_document is not None %}<br>Documento de identidad: {{ resultado.is_identity_document|yesno:"S&iacute;,No,Incierto" }}{% endif %}
-                                        {% if resultado.is_colombian_document is not None %}<br>Documento colombiano: {{ resultado.is_colombian_document|yesno:"S&iacute;,No,Incierto" }}{% endif %}
+                                        {% if resultado.is_identity_document is not None %}<br>Documento de identidad: {{ resultado.is_identity_document|yesno:"Sí,No,Incierto" }}{% endif %}
+                                        {% if resultado.is_colombian_document is not None %}<br>Documento colombiano: {{ resultado.is_colombian_document|yesno:"Sí,No,Incierto" }}{% endif %}
                                         {% if resultado.side_matches is not None %}<br>Lado solicitado: {{ resultado.side_matches|yesno:"Correcto,Incorrecto,Incierto" }}{% endif %}
-                                        {% if resultado.required_fields_visible is not None %}<br>Campos visibles: {{ resultado.required_fields_visible|yesno:"S&iacute;,No,Incierto" }}{% endif %}
+                                        {% if resultado.required_fields_visible is not None %}<br>Campos visibles: {{ resultado.required_fields_visible|yesno:"Sí,No,Incierto" }}{% endif %}
                                         {% if resultado.visible_document_type %}<br>Tipo visible: {{ resultado.visible_document_type }}{% endif %}
                                         {% if resultado.visible_document_number %}<br>N&uacute;mero visible: {{ resultado.visible_document_number }}{% endif %}
                                         {% if resultado.visible_names %}<br>Nombres visibles: {{ resultado.visible_names|join:", " }}{% endif %}

@@ -26,6 +26,9 @@ from financiacion_educativa.services.calibracion_documental import (
     PRIVATE_CONTEXT_VERSION,
 )
 from financiacion_educativa.services.metricas_openai import extraer_metricas_uso
+from financiacion_educativa.services.validacion_documental_ia import (
+    IDENTITY_POLICY_VERSION,
+)
 from financiacion_educativa.tests.calibration_backends import (
     CalibrationContentConclusiveBackend,
     CalibrationIdentityConclusiveBackend,
@@ -364,6 +367,10 @@ class CalibracionDocumentalCommandTests(TestCase):
         self.assertEqual(
             report['cases'][0]['provider_usage']['total_tokens'],
             120,
+        )
+        self.assertEqual(
+            report['configuration']['identity_policy_version'],
+            IDENTITY_POLICY_VERSION,
         )
 
     def test_content_case_uses_content_policy_and_usage_metrics(self):

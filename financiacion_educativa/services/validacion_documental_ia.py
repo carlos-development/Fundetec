@@ -73,6 +73,8 @@ LADO_IDENTIDAD = {
     TipoDocumentoFinanciacion.GUARDIAN_ID_FRONT: 'front',
     TipoDocumentoFinanciacion.GUARDIAN_ID_BACK: 'back',
 }
+IDENTITY_POLICY_VERSION = 'EDU_IDENTITY_V2'
+LEGACY_IDENTITY_POLICY_VERSION = 'EDU_IDENTITY_V1'
 
 
 class ErrorValidacionDocumentalIA(Exception):
@@ -118,6 +120,8 @@ class ResultadoValidacionDocumentalIA:
     confianza_captura_fisica: Decimal | None = None
     confianza_manipulacion: Decimal | None = None
     metricas_uso: dict = field(default_factory=dict)
+    version_politica: str = LEGACY_IDENTITY_POLICY_VERSION
+    ajustes_politica: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -173,6 +177,19 @@ class OpenAIDocumentAIValidationBackend:
                                     'Para identificaciones, comprueba si muestra una '
                                     'identificacion colombiana y el lado solicitado. Para '
                                     'otros tipos, evalua solo el tipo documental indicado. '
+                                    'STUDENT_ID_FRONT es el frente de la CC o TI '
+                                    'colombiana del estudiante; STUDENT_ID_BACK es su '
+                                    'reverso. GUARDIAN_ID_FRONT y GUARDIAN_ID_BACK '
+                                    'aplican la misma regla al tutor. CC, CEDULA DE '
+                                    'CIUDADANIA y sus variantes FRONT/BACK son '
+                                    'descripciones compatibles cuando corresponden al '
+                                    'lado solicitado; aplica la equivalencia analoga a TI. '
+                                    'document_type_match evalua categoria y lado, no la '
+                                    'igualdad literal con el codigo interno. En el frente, '
+                                    'compara numero y nombres visibles. En el reverso, el '
+                                    'numero coincidente basta: no exijas nombres. Si un '
+                                    'dato necesario no es visible devuelve null y '
+                                    'MANUAL_REVIEW, no false, salvo contradiccion visible. '
                                     'Expresa quality_score, legibility_score y confidence '
                                     'como numeros entre 0.00 y 1.00 con maximo dos '
                                     'decimales; por ejemplo, ocho sobre diez es 0.80, no 8. '
@@ -191,6 +208,9 @@ class OpenAIDocumentAIValidationBackend:
                                 'text': json.dumps(
                                     {
                                         'tipo_documental_esperado': tipo_esperado,
+                                        'politica_validacion': (
+                                            _reglas_tipo_identidad(tipo_esperado)
+                                        ),
                                         'datos_declarados_para_comparacion': contexto,
                                     },
                                     ensure_ascii=True,
@@ -229,6 +249,8 @@ class OpenAIDocumentAIValidationBackend:
             proveedor=self.proveedor,
             modelo=self.modelo,
             metricas_uso=extraer_metricas_uso(response),
+            tipo_esperado=tipo_esperado,
+            contexto=contexto,
         )
 
 
@@ -344,6 +366,222 @@ def _esquema_respuesta():
     }
 
 
+def _reglas_tipo_identidad(tipo_esperado):
+    lado = LADO_IDENTIDAD.get(tipo_esperado)
+    if not lado:
+        return {
+            'version': IDENTITY_POLICY_VERSION,
+            'categoria': 'DOCUMENTO_NO_IDENTIDAD',
+        }
+    titular = (
+        'estudiante'
+        if tipo_esperado in {
+            TipoDocumentoFinanciacion.STUDENT_ID_FRONT,
+            TipoDocumentoFinanciacion.STUDENT_ID_BACK,
+        }
+        else 'tutor'
+    )
+    return {
+        'version': IDENTITY_POLICY_VERSION,
+        'categoria': 'IDENTIFICACION_COLOMBIANA_CC_O_TI',
+        'titular': titular,
+        'lado_esperado': lado,
+        'tipos_visibles_compatibles': (
+            ['CC', 'CEDULA DE CIUDADANIA', 'CC_FRONT', 'TI', 'TI_FRONT']
+            if lado == 'front'
+            else ['CC', 'CEDULA DE CIUDADANIA', 'CC_BACK', 'TI', 'TI_BACK']
+        ),
+        'regla_tipo': 'Comparar categoria documental y lado, no texto literal.',
+        'regla_datos': (
+            'Comparar numero y nombres visibles declarados.'
+            if lado == 'front'
+            else 'El numero coincidente basta; no exigir nombres en el reverso.'
+        ),
+        'dato_no_visible': 'null y MANUAL_REVIEW',
+        'contradiccion_visible': 'false; REJECTED solo si es concluyente',
+    }
+
+
+def _normalizar_comparacion(valor):
+    texto = unicodedata.normalize('NFKD', str(valor or ''))
+    texto = ''.join(caracter for caracter in texto if not unicodedata.combining(caracter))
+    return re.sub(r'[^A-Z0-9]+', '', texto.upper())
+
+
+def _normalizar_tokens_nombre(*valores):
+    texto = ' '.join(str(valor or '') for valor in valores)
+    texto = unicodedata.normalize('NFKD', texto)
+    texto = ''.join(caracter for caracter in texto if not unicodedata.combining(caracter))
+    return frozenset(re.findall(r'[A-Z0-9]+', texto.upper()))
+
+
+def _categoria_y_lado_visibles(valor):
+    normalizado = _normalizar_comparacion(valor)
+    categoria = None
+    if normalizado in {'CC', 'CCFRONT', 'CCBACK'} or 'CEDULADECIUDADANIA' in normalizado:
+        categoria = TipoDocumentoIdentidad.CC
+    elif normalizado in {'TI', 'TIFRONT', 'TIBACK'} or 'TARJETADEIDENTIDAD' in normalizado:
+        categoria = TipoDocumentoIdentidad.TI
+    elif any(
+        marcador in normalizado
+        for marcador in ('PASAPORTE', 'PASSPORT', 'CEDULADEEXTRANJERIA', 'REGISTROCIVIL')
+    ):
+        categoria = 'OTHER_IDENTITY'
+    lado = None
+    if any(marcador in normalizado for marcador in ('FRONT', 'FRENTE', 'ANVERSO')):
+        lado = 'front'
+    elif any(marcador in normalizado for marcador in ('BACK', 'REVERSO', 'POSTERIOR')):
+        lado = 'back'
+    return categoria, lado
+
+
+def _reemplazar_codigo(payload, anterior, nuevo=None):
+    for campo in ('finding_codes', 'reason_codes'):
+        codigos = [codigo for codigo in payload[campo] if codigo != anterior]
+        if nuevo and nuevo not in codigos:
+            codigos.append(nuevo)
+        payload[campo] = codigos
+
+
+def _forzar_revision_manual(payload):
+    if payload['decision'] != 'MANUAL_REVIEW':
+        payload['decision'] = 'MANUAL_REVIEW'
+
+
+def _coherencia_nombres_frente(payload, contexto):
+    visibles = _normalizar_tokens_nombre(*payload['visible_names'])
+    declarados = _normalizar_tokens_nombre(
+        contexto.get('nombres'),
+        contexto.get('apellidos'),
+    )
+    if not visibles or not declarados:
+        return None
+    if declarados.issubset(visibles):
+        return True
+    if declarados.isdisjoint(visibles):
+        return False
+    return None
+
+
+def _aplicar_coherencia_identidad(payload, *, tipo_esperado, contexto):
+    if tipo_esperado not in TIPOS_IDENTIDAD:
+        return dict(payload), ()
+    normalizado = {
+        clave: list(valor) if isinstance(valor, list) else valor
+        for clave, valor in payload.items()
+    }
+    ajustes = []
+    contexto = dict(contexto or {})
+    lado_esperado = LADO_IDENTIDAD[tipo_esperado]
+    categoria_visible, lado_visible = _categoria_y_lado_visibles(
+        normalizado['visible_document_type']
+    )
+    categoria_declarada = str(contexto.get('tipo_documento') or '').upper()
+
+    if lado_visible and lado_visible != lado_esperado:
+        normalizado['side_matches'] = False
+        normalizado['document_type_match'] = False
+        _reemplazar_codigo(normalizado, 'TYPE_MISMATCH')
+        _reemplazar_codigo(normalizado, 'SIDE_INCONCLUSIVE', 'SIDE_MISMATCH')
+        _forzar_revision_manual(normalizado)
+        ajustes.append('VISIBLE_SIDE_CONTRADICTION')
+    else:
+        categoria_compatible = None
+        if categoria_visible:
+            categoria_compatible = bool(
+                categoria_visible in {TipoDocumentoIdentidad.CC, TipoDocumentoIdentidad.TI}
+                and categoria_declarada
+                in {TipoDocumentoIdentidad.CC, TipoDocumentoIdentidad.TI}
+                and categoria_visible == categoria_declarada
+            )
+        identidad_coherente = all(
+            normalizado[campo] is True
+            for campo in (
+                'is_identity_document',
+                'is_colombian_document',
+                'side_matches',
+            )
+        )
+        if identidad_coherente and categoria_compatible is True:
+            if normalizado['document_type_match'] is not True:
+                normalizado['document_type_match'] = True
+                _reemplazar_codigo(normalizado, 'TYPE_MISMATCH')
+                ajustes.append('DOCUMENT_TYPE_EQUIVALENCE_APPLIED')
+                _forzar_revision_manual(normalizado)
+        elif categoria_compatible is False:
+            normalizado['document_type_match'] = False
+            if 'TYPE_MISMATCH' not in normalizado['finding_codes']:
+                normalizado['finding_codes'].append('TYPE_MISMATCH')
+            ajustes.append('VISIBLE_DOCUMENT_CATEGORY_MISMATCH')
+            _forzar_revision_manual(normalizado)
+        elif identidad_coherente and categoria_compatible is None:
+            if normalizado['document_type_match'] is False:
+                normalizado['document_type_match'] = None
+                _reemplazar_codigo(
+                    normalizado,
+                    'TYPE_MISMATCH',
+                    'DOCUMENT_TYPE_INCONCLUSIVE',
+                )
+                ajustes.append('DOCUMENT_TYPE_CONTRADICTION_INCONCLUSIVE')
+                _forzar_revision_manual(normalizado)
+
+    numero_visible = _normalizar_comparacion(
+        normalizado['visible_document_number']
+    )
+    numero_declarado = _normalizar_comparacion(
+        contexto.get('numero_documento')
+    )
+    if not numero_visible or not numero_declarado:
+        normalizado['data_consistent'] = None
+        _reemplazar_codigo(
+            normalizado,
+            'DATA_MISMATCH',
+            'DATA_CONSISTENCY_INCONCLUSIVE',
+        )
+        ajustes.append('DOCUMENT_NUMBER_NOT_VISIBLE')
+        _forzar_revision_manual(normalizado)
+    elif numero_visible != numero_declarado:
+        normalizado['data_consistent'] = False
+        _reemplazar_codigo(normalizado, 'DATA_CONSISTENCY_INCONCLUSIVE')
+        if 'DATA_MISMATCH' not in normalizado['finding_codes']:
+            normalizado['finding_codes'].append('DATA_MISMATCH')
+        ajustes.append('DOCUMENT_NUMBER_MISMATCH')
+        _forzar_revision_manual(normalizado)
+    elif lado_esperado == 'back':
+        if normalizado['data_consistent'] is not True:
+            normalizado['data_consistent'] = True
+            _reemplazar_codigo(normalizado, 'DATA_MISMATCH')
+            _reemplazar_codigo(normalizado, 'DATA_CONSISTENCY_INCONCLUSIVE')
+            ajustes.append('BACK_NUMBER_MATCH_APPLIED')
+            _forzar_revision_manual(normalizado)
+    else:
+        nombres_coherentes = _coherencia_nombres_frente(normalizado, contexto)
+        if nombres_coherentes is True:
+            if normalizado['data_consistent'] is not True:
+                normalizado['data_consistent'] = True
+                _reemplazar_codigo(normalizado, 'DATA_MISMATCH')
+                _reemplazar_codigo(normalizado, 'DATA_CONSISTENCY_INCONCLUSIVE')
+                ajustes.append('FRONT_DECLARED_DATA_MATCH_APPLIED')
+                _forzar_revision_manual(normalizado)
+        elif nombres_coherentes is False:
+            normalizado['data_consistent'] = False
+            _reemplazar_codigo(normalizado, 'DATA_CONSISTENCY_INCONCLUSIVE')
+            if 'DATA_MISMATCH' not in normalizado['finding_codes']:
+                normalizado['finding_codes'].append('DATA_MISMATCH')
+            ajustes.append('VISIBLE_NAME_MISMATCH')
+            _forzar_revision_manual(normalizado)
+        else:
+            normalizado['data_consistent'] = None
+            _reemplazar_codigo(
+                normalizado,
+                'DATA_MISMATCH',
+                'DATA_CONSISTENCY_INCONCLUSIVE',
+            )
+            ajustes.append('VISIBLE_NAME_INCONCLUSIVE')
+            _forzar_revision_manual(normalizado)
+    return normalizado, tuple(dict.fromkeys(ajustes))
+
+
 def _texto_controlado(valor, limite):
     return re.sub(r'[^A-Za-z0-9._:\- ]+', '', str(valor or '')).strip()[:limite]
 
@@ -377,6 +615,8 @@ def normalizar_resultado_validacion(
     proveedor='',
     modelo='',
     metricas_uso=None,
+    tipo_esperado=None,
+    contexto=None,
 ):
     if not isinstance(payload, dict):
         raise ErrorValidacionDocumentalIA('INVALID_RESPONSE')
@@ -447,6 +687,11 @@ def normalizar_resultado_validacion(
         or payload['decision'] not in DECISIONES_MODELO
     ):
         raise ErrorValidacionDocumentalIA('INVALID_RESPONSE')
+    payload, ajustes_politica = _aplicar_coherencia_identidad(
+        payload,
+        tipo_esperado=tipo_esperado,
+        contexto=contexto,
+    )
     hallazgos = tuple(dict.fromkeys(
         [*payload['finding_codes'], *payload['reason_codes']]
     ))
@@ -576,6 +821,12 @@ def normalizar_resultado_validacion(
             else confianza
         ),
         metricas_uso=dict(metricas_uso or {}),
+        version_politica=(
+            IDENTITY_POLICY_VERSION
+            if tipo_esperado in TIPOS_IDENTIDAD
+            else LEGACY_IDENTITY_POLICY_VERSION
+        ),
+        ajustes_politica=ajustes_politica,
     )
 
 
@@ -858,6 +1109,8 @@ def _es_rechazo_concluyente(resultado, *, documento):
 def _resultado_estructurado(resultado):
     return {
         'schema_version': resultado.version_esquema,
+        'policy_version': resultado.version_politica,
+        'policy_adjustments': list(resultado.ajustes_politica),
         'decision': _decision_modelo(resultado),
         'is_identity_document': resultado.es_documento_identidad,
         'is_colombian_document': resultado.es_documento_colombiano,

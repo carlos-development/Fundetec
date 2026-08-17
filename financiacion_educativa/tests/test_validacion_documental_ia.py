@@ -1,3 +1,4 @@
+from copy import deepcopy
 from datetime import date, timedelta
 from decimal import Decimal
 from io import BytesIO, StringIO
@@ -8,6 +9,7 @@ from unittest.mock import patch
 
 from PIL import Image
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
 from django.core.exceptions import PermissionDenied
@@ -37,6 +39,7 @@ from financiacion_educativa.services.participantes import (
 from financiacion_educativa.services.validacion_documental_ia import (
     DisabledDocumentAIValidationBackend,
     ErrorValidacionDocumentalIA,
+    IDENTITY_POLICY_VERSION,
     OpenAIDocumentAIValidationBackend,
     normalizar_resultado_validacion,
     procesar_validacion_documental_ia,
@@ -616,6 +619,116 @@ class AdaptadorOpenAIValidacionDocumentalTests(TestCase):
         self.assertFalse(resultado.senales_manipulacion_visible)
         self.assertTrue(resultado.integridad_visual)
 
+    def _normalizar_identidad(self, *, tipo, tipo_visible, nombres=None, **cambios):
+        payload = deepcopy(self.payload)
+        payload.update({
+            'document_type_match': False,
+            'data_consistent': False,
+            'finding_codes': ['TYPE_MISMATCH', 'DATA_MISMATCH'],
+            'reason_codes': ['TYPE_MISMATCH', 'DATA_MISMATCH'],
+            'decision': 'REJECTED',
+            'visible_document_type': tipo_visible,
+            'visible_document_number': '1.000.123.456',
+            'visible_names': (
+                ['ANA MARIA', 'PEREZ LOPEZ'] if nombres is None else nombres
+            ),
+            **cambios,
+        })
+        return normalizar_resultado_validacion(
+            payload,
+            tipo_esperado=tipo,
+            contexto={
+                'tipo_documento': 'CC',
+                'numero_documento': '1000123456',
+                'nombres': 'ANA MARIA',
+                'apellidos': 'PEREZ LOPEZ',
+            },
+        )
+
+    def test_equivalencias_cc_respetan_categoria_y_lado_solicitado(self):
+        casos = (
+            (TipoDocumentoFinanciacion.STUDENT_ID_FRONT, 'CC'),
+            (TipoDocumentoFinanciacion.STUDENT_ID_FRONT, 'CÉDULA DE CIUDADANÍA'),
+            (TipoDocumentoFinanciacion.STUDENT_ID_FRONT, 'CC_FRONT'),
+            (TipoDocumentoFinanciacion.STUDENT_ID_BACK, 'CC'),
+            (TipoDocumentoFinanciacion.STUDENT_ID_BACK, 'CÉDULA DE CIUDADANÍA'),
+            (TipoDocumentoFinanciacion.STUDENT_ID_BACK, 'CC_BACK'),
+        )
+        for tipo, visible in casos:
+            with self.subTest(tipo=tipo, visible=visible):
+                resultado = self._normalizar_identidad(
+                    tipo=tipo,
+                    tipo_visible=visible,
+                    nombres=(
+                        []
+                        if tipo == TipoDocumentoFinanciacion.STUDENT_ID_BACK
+                        else None
+                    ),
+                )
+                self.assertTrue(resultado.corresponde_tipo)
+                self.assertTrue(resultado.datos_consistentes)
+                self.assertNotIn('TYPE_MISMATCH', resultado.hallazgos)
+                self.assertNotIn('DATA_MISMATCH', resultado.hallazgos)
+                self.assertEqual(resultado.decision, 'MANUAL_REVIEW')
+                self.assertEqual(
+                    resultado.version_politica,
+                    IDENTITY_POLICY_VERSION,
+                )
+
+    def test_reverso_no_exige_nombres_si_numero_normalizado_coincide(self):
+        resultado = self._normalizar_identidad(
+            tipo=TipoDocumentoFinanciacion.STUDENT_ID_BACK,
+            tipo_visible='CC_BACK',
+            nombres=[],
+        )
+
+        self.assertTrue(resultado.datos_consistentes)
+        self.assertNotIn('DATA_MISMATCH', resultado.hallazgos)
+        self.assertIn('BACK_NUMBER_MATCH_APPLIED', resultado.ajustes_politica)
+
+    def test_dato_necesario_no_visible_es_inconcluso_no_contradiccion(self):
+        resultado = self._normalizar_identidad(
+            tipo=TipoDocumentoFinanciacion.STUDENT_ID_BACK,
+            tipo_visible='CC_BACK',
+            nombres=[],
+            visible_document_number=None,
+        )
+
+        self.assertIsNone(resultado.datos_consistentes)
+        self.assertNotIn('DATA_MISMATCH', resultado.hallazgos)
+        self.assertIn('DATA_CONSISTENCY_INCONCLUSIVE', resultado.hallazgos)
+        self.assertEqual(resultado.decision, 'MANUAL_REVIEW')
+
+    def test_contradiccion_visible_real_no_se_convierte_en_aceptacion(self):
+        resultado = self._normalizar_identidad(
+            tipo=TipoDocumentoFinanciacion.STUDENT_ID_FRONT,
+            tipo_visible='PASAPORTE',
+            visible_document_number='99999999',
+            decision='ACCEPTED',
+            finding_codes=[],
+            reason_codes=[],
+        )
+
+        self.assertFalse(resultado.corresponde_tipo)
+        self.assertFalse(resultado.datos_consistentes)
+        self.assertIn('TYPE_MISMATCH', resultado.hallazgos)
+        self.assertIn('DATA_MISMATCH', resultado.hallazgos)
+        self.assertEqual(resultado.decision, 'MANUAL_REVIEW')
+
+    def test_normalizacion_no_reduce_umbrales_operativos(self):
+        self.assertEqual(
+            settings.FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_CONFIDENCE,
+            '0.90',
+        )
+        self.assertEqual(
+            settings.FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_QUALITY,
+            '0.80',
+        )
+        self.assertEqual(
+            settings.FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_LEGIBILITY,
+            '0.80',
+        )
+
     @override_settings(
         OPENAI_API_KEY='test-key-not-real',
         FINANCIACION_EDUCATIVA_DOCUMENT_AI_MODEL='test-model',
@@ -628,8 +741,13 @@ class AdaptadorOpenAIValidacionDocumentalTests(TestCase):
             resultado = OpenAIDocumentAIValidationBackend().validar(
                 contenido=b'contenido-imagen',
                 content_type='image/jpeg',
-                tipo_esperado='Identificacion - frente',
-                contexto={'numero_documento': '1000123456'},
+                tipo_esperado=TipoDocumentoFinanciacion.STUDENT_ID_FRONT,
+                contexto={
+                    'tipo_documento': 'CC',
+                    'numero_documento': '1000123456',
+                    'nombres': 'ANA',
+                    'apellidos': 'PRUEBA',
+                },
             )
 
         self.assertEqual(resultado.confianza, Decimal('0.9900'))
@@ -672,3 +790,13 @@ class AdaptadorOpenAIValidacionDocumentalTests(TestCase):
         instruccion = llamada['input'][0]['content'][0]['text']
         self.assertIn('ocho sobre diez es 0.80, no 8', instruccion)
         self.assertIn('No afirmes autenticidad', instruccion)
+        self.assertIn('STUDENT_ID_FRONT es el frente', instruccion)
+        datos_usuario = json.loads(llamada['input'][1]['content'][0]['text'])
+        self.assertEqual(
+            datos_usuario['politica_validacion']['version'],
+            IDENTITY_POLICY_VERSION,
+        )
+        self.assertEqual(
+            datos_usuario['politica_validacion']['lado_esperado'],
+            'front',
+        )

@@ -65,6 +65,9 @@ class SimuladorFinanciacionEducativaTests(TestCase):
         self.assertContains(response, 'Cuota mensual estimada')
         self.assertContains(response, 'Total proyectado')
         self.assertContains(response, '1 % mensual')
+        self.assertNotContains(response, 'M&eacute;todo de c&aacute;lculo')
+        self.assertNotContains(response, 'Anualidad francesa')
+        self.assertNotContains(response, 'data-simulator-method')
         self.assertIn('no-store', response['Cache-Control'])
         self.assert_sin_persistencia_financiera()
 

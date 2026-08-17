@@ -535,8 +535,6 @@ document.addEventListener('DOMContentLoaded', function () {
             simulator.querySelectorAll('[data-simulator-provider]').forEach(function (node) {
                 node.textContent = data[node.dataset.simulatorProvider];
             });
-            const method = simulator.querySelector('[data-simulator-method]');
-            if (method) method.textContent = data.metodo_calculo_nombre;
             const plan = document.querySelector('[data-simulator-plan]');
             if (plan) {
                 plan.replaceChildren();

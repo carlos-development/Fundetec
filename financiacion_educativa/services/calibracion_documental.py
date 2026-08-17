@@ -33,6 +33,7 @@ from financiacion_educativa.services.procesamiento_pdf import (
 )
 from financiacion_educativa.services.validacion_documental_ia import (
     ErrorValidacionDocumentalIA,
+    IDENTITY_POLICY_VERSION,
     ResultadoValidacionDocumentalIA,
     _decision_modelo,
     _es_concluyente,
@@ -764,6 +765,7 @@ def ejecutar_calibracion(
         'configuration': {
             'model': settings.FINANCIACION_EDUCATIVA_DOCUMENT_AI_MODEL,
             'identity_schema_version': '3',
+            'identity_policy_version': IDENTITY_POLICY_VERSION,
             'content_schema_version': settings.FINANCIACION_EDUCATIVA_CONTENT_SCHEMA_VERSION,
             'identity_thresholds': {
                 'confidence': settings.FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_CONFIDENCE,
