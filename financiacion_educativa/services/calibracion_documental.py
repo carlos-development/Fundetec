@@ -771,6 +771,9 @@ def ejecutar_calibracion(
                 'confidence': settings.FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_CONFIDENCE,
                 'quality': settings.FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_QUALITY,
                 'legibility': settings.FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_LEGIBILITY,
+                'dimension_confidence': (
+                    settings.FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_DIMENSION_CONFIDENCE
+                ),
             },
             'content_thresholds': {
                 'confidence': settings.FINANCIACION_EDUCATIVA_CONTENT_MIN_CONFIDENCE,

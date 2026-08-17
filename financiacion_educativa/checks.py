@@ -255,6 +255,10 @@ def check_document_ai_configuration(app_configs, **kwargs):
         ('FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_CONFIDENCE', 'E027'),
         ('FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_QUALITY', 'E028'),
         ('FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_LEGIBILITY', 'E029'),
+        (
+            'FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_DIMENSION_CONFIDENCE',
+            'E128',
+        ),
     ):
         try:
             valor = Decimal(str(getattr(settings, nombre, '')))

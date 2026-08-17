@@ -41,9 +41,10 @@ from financiacion_educativa.services.validacion_documental_ia import (
     DisabledDocumentAIValidationBackend,
     ErrorValidacionDocumentalIA,
     IDENTITY_POLICY_VERSION,
-    LEGACY_IDENTITY_POLICY_VERSION,
+    IDENTITY_POLICY_VERSION_V1,
+    IDENTITY_POLICY_VERSION_V2,
+    IDENTITY_POLICY_VERSION_V3,
     OpenAIDocumentAIValidationBackend,
-    PREVIOUS_IDENTITY_POLICY_VERSION,
     _es_concluyente,
     _resultado_estructurado,
     normalizar_resultado_validacion,
@@ -94,9 +95,10 @@ class ValidacionDocumentalIATests(TestCase):
         self.private_root = TemporaryDirectory()
         self.override = override_settings(
             FINANCIACION_EDUCATIVA_PRIVATE_ROOT=self.private_root.name,
-            FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_CONFIDENCE='0.90',
-            FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_QUALITY='0.80',
+            FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_CONFIDENCE='0.85',
+            FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_QUALITY='0.70',
             FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_LEGIBILITY='0.80',
+            FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_DIMENSION_CONFIDENCE='0.80',
         )
         self.override.enable()
         self.addCleanup(self.override.disable)
@@ -215,6 +217,15 @@ class ValidacionDocumentalIATests(TestCase):
         self.assertEqual(documento.nivel_confianza, validacion.confianza)
         self.assertEqual(validacion.calidad, Decimal('0.9800'))
         self.assertEqual(validacion.estado, EstadoValidacionIADocumento.AUTO_APPROVED)
+        self.assertEqual(
+            validacion.resultado_estructurado['effective_thresholds'],
+            {
+                'overall_confidence': '0.85',
+                'quality': '0.70',
+                'legibility': '0.80',
+                'dimension_confidence': '0.80',
+            },
+        )
         for key, value in scan_summary.items():
             self.assertEqual(documento.resultado_procesamiento[key], value)
         serialized = str(documento.resultado_procesamiento)
@@ -554,6 +565,12 @@ class ValidacionDocumentalIATests(TestCase):
         )
 
 
+@override_settings(
+    FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_CONFIDENCE='0.85',
+    FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_QUALITY='0.70',
+    FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_LEGIBILITY='0.80',
+    FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_DIMENSION_CONFIDENCE='0.80',
+)
 class AdaptadorOpenAIValidacionDocumentalTests(TestCase):
     payload = {
         'quality_score': 0.98,
@@ -671,6 +688,32 @@ class AdaptadorOpenAIValidacionDocumentalTests(TestCase):
             },
         )
 
+    def _resultado_v4(self, *, tipo=TipoDocumentoFinanciacion.STUDENT_ID_FRONT, **cambios):
+        payload = deepcopy(self.payload)
+        payload.update(cambios)
+        if tipo == TipoDocumentoFinanciacion.STUDENT_ID_BACK:
+            payload.update({
+                'visible_document_type': 'CC_BACK',
+                'visible_names': [],
+            })
+        return normalizar_resultado_validacion(
+            payload,
+            tipo_esperado=tipo,
+            contexto={
+                'tipo_documento': 'CC',
+                'numero_documento': '1000123456',
+                'nombres': 'ANA',
+                'apellidos': 'PRUEBA',
+            },
+        )
+
+    def _es_identidad_autoaprobable(self, resultado):
+        return _es_concluyente(
+            resultado,
+            requiere_identidad=True,
+            requiere_documento_colombiano=True,
+        )
+
     def test_equivalencias_cc_respetan_categoria_y_lado_solicitado(self):
         casos = (
             (TipoDocumentoFinanciacion.STUDENT_ID_FRONT, 'CC'),
@@ -741,17 +784,121 @@ class AdaptadorOpenAIValidacionDocumentalTests(TestCase):
         self.assertIn('DATA_MISMATCH', resultado.hallazgos)
         self.assertEqual(resultado.decision, 'MANUAL_REVIEW')
 
-    def test_normalizacion_no_reduce_umbrales_operativos(self):
+    def test_umbrales_operativos_v4_son_independientes(self):
         self.assertEqual(
             settings.FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_CONFIDENCE,
-            '0.90',
+            '0.85',
         )
         self.assertEqual(
             settings.FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_QUALITY,
-            '0.80',
+            '0.70',
         )
         self.assertEqual(
             settings.FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_LEGIBILITY,
+            '0.80',
+        )
+
+    def test_caso_real_frente_v4_es_autoaprobable(self):
+        resultado = self._resultado_v4(
+            quality_score=0.85,
+            legibility_score=0.85,
+            confidence=0.90,
+            document_type_confidence=0.90,
+            side_confidence=0.90,
+            data_match_confidence=0.90,
+            legibility_confidence=0.90,
+            tampering_confidence=0.90,
+            physical_capture_confidence=0.85,
+            visual_integrity_confidence=0.90,
+        )
+
+        self.assertEqual(resultado.decision, 'ACCEPTED')
+        self.assertFalse(resultado.ajustes_politica)
+        self.assertTrue(self._es_identidad_autoaprobable(resultado))
+
+    def test_caso_real_reverso_v4_es_autoaprobable(self):
+        resultado = self._resultado_v4(
+            tipo=TipoDocumentoFinanciacion.STUDENT_ID_BACK,
+            quality_score=0.70,
+            legibility_score=0.85,
+            confidence=0.85,
+            document_type_confidence=0.95,
+            side_confidence=0.95,
+            data_match_confidence=0.90,
+            legibility_confidence=0.90,
+            tampering_confidence=0.90,
+            physical_capture_confidence=0.85,
+            visual_integrity_confidence=0.80,
+        )
+
+        self.assertEqual(resultado.decision, 'ACCEPTED')
+        self.assertFalse(resultado.ajustes_politica)
+        self.assertTrue(self._es_identidad_autoaprobable(resultado))
+
+    def test_confianza_general_bajo_minimo_v4_no_aprueba(self):
+        resultado = self._resultado_v4(confidence=0.84)
+
+        self.assertFalse(self._es_identidad_autoaprobable(resultado))
+
+    def test_calidad_bajo_minimo_v4_no_aprueba(self):
+        resultado = self._resultado_v4(quality_score=0.69)
+
+        self.assertFalse(self._es_identidad_autoaprobable(resultado))
+
+    def test_legibilidad_bajo_minimo_v4_no_aprueba(self):
+        resultado = self._resultado_v4(legibility_score=0.79)
+
+        self.assertFalse(self._es_identidad_autoaprobable(resultado))
+
+    def test_cualquier_confianza_dimension_bajo_minimo_v4_no_aprueba(self):
+        campos = (
+            'document_type_confidence',
+            'side_confidence',
+            'legibility_confidence',
+            'visual_integrity_confidence',
+            'data_match_confidence',
+            'physical_capture_confidence',
+            'tampering_confidence',
+        )
+        for campo in campos:
+            with self.subTest(campo=campo):
+                resultado = self._resultado_v4(**{campo: 0.79})
+                self.assertFalse(self._es_identidad_autoaprobable(resultado))
+
+    def test_garantias_booleanas_v4_no_se_sustituyen_por_puntajes(self):
+        casos = (
+            ('manipulacion', {'visible_tampering_signals': True}),
+            ('datos', {'data_consistent': False}),
+            ('lado', {'side_matches': False}),
+            ('integridad', {'visual_integrity': False}),
+        )
+        for nombre, cambios in casos:
+            with self.subTest(garantia=nombre):
+                resultado = self._resultado_v4(**cambios)
+                self.assertFalse(self._es_identidad_autoaprobable(resultado))
+
+    def test_hallazgos_v4_impiden_autoaprobacion(self):
+        for campo in ('finding_codes', 'reason_codes'):
+            with self.subTest(campo=campo):
+                resultado = self._resultado_v4(**{campo: ['LOW_QUALITY']})
+                self.assertFalse(self._es_identidad_autoaprobable(resultado))
+
+    def test_decision_manual_v4_no_se_sobrescribe(self):
+        resultado = self._resultado_v4(decision='MANUAL_REVIEW')
+
+        self.assertEqual(resultado.decision, 'MANUAL_REVIEW')
+        self.assertFalse(self._es_identidad_autoaprobable(resultado))
+
+    def test_ajuste_correctivo_v4_conserva_revision_manual(self):
+        resultado = replace(
+            self._resultado_v4(),
+            decision='ACCEPTED',
+            ajustes_politica=('DOCUMENT_TYPE_EQUIVALENCE_APPLIED',),
+        )
+
+        self.assertFalse(self._es_identidad_autoaprobable(resultado))
+        self.assertEqual(
+            settings.FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_DIMENSION_CONFIDENCE,
             '0.80',
         )
 
@@ -849,8 +996,9 @@ class AdaptadorOpenAIValidacionDocumentalTests(TestCase):
         resultado = normalizar_resultado_validacion(self.payload)
 
         for version in (
-            LEGACY_IDENTITY_POLICY_VERSION,
-            PREVIOUS_IDENTITY_POLICY_VERSION,
+            IDENTITY_POLICY_VERSION_V1,
+            IDENTITY_POLICY_VERSION_V2,
+            IDENTITY_POLICY_VERSION_V3,
         ):
             with self.subTest(version=version):
                 historico = replace(resultado, version_politica=version)
@@ -859,7 +1007,7 @@ class AdaptadorOpenAIValidacionDocumentalTests(TestCase):
                     version,
                 )
 
-    def test_resultado_nuevo_registra_politica_v3(self):
+    def test_resultado_nuevo_registra_politica_v4_y_umbrales(self):
         resultado = normalizar_resultado_validacion(
             self.payload,
             tipo_esperado=TipoDocumentoFinanciacion.STUDENT_ID_FRONT,
@@ -871,11 +1019,20 @@ class AdaptadorOpenAIValidacionDocumentalTests(TestCase):
             },
         )
 
-        self.assertEqual(IDENTITY_POLICY_VERSION, 'EDU_IDENTITY_V3')
-        self.assertEqual(resultado.version_politica, 'EDU_IDENTITY_V3')
+        self.assertEqual(IDENTITY_POLICY_VERSION, 'EDU_IDENTITY_V4')
+        self.assertEqual(resultado.version_politica, 'EDU_IDENTITY_V4')
         self.assertEqual(
             _resultado_estructurado(resultado)['policy_version'],
-            'EDU_IDENTITY_V3',
+            'EDU_IDENTITY_V4',
+        )
+        self.assertEqual(
+            _resultado_estructurado(resultado)['effective_thresholds'],
+            {
+                'overall_confidence': '0.85',
+                'quality': '0.70',
+                'legibility': '0.80',
+                'dimension_confidence': '0.80',
+            },
         )
 
     @override_settings(

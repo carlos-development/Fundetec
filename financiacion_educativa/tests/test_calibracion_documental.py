@@ -55,6 +55,10 @@ CONTENT_BACKEND = (
     FINANCIACION_EDUCATIVA_CALIBRATION_IDENTITY_BACKEND=IDENTITY_BACKEND,
     FINANCIACION_EDUCATIVA_CALIBRATION_CONTENT_BACKEND=CONTENT_BACKEND,
     FINANCIACION_EDUCATIVA_DOCUMENT_AI_MAX_ATTEMPTS=3,
+    FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_CONFIDENCE='0.85',
+    FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_QUALITY='0.70',
+    FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_LEGIBILITY='0.80',
+    FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_DIMENSION_CONFIDENCE='0.80',
     FINANCIACION_EDUCATIVA_CONTENT_MAX_ATTEMPTS=3,
 )
 class CalibracionDocumentalCommandTests(TestCase):
@@ -374,7 +378,11 @@ class CalibracionDocumentalCommandTests(TestCase):
         )
         self.assertEqual(
             report['configuration']['identity_policy_version'],
-            'EDU_IDENTITY_V3',
+            'EDU_IDENTITY_V4',
+        )
+        self.assertEqual(
+            report['configuration']['identity_thresholds']['dimension_confidence'],
+            settings.FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_DIMENSION_CONFIDENCE,
         )
 
     def test_content_case_uses_content_policy_and_usage_metrics(self):

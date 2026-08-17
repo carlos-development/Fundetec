@@ -73,9 +73,12 @@ LADO_IDENTIDAD = {
     TipoDocumentoFinanciacion.GUARDIAN_ID_FRONT: 'front',
     TipoDocumentoFinanciacion.GUARDIAN_ID_BACK: 'back',
 }
-LEGACY_IDENTITY_POLICY_VERSION = 'EDU_IDENTITY_V1'
-PREVIOUS_IDENTITY_POLICY_VERSION = 'EDU_IDENTITY_V2'
-IDENTITY_POLICY_VERSION = 'EDU_IDENTITY_V3'
+IDENTITY_POLICY_VERSION_V1 = 'EDU_IDENTITY_V1'
+IDENTITY_POLICY_VERSION_V2 = 'EDU_IDENTITY_V2'
+IDENTITY_POLICY_VERSION_V3 = 'EDU_IDENTITY_V3'
+LEGACY_IDENTITY_POLICY_VERSION = IDENTITY_POLICY_VERSION_V1
+PREVIOUS_IDENTITY_POLICY_VERSION = IDENTITY_POLICY_VERSION_V3
+IDENTITY_POLICY_VERSION = 'EDU_IDENTITY_V4'
 
 
 class ErrorValidacionDocumentalIA(Exception):
@@ -1056,6 +1059,9 @@ def _es_concluyente(
     confianza_minima = Decimal(
         settings.FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_CONFIDENCE
     )
+    confianza_dimension_minima = Decimal(
+        settings.FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_DIMENSION_CONFIDENCE
+    )
     concluyente = bool(
         _decision_modelo(resultado) == 'ACCEPTED'
         and resultado.confianza >= confianza_minima
@@ -1064,20 +1070,21 @@ def _es_concluyente(
         and resultado.legibilidad
         >= Decimal(settings.FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_LEGIBILITY)
         and _confianza_dimension(resultado, 'confianza_tipo_documental')
-        >= confianza_minima
+        >= confianza_dimension_minima
         and _confianza_dimension(resultado, 'confianza_legibilidad')
-        >= confianza_minima
+        >= confianza_dimension_minima
         and _confianza_dimension(resultado, 'confianza_integridad_visual')
-        >= confianza_minima
+        >= confianza_dimension_minima
         and _confianza_dimension(resultado, 'confianza_datos')
-        >= confianza_minima
+        >= confianza_dimension_minima
         and _confianza_dimension(resultado, 'confianza_manipulacion')
-        >= confianza_minima
+        >= confianza_dimension_minima
         and resultado.corresponde_tipo is True
         and resultado.datos_consistentes is True
         and _integridad_visual(resultado) is True
         and _senales_manipulacion(resultado) is False
         and not resultado.hallazgos
+        and not resultado.ajustes_politica
     )
     if not concluyente or not requiere_identidad:
         return concluyente
@@ -1090,9 +1097,9 @@ def _es_concluyente(
         and resultado.lado_correcto is True
         and _captura_fisica(resultado) is True
         and _confianza_dimension(resultado, 'confianza_lado')
-        >= confianza_minima
+        >= confianza_dimension_minima
         and _confianza_dimension(resultado, 'confianza_captura_fisica')
-        >= confianza_minima
+        >= confianza_dimension_minima
         and resultado.campos_visibles is True
         and resultado.borrosa is False
         and resultado.oscura is False
@@ -1133,6 +1140,20 @@ def _resultado_estructurado(resultado):
         'schema_version': resultado.version_esquema,
         'policy_version': resultado.version_politica,
         'policy_adjustments': list(resultado.ajustes_politica),
+        'effective_thresholds': {
+            'overall_confidence': str(
+                settings.FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_CONFIDENCE
+            ),
+            'quality': str(
+                settings.FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_QUALITY
+            ),
+            'legibility': str(
+                settings.FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_LEGIBILITY
+            ),
+            'dimension_confidence': str(
+                settings.FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_DIMENSION_CONFIDENCE
+            ),
+        },
         'decision': _decision_modelo(resultado),
         'is_identity_document': resultado.es_documento_identidad,
         'is_colombian_document': resultado.es_documento_colombiano,

@@ -39,6 +39,7 @@ class ConfiguracionIADocumentalChecksTests(SimpleTestCase):
             'FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_CONFIDENCE': 'E027',
             'FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_QUALITY': 'E028',
             'FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_LEGIBILITY': 'E029',
+            'FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_DIMENSION_CONFIDENCE': 'E128',
         }
         for setting, code in casos.items():
             with self.subTest(setting=setting), override_settings(**{setting: -1}):
@@ -58,9 +59,10 @@ class ConfiguracionIADocumentalChecksTests(SimpleTestCase):
         FINANCIACION_EDUCATIVA_DOCUMENT_AI_MAX_ATTEMPTS=3,
         FINANCIACION_EDUCATIVA_DOCUMENT_AI_STALE_SECONDS=300,
         FINANCIACION_EDUCATIVA_DOCUMENT_AI_TIMEOUT_SECONDS=30,
-        FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_CONFIDENCE='0.90',
-        FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_QUALITY='0.80',
+        FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_CONFIDENCE='0.85',
+        FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_QUALITY='0.70',
         FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_LEGIBILITY='0.80',
+        FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_DIMENSION_CONFIDENCE='0.80',
     )
     def test_configuracion_deshabilitada_predeterminada_es_valida(self):
         self.assertEqual(self.ids(), set())
