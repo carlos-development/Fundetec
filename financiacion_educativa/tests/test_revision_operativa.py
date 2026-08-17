@@ -113,6 +113,9 @@ def jpeg(nombre, marca):
     ),
     FINANCIACION_EDUCATIVA_ALLOW_TEST_SIGNATURE_BACKENDS=True,
     FINANCIACION_EDUCATIVA_ZAPSIGN_WEBHOOK_SECRET='revision-webhook-secret',
+    FINANCIACION_EDUCATIVA_ZAPSIGN_WEBHOOK_HEADER=(
+        'X-Educational-Signature-Secret'
+    ),
 )
 class RevisionOperativaTests(TestCase):
     def setUp(self):

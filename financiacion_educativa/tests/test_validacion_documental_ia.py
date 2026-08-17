@@ -517,15 +517,36 @@ class ValidacionDocumentalIATests(TestCase):
         self.assertEqual(segundo.estado_validacion, EstadoValidacionDocumento.PENDING)
         self.assertFalse(segundo.validaciones_ia.exists())
 
+    @override_settings(
+        FINANCIACION_EDUCATIVA_DOCUMENT_AI_ENABLED=False,
+        FINANCIACION_EDUCATIVA_DOCUMENT_AI_BACKEND=(
+            'financiacion_educativa.services.validacion_documental_ia.'
+            'DisabledDocumentAIValidationBackend'
+        ),
+    )
     def test_comando_deshabilitado_falla_sin_crear_intentos(self):
         documento = self.documento_seguro()
+        estado_original = (
+            documento.estado_escaneo,
+            documento.estado_validacion,
+            documento.resultado_procesamiento,
+        )
         with self.assertRaises(CommandError):
             call_command(
                 'procesar_validaciones_ia_documentales',
                 documento_id=documento.pk,
                 stdout=StringIO(),
             )
+        documento.refresh_from_db()
         self.assertFalse(documento.validaciones_ia.exists())
+        self.assertEqual(
+            (
+                documento.estado_escaneo,
+                documento.estado_validacion,
+                documento.resultado_procesamiento,
+            ),
+            estado_original,
+        )
 
 
 class AdaptadorOpenAIValidacionDocumentalTests(TestCase):
