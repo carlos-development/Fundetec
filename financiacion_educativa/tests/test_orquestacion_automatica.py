@@ -4,6 +4,7 @@ from io import StringIO
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
@@ -130,15 +131,31 @@ def pdf(nombre):
 
 
 @override_settings(
+    EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
+    EMAIL_QA_MODE=False,
+    EMAIL_LIVE_DELIVERY_ENABLED=False,
     FINANCIACION_EDUCATIVA_AUTOMATION_ENABLED=True,
     FINANCIACION_EDUCATIVA_DOCUMENT_SCAN_BACKEND=SCAN_CLEAN,
     FINANCIACION_EDUCATIVA_ALLOW_TEST_SCAN_BACKENDS=True,
     FINANCIACION_EDUCATIVA_DOCUMENT_AI_BACKEND=AI_CONCLUSIVE,
     FINANCIACION_EDUCATIVA_DOCUMENT_AI_ENABLED=True,
     FINANCIACION_EDUCATIVA_ALLOW_TEST_AI_BACKENDS=True,
+    FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_CONFIDENCE='0.85',
+    FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_QUALITY='0.70',
+    FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_LEGIBILITY='0.80',
+    FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_DIMENSION_CONFIDENCE='0.80',
+    FINANCIACION_EDUCATIVA_PDF_PROCESSING_ENABLED=False,
+    FINANCIACION_EDUCATIVA_CONTENT_AI_BACKEND=(
+        'financiacion_educativa.services.clasificacion_contenido_documental.'
+        'DisabledContentDocumentClassificationBackend'
+    ),
+    FINANCIACION_EDUCATIVA_CALIBRATION_OPENAI_ENABLED=False,
     FINANCIACION_EDUCATIVA_ZAPSIGN_BACKEND=SIGNATURE,
     FINANCIACION_EDUCATIVA_ALLOW_TEST_SIGNATURE_BACKENDS=True,
     FINANCIACION_EDUCATIVA_ZAPSIGN_WEBHOOK_SECRET='automatic-webhook-secret',
+    FINANCIACION_EDUCATIVA_ZAPSIGN_WEBHOOK_HEADER=(
+        'X-Educational-Signature-Secret'
+    ),
     FINANCIACION_EDUCATIVA_SIGNATURE_RECIPIENT_HMAC_KEY='automatic-hmac-key',
     FINANCIACION_EDUCATIVA_ACREEDOR_RAZON_SOCIAL='ACREEDOR EDUCATIVO SAS',
     FINANCIACION_EDUCATIVA_ACREEDOR_NIT='900000000-1',
@@ -170,6 +187,46 @@ class OrquestacionAutomaticaTests(TestCase):
             username='automatico@example.com',
             email='automatico@example.com',
             password='Clave-2026',
+        )
+
+    def test_configuracion_base_esta_aislada_del_entorno_anfitrion(self):
+        self.assertEqual(
+            settings.EMAIL_BACKEND,
+            'django.core.mail.backends.locmem.EmailBackend',
+        )
+        self.assertFalse(settings.EMAIL_QA_MODE)
+        self.assertFalse(settings.EMAIL_LIVE_DELIVERY_ENABLED)
+        self.assertFalse(settings.FINANCIACION_EDUCATIVA_PDF_PROCESSING_ENABLED)
+        self.assertEqual(
+            settings.FINANCIACION_EDUCATIVA_CONTENT_AI_BACKEND,
+            (
+                'financiacion_educativa.services.'
+                'clasificacion_contenido_documental.'
+                'DisabledContentDocumentClassificationBackend'
+            ),
+        )
+        self.assertFalse(
+            settings.FINANCIACION_EDUCATIVA_CALIBRATION_OPENAI_ENABLED
+        )
+        self.assertEqual(
+            settings.FINANCIACION_EDUCATIVA_ZAPSIGN_WEBHOOK_HEADER,
+            'X-Educational-Signature-Secret',
+        )
+        self.assertEqual(
+            settings.FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_CONFIDENCE,
+            '0.85',
+        )
+        self.assertEqual(
+            settings.FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_QUALITY,
+            '0.70',
+        )
+        self.assertEqual(
+            settings.FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_LEGIBILITY,
+            '0.80',
+        )
+        self.assertEqual(
+            settings.FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_DIMENSION_CONFIDENCE,
+            '0.80',
         )
 
     def _solicitud_base(self, referencia):
