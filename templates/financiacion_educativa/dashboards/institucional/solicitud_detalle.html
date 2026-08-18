@@ -1,0 +1,39 @@
+{% extends "financiacion_educativa/dashboards/_base.html" %}
+{% load financiacion_format %}
+
+{% block title %}{{ solicitud.referencia }} | {{ education_brand.name|default:"Aprobado" }}{% endblock %}
+
+{% block dashboard_content %}
+<a class="edu-dashboard-back" href="{% url 'financiacion_educativa_web:institucion:solicitudes' %}"><i class="bi bi-arrow-left" aria-hidden="true"></i> Volver a solicitudes</a>
+<header class="edu-dashboard-heading edu-dashboard-detail-heading">
+    <div><p class="edu-eyebrow">Solicitud {{ solicitud.referencia }}</p><h1>{{ solicitud.solicitante }}</h1><p>{{ solicitud.programa }}</p></div>
+    {% include "financiacion_educativa/dashboards/institucional/_estado_badge.html" with estado=solicitud.estado %}
+</header>
+
+<div class="edu-dashboard-detail-grid">
+    <section class="edu-dashboard-panel" aria-labelledby="student-data-title"><h2 id="student-data-title">Solicitante</h2><dl class="edu-dashboard-data-list">
+        <div><dt>Nombre</dt><dd>{{ solicitud.solicitante }}</dd></div><div><dt>Correo</dt><dd>{{ solicitud.correo }}</dd></div><div><dt>Tel&eacute;fono</dt><dd>{{ solicitud.telefono }}</dd></div><div><dt>Documento</dt><dd>{{ solicitud.tipo_documento }} {{ solicitud.documento }}</dd></div>
+    </dl></section>
+    <section class="edu-dashboard-panel" aria-labelledby="academic-data-title"><h2 id="academic-data-title">Informaci&oacute;n acad&eacute;mica</h2><dl class="edu-dashboard-data-list">
+        <div><dt>Programa</dt><dd>{{ solicitud.programa }}</dd></div><div><dt>Periodo</dt><dd>{{ solicitud.periodo }}</dd></div><div><dt>Sede</dt><dd>{{ solicitud.sede }}</dd></div><div><dt>Jornada</dt><dd>{{ solicitud.jornada }}</dd></div><div><dt>C&oacute;digo de matr&iacute;cula</dt><dd>{{ solicitud.codigo_matricula }}</dd></div><div><dt>Fecha de matr&iacute;cula</dt><dd>{{ solicitud.fecha_matricula|date:"d/m/Y"|default:"No informada" }}</dd></div>
+    </dl></section>
+</div>
+
+<section class="edu-dashboard-panel" aria-labelledby="tracking-title">
+    <div class="edu-dashboard-section-heading"><div><p class="edu-eyebrow">Seguimiento p&uacute;blico</p><h2 id="tracking-title">L&iacute;nea de tiempo</h2></div><p>{{ solicitud.seguimiento }}</p></div>
+    <ol class="edu-dashboard-timeline">{% for evento in solicitud.linea_tiempo %}<li><span aria-hidden="true"></span><div>{% include "financiacion_educativa/dashboards/institucional/_estado_badge.html" with estado=evento.estado %}<strong>{{ evento.descripcion }}</strong><time datetime="{{ evento.fecha|date:'c' }}">{{ evento.fecha|date:"d/m/Y H:i" }}</time></div></li>{% endfor %}</ol>
+</section>
+
+<div class="edu-dashboard-detail-grid">
+    <section class="edu-dashboard-panel" aria-labelledby="documents-title"><h2 id="documents-title">Resumen documental</h2>
+        {% if solicitud.documentos %}<ul class="edu-dashboard-document-list">{% for documento in solicitud.documentos %}<li><strong>{{ documento.tipo }}</strong><span>{{ documento.escaneo }}</span><span>{{ documento.validacion }}</span>{% if documento.requiere_correccion %}<em>Requiere correcci&oacute;n</em>{% endif %}</li>{% endfor %}</ul>{% else %}<p class="edu-dashboard-muted">No hay documentos aportados.</p>{% endif %}
+    </section>
+    <section class="edu-dashboard-panel" aria-labelledby="signature-title"><h2 id="signature-title">Contrato y firma</h2><dl class="edu-dashboard-data-list">
+        <div><dt>Estado contractual</dt><dd>{{ solicitud.firma.documento }}</dd></div><div><dt>Estado de firma</dt><dd>{{ solicitud.firma.firma }}</dd></div><div><dt>Enviado</dt><dd>{{ solicitud.firma.enviado_en|date:"d/m/Y H:i"|default:"No enviado" }}</dd></div><div><dt>Firmado</dt><dd>{{ solicitud.firma.firmado_en|date:"d/m/Y H:i"|default:"No firmado" }}</dd></div><div><dt>Autorizaci&oacute;n efectiva</dt><dd>{{ solicitud.autorizacion_efectiva_en|date:"d/m/Y H:i"|default:"No autorizada" }}</dd></div>
+    </dl></section>
+</div>
+
+<section class="edu-dashboard-panel" aria-labelledby="financial-title"><h2 id="financial-title">Condiciones financieras</h2>
+    <dl class="edu-dashboard-financial-grid"><div><dt>Valor solicitado</dt><dd>{{ solicitud.finanzas.valor_solicitado|cop }}</dd></div>{% if solicitud.finanzas.disponible %}<div><dt>Capital financiado</dt><dd>{{ solicitud.finanzas.valor_financiado|cop }}</dd></div><div><dt>Plazo</dt><dd>{{ solicitud.finanzas.plazo_meses }} meses</dd></div><div><dt>Cuota estimada</dt><dd>{{ solicitud.finanzas.cuota_estimada|cop }}</dd></div><div><dt>Total estimado</dt><dd>{{ solicitud.finanzas.total_estimado|cop }}</dd></div><div><dt>Moneda</dt><dd>{{ solicitud.finanzas.moneda }}</dd></div>{% endif %}</dl>{% if not solicitud.finanzas.disponible %}<p class="edu-dashboard-muted">Las condiciones financieras a&uacute;n no est&aacute;n disponibles.</p>{% endif %}
+</section>
+{% endblock %}

@@ -342,7 +342,7 @@ class DashboardInstitucionalAccesoTests(TestCase):
             self.client.session,
         )
 
-    def test_shell_no_consulta_ni_muestra_solicitudes_metricas_o_pii(self):
+    def test_shell_resume_sin_exponer_contacto_del_solicitante(self):
         self._crear_membresia(
             rol=MembresiaInstitucion.Rol.INSTITUTION_ADMIN
         )
@@ -357,16 +357,16 @@ class DashboardInstitucionalAccesoTests(TestCase):
             respuesta = self.client.get(self.inicio)
 
         self.assertEqual(respuesta.status_code, 200)
-        self.assertLessEqual(len(consultas), 6)
+        self.assertLessEqual(len(consultas), 10)
         self.assertContains(respuesta, 'financiacion_educativa_dashboard.css')
         self.assertContains(respuesta, 'edu-dashboard-sidebar')
-        self.assertContains(respuesta, 'Pr&oacute;ximamente', count=8, html=True)
+        self.assertContains(respuesta, 'Pr&oacute;ximamente', count=4, html=True)
         self.assertContains(respuesta, self.institucion.nombre_comercial)
-        self.assertNotContains(respuesta, solicitud.referencia_externa)
+        self.assertContains(respuesta, solicitud.referencia_externa)
         self.assertNotContains(respuesta, solicitud.correo)
         self.assertNotContains(respuesta, self.usuario.email)
         self.assertContains(respuesta, 'Mi cuenta')
-        self.assertNotContains(respuesta, 'Total de solicitudes')
+        self.assertContains(respuesta, 'Indicadores institucionales')
         self.assertNotContains(respuesta, 'capital financiado')
         self.assertContains(respuesta, 'id="contenido-principal"')
         self.assertContains(respuesta, 'aria-label="Navegaci&oacute;n institucional"')

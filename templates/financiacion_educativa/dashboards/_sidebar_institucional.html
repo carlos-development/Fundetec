@@ -1,19 +1,17 @@
 <aside class="edu-dashboard-sidebar" aria-label="Navegaci&oacute;n institucional">
     <nav>
-        <a class="is-active" href="{% url 'financiacion_educativa_web:institucion:inicio' %}" aria-current="page">
+        <a{% if seccion_dashboard == 'inicio' %} class="is-active" aria-current="page"{% endif %} href="{% url 'financiacion_educativa_web:institucion:inicio' %}">
             <i class="bi bi-grid" aria-hidden="true"></i>
             Inicio
         </a>
-        <span aria-disabled="true">
+        <a{% if seccion_dashboard == 'solicitudes' %} class="is-active" aria-current="page"{% endif %} href="{% url 'financiacion_educativa_web:institucion:solicitudes' %}">
             <i class="bi bi-file-earmark-text" aria-hidden="true"></i>
             Solicitudes
-            <small>Pr&oacute;ximamente</small>
-        </span>
-        <span aria-disabled="true">
+        </a>
+        <a{% if seccion_dashboard == 'seguimiento' %} class="is-active" aria-current="page"{% endif %} href="{% url 'financiacion_educativa_web:institucion:seguimiento' %}">
             <i class="bi bi-signpost-split" aria-hidden="true"></i>
             Seguimiento
-            <small>Pr&oacute;ximamente</small>
-        </span>
+        </a>
         <span aria-disabled="true">
             <i class="bi bi-bar-chart" aria-hidden="true"></i>
             Reportes

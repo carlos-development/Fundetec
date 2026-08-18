@@ -1,0 +1,41 @@
+<form method="get" class="edu-dashboard-filters" novalidate>
+    {% if formulario_filtros.non_field_errors %}
+        <div class="edu-dashboard-alert" role="alert">{{ formulario_filtros.non_field_errors }}</div>
+    {% endif %}
+
+    <div class="edu-dashboard-filter-primary">
+        {% for field in formulario_filtros.visible_fields %}
+            {% if field.name == "q" or field.name == "estado" %}
+                <div class="edu-dashboard-filter{% if field.errors %} has-error{% endif %}">
+                    <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                    {{ field }}
+                    {% for error in field.errors %}<small role="alert">{{ error }}</small>{% endfor %}
+                </div>
+            {% endif %}
+        {% endfor %}
+        <div class="edu-dashboard-filter-actions">
+            <button class="edu-button" type="submit"><i class="bi bi-search" aria-hidden="true"></i> Consultar</button>
+            <a href="{% if solo_seguimiento %}{% url 'financiacion_educativa_web:institucion:seguimiento' %}{% else %}{% url 'financiacion_educativa_web:institucion:solicitudes' %}{% endif %}">Limpiar</a>
+        </div>
+    </div>
+
+    <details class="edu-dashboard-advanced-filters"{% if formulario_filtros.filtros_avanzados_abiertos %} open{% endif %}>
+        <summary>
+            <span><i class="bi bi-sliders" aria-hidden="true"></i> Filtros avanzados</span>
+            {% if formulario_filtros.cantidad_filtros_avanzados_activos %}
+                <small aria-label="{{ formulario_filtros.cantidad_filtros_avanzados_activos }} filtros avanzados activos">{{ formulario_filtros.cantidad_filtros_avanzados_activos }}</small>
+            {% endif %}
+        </summary>
+        <div class="edu-dashboard-filter-advanced-grid">
+            {% for field in formulario_filtros.visible_fields %}
+                {% if field.name != "q" and field.name != "estado" %}
+                    <div class="edu-dashboard-filter{% if field.errors %} has-error{% endif %}">
+                        <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                        {{ field }}
+                        {% for error in field.errors %}<small role="alert">{{ error }}</small>{% endfor %}
+                    </div>
+                {% endif %}
+            {% endfor %}
+        </div>
+    </details>
+</form>

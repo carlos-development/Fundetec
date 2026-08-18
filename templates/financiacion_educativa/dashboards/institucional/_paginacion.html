@@ -1,0 +1,7 @@
+{% if pagina.paginator.num_pages > 1 %}
+<nav class="edu-dashboard-pagination" aria-label="Paginaci&oacute;n de solicitudes">
+    {% if pagina.has_previous %}<a href="?{% if querystring %}{{ querystring }}&amp;{% endif %}page={{ pagina.previous_page_number }}">Anterior</a>{% endif %}
+    <span>P&aacute;gina {{ pagina.number }} de {{ pagina.paginator.num_pages }}</span>
+    {% if pagina.has_next %}<a href="?{% if querystring %}{{ querystring }}&amp;{% endif %}page={{ pagina.next_page_number }}">Siguiente</a>{% endif %}
+</nav>
+{% endif %}
