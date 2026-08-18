@@ -1,5 +1,6 @@
 import uuid
 
+from django.conf import settings
 from django.contrib.auth.hashers import check_password, make_password
 from django.core.exceptions import ValidationError
 from django.db import models
@@ -53,6 +54,92 @@ class Institucion(models.Model):
 
     def __str__(self):
         return self.nombre_comercial
+
+
+class MembresiaInstitucion(models.Model):
+    class Rol(models.TextChoices):
+        INSTITUTION_ADMIN = 'INSTITUTION_ADMIN', 'Administrador institucional'
+        INSTITUTION_ANALYST = 'INSTITUTION_ANALYST', 'Analista institucional'
+        INSTITUTION_READ_ONLY = 'INSTITUTION_READ_ONLY', 'Solo lectura'
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name='membresias_institucionales',
+    )
+    institucion = models.ForeignKey(
+        Institucion,
+        on_delete=models.PROTECT,
+        related_name='membresias',
+    )
+    rol = models.CharField(max_length=30, choices=Rol.choices)
+    activa = models.BooleanField(default=True)
+    creado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        editable=False,
+        related_name='membresias_institucionales_creadas',
+    )
+    invitado_en = models.DateTimeField(default=timezone.now, editable=False)
+    activado_en = models.DateTimeField(
+        default=timezone.now,
+        null=True,
+        blank=True,
+        editable=False,
+    )
+    desactivado_en = models.DateTimeField(null=True, blank=True, editable=False)
+    creada_en = models.DateTimeField(auto_now_add=True)
+    actualizada_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['institucion__nombre_comercial', 'usuario__email']
+        verbose_name = 'Membresia institucional'
+        verbose_name_plural = 'Membresias institucionales'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['usuario', 'institucion'],
+                name='uniq_membresia_usuario_institucion',
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(
+                        activa=True,
+                        activado_en__isnull=False,
+                        desactivado_en__isnull=True,
+                    )
+                    | models.Q(activa=False)
+                ),
+                name='membresia_activa_fechas_consistentes',
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=['institucion', 'activa', 'rol'],
+                name='memb_inst_activa_rol_idx',
+            ),
+            models.Index(
+                fields=['usuario', 'activa'],
+                name='memb_usuario_activa_idx',
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.activa and self.institucion_id and not self.institucion.activa:
+            raise ValidationError({
+                'institucion': (
+                    'Una membresia activa requiere una institucion activa.'
+                ),
+            })
+
+    def __str__(self):
+        return (
+            f'{self.usuario} - {self.institucion.nombre_comercial} '
+            f'({self.get_rol_display()})'
+        )
 
 
 class CredencialAPIInstitucion(models.Model):

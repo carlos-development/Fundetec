@@ -1,0 +1,57 @@
+{% extends "financiacion_educativa/dashboards/_base.html" %}
+
+{% block title %}Panel institucional | {{ education_brand.name|default:"Aprobado" }}{% endblock %}
+
+{% block dashboard_content %}
+<header class="edu-dashboard-heading">
+    <p class="edu-eyebrow">Financiaci&oacute;n educativa</p>
+    <h1>Panel institucional</h1>
+    <p>
+        El acceso institucional de <strong>{{ institucion_activa.nombre_comercial }}</strong>
+        est&aacute; disponible.
+    </p>
+</header>
+
+<section class="edu-dashboard-welcome" aria-labelledby="dashboard-access-title">
+    <div>
+        <span class="edu-dashboard-status">
+            <i class="bi bi-shield-check" aria-hidden="true"></i>
+            Acceso verificado
+        </span>
+        <h2 id="dashboard-access-title">Contexto institucional activo</h2>
+        <p>Tu sesi&oacute;n est&aacute; limitada a la instituci&oacute;n seleccionada.</p>
+    </div>
+    <dl>
+        <div>
+            <dt>Instituci&oacute;n</dt>
+            <dd>{{ institucion_activa.nombre_comercial }}</dd>
+        </div>
+        <div>
+            <dt>Rol</dt>
+            <dd>{{ membresia_institucional.get_rol_display }}</dd>
+        </div>
+    </dl>
+</section>
+
+<section aria-labelledby="dashboard-sections-title">
+    <div class="edu-dashboard-section-heading">
+        <div>
+            <p class="edu-eyebrow">Pr&oacute;ximas secciones</p>
+            <h2 id="dashboard-sections-title">Herramientas institucionales</h2>
+        </div>
+        <p>Estas secciones se habilitar&aacute;n progresivamente.</p>
+    </div>
+    <div class="edu-dashboard-placeholder-grid">
+        {% for seccion in secciones_proximas %}
+            <article class="edu-dashboard-placeholder">
+                <i class="bi {{ seccion.icono }}" aria-hidden="true"></i>
+                <div>
+                    <span>Pr&oacute;ximamente</span>
+                    <h3>{{ seccion.titulo }}</h3>
+                    <p>{{ seccion.descripcion }}</p>
+                </div>
+            </article>
+        {% endfor %}
+    </div>
+</section>
+{% endblock %}

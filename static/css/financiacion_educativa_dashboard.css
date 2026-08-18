@@ -1,0 +1,409 @@
+.education-dashboard-shell {
+    background: var(--edu-soft);
+}
+
+.education-dashboard-shell main {
+    min-height: calc(100vh - 170px);
+}
+
+.edu-dashboard-navbar .edu-navbar-inner {
+    gap: 24px;
+}
+
+.edu-dashboard-tenant {
+    display: grid;
+    min-width: 0;
+    margin-right: auto;
+}
+
+.edu-dashboard-tenant span,
+.edu-dashboard-tenant small {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 0.72rem;
+}
+
+.edu-dashboard-tenant strong {
+    overflow: hidden;
+    color: var(--edu-white);
+    font-size: 0.95rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.edu-dashboard-switch-form {
+    margin: 0;
+}
+
+.edu-dashboard-switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 12px;
+    color: var(--edu-white);
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.42);
+    border-radius: 6px;
+    font: inherit;
+    font-size: 0.78rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.edu-dashboard-switch:hover,
+.edu-dashboard-switch:focus-visible {
+    color: var(--edu-night);
+    background: var(--edu-yellow);
+    border-color: var(--edu-yellow);
+}
+
+.edu-dashboard-layout {
+    display: grid;
+    grid-template-columns: 230px minmax(0, 1fr);
+    width: min(calc(100% - 40px), var(--edu-content));
+    min-height: 620px;
+    margin: 0 auto;
+    padding: 32px 0 56px;
+    gap: 30px;
+}
+
+.edu-dashboard-sidebar {
+    align-self: start;
+    position: sticky;
+    top: 20px;
+}
+
+.edu-dashboard-sidebar nav {
+    display: grid;
+    overflow: hidden;
+    background: var(--edu-white);
+    border: 1px solid var(--edu-line);
+    border-radius: var(--edu-radius);
+}
+
+.edu-dashboard-sidebar a,
+.edu-dashboard-sidebar span {
+    display: grid;
+    grid-template-columns: 22px 1fr;
+    align-items: center;
+    gap: 10px;
+    min-height: 48px;
+    padding: 10px 14px;
+    color: var(--edu-ink);
+    border-left: 3px solid transparent;
+    text-decoration: none;
+}
+
+.edu-dashboard-sidebar a:hover,
+.edu-dashboard-sidebar a:focus-visible,
+.edu-dashboard-sidebar a.is-active {
+    color: var(--edu-cyan-dark);
+    background: #eef8fb;
+    border-left-color: var(--edu-cyan);
+}
+
+.edu-dashboard-sidebar span[aria-disabled="true"] {
+    color: #778793;
+    cursor: not-allowed;
+}
+
+.edu-dashboard-sidebar small {
+    grid-column: 2;
+    color: var(--edu-muted);
+    font-size: 0.66rem;
+}
+
+.edu-dashboard-content {
+    min-width: 0;
+}
+
+.edu-dashboard-heading {
+    margin-bottom: 24px;
+}
+
+.edu-dashboard-heading h1 {
+    margin: 5px 0 8px;
+    color: var(--edu-night);
+    font-size: 1.85rem;
+}
+
+.edu-dashboard-heading p:last-child {
+    max-width: 720px;
+    margin: 0;
+    color: var(--edu-muted);
+}
+
+.edu-dashboard-welcome {
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) minmax(260px, 1fr);
+    gap: 28px;
+    margin-bottom: 34px;
+    padding: 24px;
+    background: var(--edu-white);
+    border: 1px solid var(--edu-line);
+    border-left: 4px solid var(--edu-cyan);
+    border-radius: var(--edu-radius);
+}
+
+.edu-dashboard-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    color: var(--edu-success);
+    font-size: 0.76rem;
+    font-weight: 700;
+}
+
+.edu-dashboard-welcome h2 {
+    margin: 8px 0 6px;
+    color: var(--edu-night);
+    font-size: 1.18rem;
+}
+
+.edu-dashboard-welcome p {
+    margin: 0;
+    color: var(--edu-muted);
+}
+
+.edu-dashboard-welcome dl {
+    display: grid;
+    gap: 12px;
+    margin: 0;
+}
+
+.edu-dashboard-welcome dl div {
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--edu-line);
+}
+
+.edu-dashboard-welcome dt {
+    color: var(--edu-muted);
+    font-size: 0.72rem;
+}
+
+.edu-dashboard-welcome dd {
+    margin: 3px 0 0;
+    color: var(--edu-ink);
+    font-weight: 700;
+}
+
+.edu-dashboard-section-heading {
+    display: flex;
+    align-items: end;
+    justify-content: space-between;
+    gap: 24px;
+    margin-bottom: 16px;
+}
+
+.edu-dashboard-section-heading h2 {
+    margin: 4px 0 0;
+    color: var(--edu-night);
+    font-size: 1.25rem;
+}
+
+.edu-dashboard-section-heading > p {
+    margin: 0;
+    color: var(--edu-muted);
+    font-size: 0.82rem;
+}
+
+.edu-dashboard-placeholder-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+}
+
+.edu-dashboard-placeholder {
+    display: grid;
+    grid-template-columns: 38px minmax(0, 1fr);
+    gap: 14px;
+    min-height: 150px;
+    padding: 20px;
+    background: var(--edu-white);
+    border: 1px solid var(--edu-line);
+    border-radius: var(--edu-radius);
+}
+
+.edu-dashboard-placeholder > i {
+    color: var(--edu-cyan-dark);
+    font-size: 1.45rem;
+}
+
+.edu-dashboard-placeholder span {
+    color: var(--edu-warning);
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.edu-dashboard-placeholder h3 {
+    margin: 5px 0 6px;
+    color: var(--edu-night);
+    font-size: 1rem;
+}
+
+.edu-dashboard-placeholder p {
+    margin: 0;
+    color: var(--edu-muted);
+    font-size: 0.82rem;
+}
+
+.edu-dashboard-selector {
+    width: min(100%, 720px);
+    margin: 24px auto;
+    padding: 28px;
+    background: var(--edu-white);
+    border: 1px solid var(--edu-line);
+    border-radius: var(--edu-radius);
+}
+
+.edu-dashboard-alert {
+    margin-bottom: 18px;
+    padding: 12px 14px;
+    color: var(--edu-danger);
+    background: var(--edu-danger-soft);
+    border-left: 3px solid var(--edu-danger);
+}
+
+.edu-dashboard-selector-form fieldset {
+    margin: 0 0 20px;
+    padding: 0;
+    border: 0;
+}
+
+.edu-dashboard-institution-list {
+    display: grid;
+    gap: 10px;
+}
+
+.edu-dashboard-institution-option {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 14px;
+    padding: 15px 16px;
+    border: 1px solid var(--edu-line);
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.edu-dashboard-institution-option:hover,
+.edu-dashboard-institution-option:focus-within {
+    background: #f2fafc;
+    border-color: var(--edu-cyan-dark);
+}
+
+.edu-dashboard-institution-option input {
+    accent-color: var(--edu-cyan-dark);
+}
+
+.edu-dashboard-institution-option strong,
+.edu-dashboard-institution-option small {
+    display: block;
+}
+
+.edu-dashboard-institution-option strong {
+    color: var(--edu-night);
+}
+
+.edu-dashboard-institution-option small {
+    margin-top: 3px;
+    color: var(--edu-muted);
+}
+
+.edu-dashboard-selector-form .edu-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.edu-visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+@media (max-width: 900px) {
+    .edu-dashboard-tenant {
+        display: none;
+    }
+
+    .edu-dashboard-switch-form,
+    .edu-dashboard-navbar .edu-user-menu {
+        display: none;
+    }
+
+    .edu-dashboard-layout {
+        grid-template-columns: 1fr;
+        gap: 18px;
+        padding-top: 20px;
+    }
+
+    .edu-dashboard-sidebar {
+        position: static;
+        overflow-x: auto;
+    }
+
+    .edu-dashboard-sidebar nav {
+        display: flex;
+        min-width: max-content;
+    }
+
+    .edu-dashboard-sidebar a,
+    .edu-dashboard-sidebar span {
+        grid-template-columns: auto auto;
+        min-width: 140px;
+        border-bottom: 3px solid transparent;
+        border-left: 0;
+    }
+
+    .edu-dashboard-sidebar a:hover,
+    .edu-dashboard-sidebar a:focus-visible,
+    .edu-dashboard-sidebar a.is-active {
+        border-bottom-color: var(--edu-cyan);
+        border-left-color: transparent;
+    }
+}
+
+@media (max-width: 640px) {
+    .edu-dashboard-layout {
+        width: min(calc(100% - 28px), var(--edu-content));
+    }
+
+    .edu-dashboard-heading h1 {
+        font-size: 1.5rem;
+    }
+
+    .edu-dashboard-welcome,
+    .edu-dashboard-placeholder-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .edu-dashboard-section-heading {
+        align-items: start;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .edu-dashboard-selector {
+        margin: 0;
+        padding: 22px 18px;
+    }
+
+    .edu-dashboard-selector-form .edu-button {
+        width: 100%;
+        justify-content: center;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .edu-dashboard-switch,
+    .edu-dashboard-institution-option {
+        scroll-behavior: auto;
+        transition: none;
+    }
+}

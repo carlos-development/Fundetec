@@ -20,7 +20,9 @@
 {% include 'base/loader_global.html' %}
 <a class="edu-skip-link" href="#contenido-principal">Ir al contenido principal</a>
 
-{% include "financiacion_educativa/_navbar.html" %}
+{% block navbar %}
+    {% include "financiacion_educativa/_navbar.html" %}
+{% endblock %}
 
 <main id="contenido-principal">
     {% if messages %}

@@ -1,0 +1,22 @@
+{% extends "financiacion_educativa/_base.html" %}
+{% load static %}
+
+{% block extra_head %}
+    {{ block.super }}
+    <link rel="stylesheet" href="{% static 'css/financiacion_educativa_dashboard.css' %}">
+{% endblock %}
+
+{% block body_class %}education-dashboard-shell{% endblock %}
+
+{% block navbar %}
+    {% include "financiacion_educativa/dashboards/_navbar_institucional.html" %}
+{% endblock %}
+
+{% block content %}
+<div class="edu-dashboard-layout">
+    {% include "financiacion_educativa/dashboards/_sidebar_institucional.html" %}
+    <section class="edu-dashboard-content" aria-label="Contenido del panel institucional">
+        {% block dashboard_content %}{% endblock %}
+    </section>
+</div>
+{% endblock %}

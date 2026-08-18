@@ -1,4 +1,4 @@
-from django.urls import path
+from django.urls import include, path
 
 from . import views
 
@@ -6,6 +6,13 @@ from . import views
 app_name = 'financiacion_educativa_web'
 
 urlpatterns = [
+    path(
+        'institucion/',
+        include(
+            'financiacion_educativa.dashboards.institucional.urls',
+            namespace='institucion',
+        ),
+    ),
     path('simulador/', views.simulador_publico_view, name='simulador-publico'),
     path(
         'simulador/calcular/',

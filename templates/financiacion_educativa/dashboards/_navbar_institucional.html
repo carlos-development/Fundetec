@@ -1,0 +1,70 @@
+{% load static %}
+<header class="edu-navbar edu-dashboard-navbar" data-education-navbar>
+    <div class="edu-navbar-inner">
+        <a class="edu-navbar-logo" href="{% url 'financiacion_educativa_web:institucion:inicio' %}" aria-label="Aprobado, panel institucional">
+            <img src="{% static education_brand.logo_inverse|default:'images/logo.png' %}" alt="Aprobado">
+        </a>
+
+        <div class="edu-dashboard-tenant" aria-live="polite">
+            <span>Financiaci&oacute;n educativa</span>
+            <strong>{{ institucion_activa.nombre_comercial|default:"Acceso institucional" }}</strong>
+            {% if membresia_institucional %}
+                <small>{{ membresia_institucional.get_rol_display }}</small>
+            {% endif %}
+        </div>
+
+        <div class="edu-navbar-actions">
+            {% if puede_cambiar_institucion %}
+                <form method="post" action="{% url 'financiacion_educativa_web:institucion:cambiar' %}" class="edu-dashboard-switch-form">
+                    {% csrf_token %}
+                    <button type="submit" class="edu-dashboard-switch">
+                        <i class="bi bi-arrow-left-right" aria-hidden="true"></i>
+                        Cambiar instituci&oacute;n
+                    </button>
+                </form>
+            {% endif %}
+            <div class="edu-user-menu">
+                <button class="edu-user-trigger" type="button" aria-expanded="false" data-user-menu-trigger>
+                    <span class="edu-user-avatar" aria-hidden="true"><i class="bi bi-person"></i></span>
+                    <span>Mi cuenta</span>
+                    <span class="edu-user-caret" aria-hidden="true">&#9662;</span>
+                </button>
+                <div class="edu-user-dropdown" data-user-menu>
+                    <form method="post" action="{% url 'account_logout' %}">
+                        {% csrf_token %}
+                        <button type="submit">
+                            <i class="bi bi-box-arrow-right" aria-hidden="true"></i>
+                            Cerrar sesi&oacute;n
+                        </button>
+                    </form>
+                </div>
+            </div>
+            <button class="edu-menu-toggle" type="button" aria-label="Abrir men&uacute;" aria-expanded="false" data-menu-toggle>
+                <span aria-hidden="true">&#9776;</span>
+            </button>
+        </div>
+    </div>
+
+    <div class="edu-mobile-menu edu-dashboard-mobile-menu" data-mobile-menu>
+        <a href="{% url 'financiacion_educativa_web:institucion:inicio' %}">Inicio institucional</a>
+        {% if institucion_activa %}
+            <span>{{ institucion_activa.nombre_comercial }}</span>
+        {% endif %}
+        {% if puede_cambiar_institucion %}
+            <form method="post" action="{% url 'financiacion_educativa_web:institucion:cambiar' %}">
+                {% csrf_token %}
+                <button type="submit">
+                    <i class="bi bi-arrow-left-right" aria-hidden="true"></i>
+                    Cambiar instituci&oacute;n
+                </button>
+            </form>
+        {% endif %}
+        <form method="post" action="{% url 'account_logout' %}">
+            {% csrf_token %}
+            <button type="submit">
+                <i class="bi bi-box-arrow-right" aria-hidden="true"></i>
+                Cerrar sesi&oacute;n
+            </button>
+        </form>
+    </div>
+</header>

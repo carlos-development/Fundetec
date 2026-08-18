@@ -1,0 +1,42 @@
+{% extends "financiacion_educativa/dashboards/_base.html" %}
+
+{% block title %}Seleccionar instituci&oacute;n | {{ education_brand.name|default:"Aprobado" }}{% endblock %}
+
+{% block dashboard_content %}
+<div class="edu-dashboard-selector">
+    <header class="edu-dashboard-heading">
+        <p class="edu-eyebrow">Acceso institucional</p>
+        <h1>Selecciona una instituci&oacute;n</h1>
+        <p>Tu cuenta tiene acceso a m&aacute;s de una instituci&oacute;n activa.</p>
+    </header>
+
+    {% if seleccion_invalida %}
+        <div class="edu-dashboard-alert" role="alert">
+            No fue posible seleccionar esa instituci&oacute;n. Elige una opci&oacute;n disponible.
+        </div>
+    {% endif %}
+
+    <form method="post" class="edu-dashboard-selector-form">
+        {% csrf_token %}
+        <fieldset>
+            <legend class="edu-visually-hidden">Instituciones disponibles</legend>
+            <div class="edu-dashboard-institution-list">
+                {% for membresia in membresias_institucionales %}
+                    <label class="edu-dashboard-institution-option">
+                        <input type="radio" name="institucion_id" value="{{ membresia.institucion_id }}" required>
+                        <span>
+                            <strong>{{ membresia.institucion.nombre_comercial }}</strong>
+                            <small>{{ membresia.get_rol_display }}</small>
+                        </span>
+                        <i class="bi bi-chevron-right" aria-hidden="true"></i>
+                    </label>
+                {% endfor %}
+            </div>
+        </fieldset>
+        <button type="submit" class="edu-button">
+            Continuar
+            <i class="bi bi-arrow-right" aria-hidden="true"></i>
+        </button>
+    </form>
+</div>
+{% endblock %}
