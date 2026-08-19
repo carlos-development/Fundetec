@@ -260,7 +260,32 @@ class DashboardInstitucionalConsultaTests(TestCase):
     def test_inicio_vacio_es_claro(self):
         respuesta = self.client.get(self.inicio)
         self.assertContains(respuesta, 'A&uacute;n no hay solicitudes', html=True)
+        self.assertContains(respuesta, 'para este programa')
+        self.assertNotContains(respuesta, 'para esta instituci&oacute;n')
         self.assertEqual(respuesta.context['indicadores']['total'], 0)
+
+    def test_nombre_curso_se_presenta_como_curso(self):
+        solicitud = self._solicitud(
+            'CURSO-ETIQUETA',
+            nombre_curso='INGLES BASICO A2 ELITE',
+        )
+
+        inicio = self.client.get(self.inicio)
+        listado = self.client.get(self.listado)
+        detalle = self.client.get(self._detalle(solicitud))
+
+        self.assertContains(inicio, '<th>Curso</th>', html=True)
+        self.assertContains(listado, '<th>Curso</th>', html=True)
+        self.assertContains(listado, 'data-label="Curso"')
+        self.assertContains(listado, '>Curso</label>')
+        self.assertContains(listado, 'Todos los cursos')
+        self.assertContains(listado, 'Curso A-Z')
+        self.assertContains(detalle, '<dt>Curso financiado</dt>', html=True)
+        for respuesta in (inicio, listado, detalle):
+            self.assertContains(respuesta, 'INGLES BASICO A2 ELITE')
+        self.assertNotContains(inicio, '<th>Programa</th>', html=True)
+        self.assertNotContains(listado, 'data-label="Programa"')
+        self.assertNotContains(detalle, '<dt>Programa</dt>', html=True)
 
     def test_listado_y_seguimiento_solo_muestran_solicitudes_propias(self):
         propia = self._solicitud('VISIBLE-PROPIA')

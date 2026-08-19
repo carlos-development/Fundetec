@@ -27,7 +27,7 @@ from .selectors import (
 SECCIONES_PROXIMAS = (
     {
         'titulo': 'Reportes',
-        'descripcion': 'Reportes institucionales disponibles en una fase posterior.',
+        'descripcion': 'Reportes del programa disponibles en una fase posterior.',
         'icono': 'bi-bar-chart',
     },
     {
@@ -183,7 +183,7 @@ def solicitud_detalle_view(request, application_id):
 def seleccionar_institucion_view(request):
     resolucion = resolver_contexto_institucional(request)
     if not resolucion.membresias:
-        raise PermissionDenied('No tienes acceso al panel institucional.')
+        raise PermissionDenied('No tienes acceso al panel del programa.')
     if len(resolucion.membresias) == 1:
         return redirect('financiacion_educativa_web:institucion:inicio')
 
@@ -227,7 +227,7 @@ def seleccionar_institucion_view(request):
 def cambiar_institucion_view(request):
     resolucion = resolver_contexto_institucional(request)
     if not resolucion.membresias:
-        raise PermissionDenied('No tienes acceso al panel institucional.')
+        raise PermissionDenied('No tienes acceso al panel del programa.')
     request.session.pop(SESSION_MEMBRESIA_INSTITUCIONAL_ID, None)
     if len(resolucion.membresias) == 1:
         return redirect('financiacion_educativa_web:institucion:inicio')

@@ -1,15 +1,15 @@
-{% load static %}
+{% load static financiacion_format %}
 <header class="edu-navbar edu-dashboard-navbar" data-education-navbar>
     <div class="edu-navbar-inner">
-        <a class="edu-navbar-logo" href="{% url 'financiacion_educativa_web:institucion:inicio' %}" aria-label="Aprobado, panel institucional">
+        <a class="edu-navbar-logo" href="{% url 'financiacion_educativa_web:institucion:inicio' %}" aria-label="Aprobado, panel del programa">
             <img src="{% static education_brand.logo_inverse|default:'images/logo.png' %}" alt="Aprobado">
         </a>
 
-        <div class="edu-dashboard-tenant" aria-live="polite">
-            <span>Financiaci&oacute;n educativa</span>
-            <strong>{{ institucion_activa.nombre_comercial|default:"Acceso institucional" }}</strong>
+        <div class="edu-dashboard-tenant" aria-label="Contexto de programa activo" aria-live="polite">
+            <span>Programa activo</span>
+            <strong>{{ institucion_activa.nombre_comercial|default:"Acceso a programas" }}</strong>
             {% if membresia_institucional %}
-                <small>{{ membresia_institucional.get_rol_display }}</small>
+                <small>{{ membresia_institucional.rol|rol_programa }}</small>
             {% endif %}
         </div>
 
@@ -19,7 +19,7 @@
                     {% csrf_token %}
                     <button type="submit" class="edu-dashboard-switch">
                         <i class="bi bi-arrow-left-right" aria-hidden="true"></i>
-                        Cambiar instituci&oacute;n
+                        Cambiar programa
                     </button>
                 </form>
             {% endif %}
@@ -46,7 +46,7 @@
     </div>
 
     <div class="edu-mobile-menu edu-dashboard-mobile-menu" data-mobile-menu>
-        <a href="{% url 'financiacion_educativa_web:institucion:inicio' %}">Inicio institucional</a>
+        <a href="{% url 'financiacion_educativa_web:institucion:inicio' %}">Inicio del programa</a>
         {% if institucion_activa %}
             <span>{{ institucion_activa.nombre_comercial }}</span>
         {% endif %}
@@ -55,7 +55,7 @@
                 {% csrf_token %}
                 <button type="submit">
                     <i class="bi bi-arrow-left-right" aria-hidden="true"></i>
-                    Cambiar instituci&oacute;n
+                    Cambiar programa
                 </button>
             </form>
         {% endif %}

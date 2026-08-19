@@ -6,6 +6,13 @@ from django import template
 register = template.Library()
 
 
+ETIQUETAS_ROL_PROGRAMA = {
+    'INSTITUTION_ADMIN': 'Administrador de programa',
+    'INSTITUTION_ANALYST': 'Analista de programa',
+    'INSTITUTION_READ_ONLY': 'Consulta del programa',
+}
+
+
 @register.filter
 def cop(valor):
     try:
@@ -23,3 +30,8 @@ def porcentaje(valor):
         return ''
     texto = format(numero, 'f').rstrip('0').rstrip('.')
     return texto.replace('.', ',')
+
+
+@register.filter
+def rol_programa(valor):
+    return ETIQUETAS_ROL_PROGRAMA.get(str(valor), str(valor))

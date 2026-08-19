@@ -18,6 +18,18 @@ from instituciones.services.membresias import (
 
 
 class DashboardInstitucionalAccesoTests(TestCase):
+    ETIQUETAS_ROL_PROGRAMA = {
+        MembresiaInstitucion.Rol.INSTITUTION_ADMIN: (
+            'Administrador de programa'
+        ),
+        MembresiaInstitucion.Rol.INSTITUTION_ANALYST: (
+            'Analista de programa'
+        ),
+        MembresiaInstitucion.Rol.INSTITUTION_READ_ONLY: (
+            'Consulta del programa'
+        ),
+    }
+
     def setUp(self):
         User = get_user_model()
         self.actor = User.objects.create_user(
@@ -183,7 +195,11 @@ class DashboardInstitucionalAccesoTests(TestCase):
             respuesta = self.client.get(self.inicio)
 
             self.assertEqual(respuesta.status_code, 200)
-            self.assertContains(respuesta, membresia.get_rol_display())
+            self.assertContains(
+                respuesta,
+                self.ETIQUETAS_ROL_PROGRAMA[rol],
+            )
+            self.assertNotContains(respuesta, membresia.get_rol_display())
             self.assertEqual(
                 self.client.session[SESSION_MEMBRESIA_INSTITUCIONAL_ID],
                 str(membresia.pk),
@@ -212,6 +228,11 @@ class DashboardInstitucionalAccesoTests(TestCase):
         self.assertContains(selector, primera.institucion.nombre_comercial)
         self.assertContains(selector, segunda.institucion.nombre_comercial)
         self.assertNotContains(selector, inactiva_institucion.nombre_comercial)
+        self.assertContains(selector, 'Selecciona un programa')
+        self.assertContains(selector, 'Programas disponibles')
+        self.assertContains(selector, 'Acceso a programas')
+        self.assertNotContains(selector, 'Selecciona una instituci&oacute;n')
+        self.assertNotContains(selector, 'Instituciones disponibles')
 
     def test_selector_post_valida_membresia_y_guarda_solo_su_id(self):
         self._crear_membresia()
@@ -236,6 +257,9 @@ class DashboardInstitucionalAccesoTests(TestCase):
         self.assertNotIn('institucion_id', sesion)
         pagina = self.client.get(self.inicio)
         self.assertContains(pagina, segunda_institucion.nombre_comercial)
+        self.assertContains(pagina, 'Programa activo')
+        self.assertContains(pagina, 'Contexto de programa activo')
+        self.assertContains(pagina, 'Cambiar programa')
 
     def test_uuid_ajeno_o_inexistente_no_enumera_y_limpia_sesion(self):
         propia = self._crear_membresia()
@@ -263,7 +287,7 @@ class DashboardInstitucionalAccesoTests(TestCase):
                 self.assertEqual(respuesta.status_code, 400)
                 self.assertContains(
                     respuesta,
-                    'No fue posible seleccionar esa instituci',
+                    'No fue posible seleccionar ese programa',
                     status_code=400,
                 )
                 self.assertNotContains(
@@ -366,10 +390,12 @@ class DashboardInstitucionalAccesoTests(TestCase):
         self.assertNotContains(respuesta, solicitud.correo)
         self.assertNotContains(respuesta, self.usuario.email)
         self.assertContains(respuesta, 'Mi cuenta')
-        self.assertContains(respuesta, 'Indicadores institucionales')
+        self.assertContains(respuesta, 'Indicadores del programa')
         self.assertNotContains(respuesta, 'capital financiado')
         self.assertContains(respuesta, 'id="contenido-principal"')
-        self.assertContains(respuesta, 'aria-label="Navegaci&oacute;n institucional"')
+        self.assertContains(respuesta, 'aria-label="Navegaci&oacute;n del programa"')
+        self.assertContains(respuesta, 'Panel del programa')
+        self.assertNotContains(respuesta, 'Panel institucional')
 
     def test_selector_evita_n_mas_uno(self):
         self._crear_membresia()

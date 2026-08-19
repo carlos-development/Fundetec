@@ -37,7 +37,7 @@ def requiere_contexto_institucional(view):
     def protegida(request, *args, **kwargs):
         resolucion = resolver_contexto_institucional(request)
         if not resolucion.membresias:
-            raise PermissionDenied('No tienes acceso al panel institucional.')
+            raise PermissionDenied('No tienes acceso al panel del programa.')
         if resolucion.requiere_seleccion:
             return redirect(
                 'financiacion_educativa_web:institucion:seleccionar'

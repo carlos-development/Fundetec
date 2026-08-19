@@ -1,13 +1,13 @@
 {% extends "financiacion_educativa/dashboards/_base.html" %}
 {% load financiacion_format %}
 
-{% block title %}Panel institucional | {{ education_brand.name|default:"Aprobado" }}{% endblock %}
+{% block title %}Panel del programa | {{ education_brand.name|default:"Aprobado" }}{% endblock %}
 
 {% block dashboard_content %}
 <header class="edu-dashboard-heading">
     <p class="edu-eyebrow">Financiaci&oacute;n educativa</p>
-    <h1>Resumen institucional</h1>
-    <p>Consulta el estado agregado y la actividad reciente de <strong>{{ institucion_activa.nombre_comercial }}</strong>.</p>
+    <h1>Resumen del programa</h1>
+    <p>Consulta el estado agregado y la actividad reciente del programa <strong>{{ institucion_activa.nombre_comercial }}</strong>.</p>
 </header>
 
 {% include "financiacion_educativa/dashboards/institucional/_indicadores.html" %}
@@ -20,21 +20,21 @@
     {% if solicitudes_recientes %}
         <div class="edu-dashboard-table-wrap">
             <table class="edu-dashboard-table">
-                <thead><tr><th>Referencia</th><th>Solicitante</th><th>Programa</th><th>Estado</th><th>Creada</th><th><span class="edu-visually-hidden">Acci&oacute;n</span></th></tr></thead>
+                <thead><tr><th>Referencia</th><th>Solicitante</th><th>Curso</th><th>Estado</th><th>Creada</th><th><span class="edu-visually-hidden">Acci&oacute;n</span></th></tr></thead>
                 <tbody>{% for item in solicitudes_recientes %}<tr>
-                    <td data-label="Referencia"><strong>{{ item.referencia }}</strong></td><td data-label="Solicitante">{{ item.solicitante }}</td><td data-label="Programa">{{ item.programa }}</td>
+                    <td data-label="Referencia"><strong>{{ item.referencia }}</strong></td><td data-label="Solicitante">{{ item.solicitante }}</td><td data-label="Curso">{{ item.programa }}</td>
                     <td data-label="Estado">{% include "financiacion_educativa/dashboards/institucional/_estado_badge.html" with estado=item.estado %}</td><td data-label="Creada">{{ item.creada_en|date:"d/m/Y" }}</td>
                     <td><a class="edu-dashboard-row-link" href="{% url 'financiacion_educativa_web:institucion:solicitud-detalle' item.id %}" aria-label="Ver solicitud {{ item.referencia }}"><i class="bi bi-chevron-right" aria-hidden="true"></i></a></td>
                 </tr>{% endfor %}</tbody>
             </table>
         </div>
     {% else %}
-        <div class="edu-dashboard-empty"><i class="bi bi-inbox" aria-hidden="true"></i><h3>A&uacute;n no hay solicitudes</h3><p>Las solicitudes recibidas para esta instituci&oacute;n aparecer&aacute;n aqu&iacute;.</p></div>
+        <div class="edu-dashboard-empty"><i class="bi bi-inbox" aria-hidden="true"></i><h3>A&uacute;n no hay solicitudes</h3><p>Las solicitudes recibidas para este programa aparecer&aacute;n aqu&iacute;.</p></div>
     {% endif %}
 </section>
 
 <section aria-labelledby="future-sections-title">
-    <div class="edu-dashboard-section-heading"><div><p class="edu-eyebrow">Pr&oacute;ximas secciones</p><h2 id="future-sections-title">Herramientas institucionales</h2></div></div>
+    <div class="edu-dashboard-section-heading"><div><p class="edu-eyebrow">Pr&oacute;ximas secciones</p><h2 id="future-sections-title">Herramientas del programa</h2></div></div>
     <div class="edu-dashboard-placeholder-grid">{% for seccion in secciones_proximas %}<article class="edu-dashboard-placeholder"><i class="bi {{ seccion.icono }}" aria-hidden="true"></i><div><span>Pr&oacute;ximamente</span><h3>{{ seccion.titulo }}</h3><p>{{ seccion.descripcion }}</p></div></article>{% endfor %}</div>
 </section>
 {% endblock %}

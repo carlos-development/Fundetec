@@ -7,7 +7,7 @@
 <header class="edu-dashboard-heading">
     <p class="edu-eyebrow">Financiaci&oacute;n educativa</p>
     <h1>{% if solo_seguimiento %}Seguimiento activo{% else %}Solicitudes{% endif %}</h1>
-    <p>{% if solo_seguimiento %}Solicitudes que contin&uacute;an en proceso.{% else %}Consulta limitada a {{ institucion_activa.nombre_comercial }}.{% endif %}</p>
+    <p>{% if solo_seguimiento %}Solicitudes que contin&uacute;an en proceso para {{ institucion_activa.nombre_comercial }}.{% else %}Consulta del programa {{ institucion_activa.nombre_comercial }}.{% endif %}</p>
 </header>
 
 {% include "financiacion_educativa/dashboards/institucional/_filtros_solicitudes.html" %}
@@ -16,9 +16,9 @@
     <div class="edu-dashboard-section-heading"><div><p class="edu-eyebrow">Resultado</p><h2 id="applications-result-title">{{ pagina.paginator.count }} solicitud{{ pagina.paginator.count|pluralize:"es" }}</h2></div></div>
     {% if pagina.object_list %}
     <div class="edu-dashboard-table-wrap"><table class="edu-dashboard-table">
-        <thead><tr><th>Referencia</th><th>Solicitante</th><th>Programa</th><th>Periodo / sede</th><th>Plan</th><th>Estado / seguimiento</th><th>Actualizaci&oacute;n</th><th><span class="edu-visually-hidden">Acci&oacute;n</span></th></tr></thead>
+        <thead><tr><th>Referencia</th><th>Solicitante</th><th>Curso</th><th>Periodo / sede</th><th>Plan</th><th>Estado / seguimiento</th><th>Actualizaci&oacute;n</th><th><span class="edu-visually-hidden">Acci&oacute;n</span></th></tr></thead>
         <tbody>{% for item in pagina.object_list %}<tr>
-            <td data-label="Referencia"><strong>{{ item.referencia }}</strong><small>{{ item.creada_en|date:"d/m/Y" }}</small></td><td data-label="Solicitante">{{ item.solicitante }}</td><td data-label="Programa">{{ item.programa }}</td>
+            <td data-label="Referencia"><strong>{{ item.referencia }}</strong><small>{{ item.creada_en|date:"d/m/Y" }}</small></td><td data-label="Solicitante">{{ item.solicitante }}</td><td data-label="Curso">{{ item.programa }}</td>
             <td data-label="Periodo / sede">{{ item.periodo }}<small>{{ item.sede }}</small></td><td data-label="Plan">{{ item.valor_plan|cop }}<small>{{ item.plazo_meses }} meses</small></td>
             <td data-label="Estado / seguimiento">{% include "financiacion_educativa/dashboards/institucional/_estado_badge.html" with estado=item.estado %}<small>{{ item.seguimiento }}</small></td><td data-label="Actualizaci&oacute;n">{{ item.actualizada_en|date:"d/m/Y H:i" }}</td>
             <td><a class="edu-dashboard-row-link" href="{% url 'financiacion_educativa_web:institucion:solicitud-detalle' item.id %}" aria-label="Ver solicitud {{ item.referencia }}"><i class="bi bi-chevron-right" aria-hidden="true"></i></a></td>

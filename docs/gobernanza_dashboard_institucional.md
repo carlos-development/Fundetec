@@ -6,9 +6,22 @@ El dashboard permite consultar solicitudes de financiacion educativa pertenecien
 a una institucion. El acceso humano se concede mediante membresias individuales y
 debe respetar el principio de minimo privilegio.
 
+## Terminologia comercial temporal
+
+FUNDETEC es la institucion comercial principal. En el frontend institucional,
+los registros actuales de `Institucion` representan ofertas financiables y se
+presentan temporalmente como **Programa**. De forma independiente, el campo
+`program_name` (`nombre_curso` en el dominio Django) se presenta como **Curso**
+o **Curso financiado**.
+
+Esta terminologia es exclusivamente de presentacion y no constituye una
+migracion del modelo de dominio. En una fase futura se implementara una
+jerarquia explicita con los niveles **Institucion**, **Programa** y **Curso u
+oferta academica**.
+
 ## Roles y permisos
 
-| Capacidad | Administrador institucional | Analista institucional | Solo lectura |
+| Capacidad | Administrador de programa | Analista de programa | Consulta del programa |
 | --- | --- | --- | --- |
 | Ver inicio, indicadores y solicitudes | Si | Si | Si |
 | Ver detalle y estados documentales | Si | Si | Si |
@@ -20,7 +33,7 @@ debe respetar el principio de minimo privilegio.
 | Gestionar usuarios o credenciales API | No en esta fase | No | No |
 | Exportar informacion | No | No | No |
 
-`INSTITUTION_ADMIN` representa al responsable institucional de mayor privilegio,
+`INSTITUTION_ADMIN` representa al responsable del programa de mayor privilegio,
 pero no habilita operaciones de revision ni administracion de accesos en el
 dashboard. `INSTITUTION_ANALYST` consulta el expediente para seguimiento.
 `INSTITUTION_READ_ONLY` consulta los mismos estados con contacto enmascarado.

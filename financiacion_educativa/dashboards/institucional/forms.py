@@ -8,7 +8,7 @@ ORDENAMIENTOS_SOLICITUDES = (
     ('creada_en', 'Mas antiguas'),
     ('-actualizada_en', 'Actualizadas recientemente'),
     ('referencia_externa', 'Referencia A-Z'),
-    ('nombre_curso', 'Programa A-Z'),
+    ('nombre_curso', 'Curso A-Z'),
     ('-valor_plan', 'Mayor valor del plan'),
     ('valor_plan', 'Menor valor del plan'),
 )
@@ -40,7 +40,7 @@ class FiltrosSolicitudesInstitucionalesForm(forms.Form):
         label='Estado',
         choices=(('', 'Todos los estados'),) + tuple(EstadoPublicoSolicitud.choices),
     )
-    programa = forms.ChoiceField(required=False, label='Programa')
+    programa = forms.ChoiceField(required=False, label='Curso')
     periodo = forms.ChoiceField(required=False, label='Periodo academico')
     sede = forms.ChoiceField(required=False, label='Sede')
     desde = forms.DateField(
@@ -70,7 +70,7 @@ class FiltrosSolicitudesInstitucionalesForm(forms.Form):
         opciones = opciones or {}
         self.fields['programa'].choices = self._choices(
             opciones.get('programas', ()),
-            'Todos los programas',
+            'Todos los cursos',
         )
         self.fields['periodo'].choices = self._choices(
             opciones.get('periodos', ()),
