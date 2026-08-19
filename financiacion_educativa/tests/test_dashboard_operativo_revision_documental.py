@@ -10,7 +10,7 @@ from django.contrib.auth.models import Permission
 from django.core import mail
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.db import close_old_connections, connection
+from django.db import close_old_connections, connection, connections
 from django.test import Client, TestCase, TransactionTestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
@@ -750,7 +750,11 @@ class RevisionDocumentalConcurrentePostgreSQLTests(TransactionTestCase):
 
     def _aceptar_desde_conexion_independiente(self, actor_id, barrera):
         close_old_connections()
+        conexion_thread = connections['default']
         try:
+            conexion_thread.ensure_connection()
+            wrapper_id = id(conexion_thread)
+            conexion_db_id = id(conexion_thread.connection)
             actor = get_user_model().objects.get(pk=actor_id)
             barrera.wait(timeout=10)
             resultado = aceptar_documento_operativo(
@@ -758,13 +762,24 @@ class RevisionDocumentalConcurrentePostgreSQLTests(TransactionTestCase):
                 actor=actor,
                 observacion='Decision concurrente identica.',
             )
-            return ('ok', resultado.repetida, str(resultado.decision.pk))
+            return (
+                'ok',
+                resultado.repetida,
+                str(resultado.decision.pk),
+                wrapper_id,
+                conexion_db_id,
+            )
         except Exception as error:  # El test debe hacer visibles fallos del hilo.
             return ('error', type(error).__name__, str(error))
         finally:
-            close_old_connections()
+            conexion_thread.close()
 
     def test_dos_revisores_generan_una_sola_decision_efectiva(self):
+        conexion_principal = connections['default']
+        conexion_principal.ensure_connection()
+        wrapper_principal_id = id(conexion_principal)
+        conexion_db_principal = conexion_principal.connection
+        conexion_db_principal_id = id(conexion_db_principal)
         barrera = Barrier(2)
         with ThreadPoolExecutor(max_workers=2) as ejecutor:
             futuros = [
@@ -785,6 +800,21 @@ class RevisionDocumentalConcurrentePostgreSQLTests(TransactionTestCase):
         self.assertEqual(
             len({resultado[2] for resultado in resultados}),
             1,
+        )
+        self.assertEqual(len({resultado[3] for resultado in resultados}), 2)
+        self.assertEqual(len({resultado[4] for resultado in resultados}), 2)
+        self.assertNotIn(
+            wrapper_principal_id,
+            {resultado[3] for resultado in resultados},
+        )
+        self.assertNotIn(
+            conexion_db_principal_id,
+            {resultado[4] for resultado in resultados},
+        )
+        self.assertIs(conexion_principal.connection, conexion_db_principal)
+        self.assertTrue(conexion_principal.is_usable())
+        self.assertTrue(
+            DocumentoFinanciacion.objects.filter(pk=self.documento.pk).exists()
         )
         self.documento.refresh_from_db()
         self.assertEqual(
