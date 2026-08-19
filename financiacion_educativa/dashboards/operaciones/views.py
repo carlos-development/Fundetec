@@ -1,19 +1,31 @@
+from django.contrib import messages
+from django.core.exceptions import ValidationError
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
-from django.shortcuts import render
+from django.http import FileResponse, Http404
+from django.shortcuts import redirect, render
 from django.views.decorators.cache import never_cache
-from django.views.decorators.http import require_GET
+from django.views.decorators.http import require_GET, require_POST
 
-from .forms import FiltrosSolicitudesOperativasForm
+from .forms import (
+    AceptarDocumentoOperativoForm,
+    CorreccionDocumentoOperativoForm,
+    FiltrosRevisionDocumentalForm,
+    FiltrosSolicitudesOperativasForm,
+)
 from .permissions import (
     PERMISO_DOCUMENTOS,
     PERMISO_PROCESOS,
     PERMISO_SOLICITUDES,
+    PERMISO_ACCESO_REVISION_DOCUMENTAL,
+    PERMISO_DECIDIR_REVISION_DOCUMENTAL,
     capacidades_operativas,
     requiere_permisos_operativos,
 )
 from .presenters import (
     presentar_detalle_solicitud,
     presentar_resumen_solicitud,
+    presentar_documento_revision,
+    presentar_resumen_documento_revision,
 )
 from .selectors import (
     filtrar_solicitudes_operativas,
@@ -24,7 +36,22 @@ from .selectors import (
     obtener_opciones_filtros,
     obtener_solicitud_operativa,
     obtener_solicitudes_recientes,
+    filtrar_documentos_revision,
+    obtener_documento_revision,
 )
+from financiacion_educativa.services.revision_documental_operativa import (
+    ConflictoRevisionDocumental,
+    aceptar_documento_operativo,
+    documento_admite_revision,
+    solicitar_correccion_documento_operativo,
+)
+
+
+MIME_PREVISUALIZABLES_OPERATIVOS = {
+    'application/pdf': 'documento.pdf',
+    'image/jpeg': 'documento.jpg',
+    'image/png': 'documento.png',
+}
 
 
 def _contexto(request, *, seccion='resumen', **adicional):
@@ -175,4 +202,195 @@ def solicitud_detalle_view(request, application_id):
             seccion='solicitudes',
             solicitud=detalle,
         ),
+    )
+
+
+@never_cache
+@requiere_permisos_operativos(
+    PERMISO_ACCESO_REVISION_DOCUMENTAL,
+    PERMISO_DOCUMENTOS,
+)
+@require_GET
+def revision_documental_view(request):
+    instituciones = tuple(
+        (str(pk), nombre)
+        for pk, nombre in obtener_instituciones_operativas().values_list(
+            'pk', 'nombre_comercial'
+        )
+    )
+    formulario = FiltrosRevisionDocumentalForm(
+        request.GET,
+        instituciones=instituciones,
+    )
+    estado_http = 200
+    if formulario.is_valid():
+        consulta = filtrar_documentos_revision(
+            filtros=formulario.cleaned_data
+        )
+        numero_pagina = formulario.cleaned_data.get('page') or 1
+    else:
+        consulta = filtrar_documentos_revision(filtros={}).none()
+        numero_pagina = 1
+        estado_http = 400
+    paginador = Paginator(consulta, 25)
+    try:
+        pagina = paginador.page(numero_pagina)
+    except (EmptyPage, PageNotAnInteger):
+        pagina = paginador.get_page(1)
+        estado_http = 400
+    pagina.object_list = [
+        presentar_resumen_documento_revision(documento)
+        for documento in pagina.object_list
+    ]
+    return render(
+        request,
+        'financiacion_educativa/dashboards/operaciones/revision_documental_lista.html',
+        _contexto(
+            request,
+            seccion='revision-documental',
+            formulario_filtros=formulario,
+            pagina=pagina,
+            querystring=_querystring_sin_pagina(request),
+        ),
+        status=estado_http,
+    )
+
+
+def _respuesta_revision_documento(request, documento, *, status=200):
+    detalle = presentar_documento_revision(documento)
+    return render(
+        request,
+        'financiacion_educativa/dashboards/operaciones/revision_documental_detalle.html',
+        _contexto(
+            request,
+            seccion='revision-documental',
+            documento=detalle,
+            admite_decision=documento_admite_revision(documento),
+            puede_decidir=request.user.has_perm(
+                PERMISO_DECIDIR_REVISION_DOCUMENTAL
+            ),
+            form_aceptar=AceptarDocumentoOperativoForm(),
+            form_correccion=CorreccionDocumentoOperativoForm(),
+        ),
+        status=status,
+    )
+
+
+@never_cache
+@requiere_permisos_operativos(
+    PERMISO_ACCESO_REVISION_DOCUMENTAL,
+    PERMISO_DOCUMENTOS,
+)
+@require_GET
+def revision_documento_view(request, application_id):
+    documento = obtener_documento_revision(application_id)
+    return _respuesta_revision_documento(request, documento)
+
+
+@never_cache
+@requiere_permisos_operativos(
+    PERMISO_ACCESO_REVISION_DOCUMENTAL,
+    PERMISO_DOCUMENTOS,
+)
+@require_GET
+def previsualizar_documento_operativo_view(request, application_id):
+    documento = obtener_documento_revision(application_id)
+    nombre = MIME_PREVISUALIZABLES_OPERATIVOS.get(documento.content_type)
+    if not nombre or not documento.archivo:
+        raise Http404
+    respuesta = FileResponse(
+        documento.archivo.open('rb'),
+        as_attachment=False,
+        filename=nombre,
+        content_type=documento.content_type,
+    )
+    respuesta['X-Content-Type-Options'] = 'nosniff'
+    respuesta['X-Frame-Options'] = 'SAMEORIGIN'
+    respuesta['Content-Security-Policy'] = (
+        "default-src 'none'; img-src 'self' data:; object-src 'none'; "
+        "base-uri 'none'; frame-ancestors 'self'"
+    )
+    respuesta['Cross-Origin-Resource-Policy'] = 'same-origin'
+    respuesta['Referrer-Policy'] = 'no-referrer'
+    respuesta['Cache-Control'] = 'no-store, private'
+    return respuesta
+
+
+def _mensajes_validacion(error):
+    if hasattr(error, 'message_dict'):
+        return ' '.join(
+            mensaje
+            for mensajes in error.message_dict.values()
+            for mensaje in mensajes
+        )
+    return ' '.join(error.messages)
+
+
+@never_cache
+@requiere_permisos_operativos(
+    PERMISO_ACCESO_REVISION_DOCUMENTAL,
+    PERMISO_DOCUMENTOS,
+    PERMISO_DECIDIR_REVISION_DOCUMENTAL,
+)
+@require_POST
+def aceptar_documento_view(request, application_id):
+    formulario = AceptarDocumentoOperativoForm(request.POST)
+    if not formulario.is_valid():
+        messages.error(request, 'Revisa la observacion registrada.')
+    else:
+        try:
+            resultado = aceptar_documento_operativo(
+                documento_id=application_id,
+                actor=request.user,
+                observacion=formulario.cleaned_data['observacion'],
+            )
+        except ConflictoRevisionDocumental as error:
+            messages.warning(request, _mensajes_validacion(error))
+        except ValidationError as error:
+            messages.error(request, _mensajes_validacion(error))
+        else:
+            messages.success(
+                request,
+                'La decision ya estaba registrada.'
+                if resultado.repetida
+                else 'Documento aceptado y decision auditada.',
+            )
+    return redirect(
+        'financiacion_educativa_web:operaciones:revision-documento',
+        application_id=application_id,
+    )
+
+
+@never_cache
+@requiere_permisos_operativos(
+    PERMISO_ACCESO_REVISION_DOCUMENTAL,
+    PERMISO_DOCUMENTOS,
+    PERMISO_DECIDIR_REVISION_DOCUMENTAL,
+)
+@require_POST
+def solicitar_correccion_documento_view(request, application_id):
+    formulario = CorreccionDocumentoOperativoForm(request.POST)
+    if not formulario.is_valid():
+        messages.error(request, 'Revisa los datos de la correccion.')
+    else:
+        try:
+            resultado = solicitar_correccion_documento_operativo(
+                documento_id=application_id,
+                actor=request.user,
+                **formulario.cleaned_data,
+            )
+        except ConflictoRevisionDocumental as error:
+            messages.warning(request, _mensajes_validacion(error))
+        except ValidationError as error:
+            messages.error(request, _mensajes_validacion(error))
+        else:
+            messages.success(
+                request,
+                'La decision ya estaba registrada.'
+                if resultado.repetida
+                else 'Correccion solicitada mediante el outbox educativo.',
+            )
+    return redirect(
+        'financiacion_educativa_web:operaciones:revision-documento',
+        application_id=application_id,
     )

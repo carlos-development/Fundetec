@@ -14,6 +14,7 @@ from django.db.models import (
     Sum,
     Value,
     When,
+    JSONField,
 )
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -26,11 +27,14 @@ from financiacion_educativa.choices import (
     EstadoPublicoSolicitud,
     EstadoSolicitudFinanciacion,
     EstadoValidacionIADocumento,
+    EstadoEscaneoDocumento,
+    EstadoValidacionDocumento,
 )
 from financiacion_educativa.models import (
     ArtefactoContractualEducativo,
     CondicionesFinancieras,
     DecisionRevisionEducativa,
+    DecisionRevisionDocumentoOperativa,
     DocumentoFinanciacion,
     EtapaProcesoAutomatizacionEducativa,
     HistorialEstadoSolicitud,
@@ -509,3 +513,88 @@ def obtener_solicitud_operativa(application_id):
         ),
     )
     return get_object_or_404(consulta, pk=application_id)
+
+
+def documentos_revision_operativa():
+    ultima_validacion = ValidacionIADocumento.objects.filter(
+        documento_id=OuterRef('pk')
+    ).order_by('-numero', '-iniciado_en')
+    return DocumentoFinanciacion.objects.filter(
+        activo=True,
+        estado_escaneo=EstadoEscaneoDocumento.SAFE,
+        estado_validacion=EstadoValidacionDocumento.PENDING,
+        solicitud__estado=EstadoSolicitudFinanciacion.PENDING_MANUAL_REVIEW,
+    ).select_related(
+        'solicitud__institucion',
+        'participante',
+    ).annotate(
+        validacion_estado=Subquery(
+            ultima_validacion.values('estado')[:1],
+            output_field=CharField(),
+        ),
+        validacion_confianza=Subquery(
+            ultima_validacion.values('confianza')[:1],
+        ),
+        validacion_hallazgos=Subquery(
+            ultima_validacion.values('hallazgos')[:1],
+            output_field=JSONField(),
+        ),
+    )
+
+
+def filtrar_documentos_revision(*, filtros):
+    consulta = documentos_revision_operativa()
+    if filtros.get('q'):
+        valor = filtros['q']
+        consulta = consulta.filter(
+            Q(solicitud__referencia_externa__icontains=valor)
+            | Q(solicitud__nombres__icontains=valor)
+            | Q(solicitud__apellidos__icontains=valor)
+        )
+    if filtros.get('institucion'):
+        consulta = consulta.filter(
+            solicitud__institucion_id=filtros['institucion']
+        )
+    if filtros.get('tipo'):
+        consulta = consulta.filter(tipo=filtros['tipo'])
+    if filtros.get('estado'):
+        consulta = consulta.filter(estado_validacion=filtros['estado'])
+    if filtros.get('hallazgo'):
+        consulta = consulta.filter(
+            validacion_hallazgos__icontains=filtros['hallazgo']
+        )
+    if filtros.get('desde'):
+        consulta = consulta.filter(cargado_en__date__gte=filtros['desde'])
+    if filtros.get('hasta'):
+        consulta = consulta.filter(cargado_en__date__lte=filtros['hasta'])
+    if filtros.get('antiguedad'):
+        limite = timezone.now() - timedelta(
+            hours=int(filtros['antiguedad'])
+        )
+        consulta = consulta.filter(cargado_en__lte=limite)
+    return consulta.order_by(filtros.get('orden') or 'cargado_en', 'id')
+
+
+def obtener_documento_revision(documento_id, *, activo=True):
+    consulta = DocumentoFinanciacion.objects.select_related(
+        'solicitud__institucion',
+        'participante',
+    ).prefetch_related(
+        Prefetch(
+            'validaciones_ia',
+            queryset=ValidacionIADocumento.objects.order_by('-numero'),
+            to_attr='validaciones_operativas',
+        ),
+        Prefetch(
+            'decisiones_operativas',
+            queryset=(
+                DecisionRevisionDocumentoOperativa.objects.select_related(
+                    'actor'
+                ).order_by('-creada_en')
+            ),
+            to_attr='decisiones_documentales_operativas',
+        ),
+    )
+    if activo:
+        consulta = consulta.filter(activo=True)
+    return get_object_or_404(consulta, pk=documento_id)

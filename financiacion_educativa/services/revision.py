@@ -52,6 +52,19 @@ def _validar_revisor(actor):
         raise ValidationError('No tienes permiso para decidir esta solicitud.')
 
 
+def _validar_revisor_documental_operativo(actor):
+    if (
+        not actor
+        or not actor.is_authenticated
+        or not actor.has_perm(
+            'financiacion_educativa.decidir_revision_documental_operativa'
+        )
+    ):
+        raise ValidationError(
+            'No tienes permiso para solicitar correcciones documentales.'
+        )
+
+
 def _validar_aprobacion(solicitud):
     validar_expediente_para_aprobacion(solicitud)
 
@@ -81,8 +94,10 @@ def _persistir_decision(
     mensaje_solicitante='',
     observacion_interna='',
     requisitos_pendientes=(),
+    validar_permiso=True,
 ):
-    _validar_revisor(actor)
+    if validar_permiso:
+        _validar_revisor(actor)
     if tipo not in TipoDecisionRevisionEducativa.values:
         raise ValidationError({'tipo': 'Selecciona una decision valida.'})
     if motivo not in MotivoDecisionRevisionEducativa.values:
@@ -205,6 +220,28 @@ def _persistir_decision(
         )
     _programar_correo(solicitud=solicitud, decision=decision)
     return decision
+
+
+def solicitar_correccion_documental(
+    *,
+    solicitud,
+    actor,
+    motivo,
+    mensaje_solicitante,
+    observacion_interna='',
+    requisitos_pendientes=(),
+):
+    _validar_revisor_documental_operativo(actor)
+    return _persistir_decision(
+        solicitud=solicitud,
+        actor=actor,
+        tipo=TipoDecisionRevisionEducativa.CORRECTION_REQUESTED,
+        motivo=motivo,
+        mensaje_solicitante=mensaje_solicitante,
+        observacion_interna=observacion_interna,
+        requisitos_pendientes=requisitos_pendientes,
+        validar_permiso=False,
+    )
 
 
 def decidir_solicitud(

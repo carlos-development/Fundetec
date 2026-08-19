@@ -406,3 +406,109 @@ def presentar_detalle_solicitud(
         'puede_ver_procesos': puede_ver_procesos,
         'datos_integrales': datos_integrales,
     }
+
+
+CAMPOS_ESTRUCTURADOS_DOCUMENTALES = (
+    'decision',
+    'schema_version',
+    'policy_version',
+    'is_identity_document',
+    'is_colombian_document',
+    'visible_document_type',
+    'required_fields_visible',
+    'side_matches',
+    'data_consistent',
+    'physical_capture',
+    'appears_real',
+    'visual_integrity',
+    'visible_tampering_signals',
+    'tampering_confidence',
+    'type_confidence',
+    'data_confidence',
+    'physical_capture_confidence',
+)
+
+
+def presentar_documento_revision(documento):
+    validaciones = getattr(documento, 'validaciones_operativas', ())
+    vigente = validaciones[0] if validaciones else None
+    estructurado = {}
+    if vigente and isinstance(vigente.resultado_estructurado, dict):
+        estructurado = {
+            campo: vigente.resultado_estructurado.get(campo)
+            for campo in CAMPOS_ESTRUCTURADOS_DOCUMENTALES
+            if campo in vigente.resultado_estructurado
+        }
+    decisiones = [
+        {
+            'id': decision.pk,
+            'accion': decision.get_accion_display(),
+            'motivo': (
+                decision.get_motivo_display() if decision.motivo else ''
+            ),
+            'observacion_publica': decision.observacion_publica,
+            'nota_interna': decision.nota_interna,
+            'actor': decision.actor.get_username(),
+            'anterior': decision.get_estado_documento_anterior_display(),
+            'posterior': decision.get_estado_documento_posterior_display(),
+            'creada_en': decision.creada_en,
+        }
+        for decision in getattr(
+            documento,
+            'decisiones_documentales_operativas',
+            (),
+        )
+    ]
+    return {
+        'id': documento.pk,
+        'solicitud_id': documento.solicitud_id,
+        'referencia': documento.solicitud.referencia_externa,
+        'institucion': documento.solicitud.institucion.nombre_comercial,
+        'solicitante': (
+            f'{documento.solicitud.nombres} '
+            f'{documento.solicitud.apellidos}'
+        ).strip(),
+        'titular': (
+            documento.participante.nombre_completo
+            if documento.participante else 'Solicitante principal'
+        ),
+        'tipo': documento.get_tipo_display(),
+        'content_type': documento.content_type,
+        'escaneo': documento.get_estado_escaneo_display(),
+        'validacion': documento.get_estado_validacion_display(),
+        'cargado_en': documento.cargado_en,
+        'vigente': _presentar_validacion_ia(vigente) if vigente else None,
+        'dimensiones': ({
+            'correspondencia_tipo': vigente.corresponde_tipo,
+            'consistencia_datos': vigente.datos_consistentes,
+            'indicios_imagen_real': vigente.indicios_imagen_real,
+            'confianza_correspondencia_tipo': estructurado.get('type_confidence'),
+            'confianza_consistencia_datos': estructurado.get('data_confidence'),
+            'confianza_captura_fisica': estructurado.get('physical_capture_confidence'),
+            'confianza_manipulacion': estructurado.get('tampering_confidence'),
+        } if vigente else {}),
+        'estructurado': estructurado,
+        'historico_ia': [
+            _presentar_validacion_ia(item) for item in validaciones[1:]
+        ],
+        'decisiones': decisiones,
+    }
+
+
+def presentar_resumen_documento_revision(documento):
+    hallazgos = getattr(documento, 'validacion_hallazgos', None) or []
+    return {
+        'id': documento.pk,
+        'institucion': documento.solicitud.institucion.nombre_comercial,
+        'referencia': documento.solicitud.referencia_externa,
+        'solicitante': (
+            f'{documento.solicitud.nombres} '
+            f'{documento.solicitud.apellidos}'
+        ).strip(),
+        'tipo': documento.get_tipo_display(),
+        'escaneo': documento.get_estado_escaneo_display(),
+        'validacion': documento.get_estado_validacion_display(),
+        'confianza': getattr(documento, 'validacion_confianza', None),
+        'hallazgos': _lista_codigos_controlados(hallazgos),
+        'cargado_en': documento.cargado_en,
+    }

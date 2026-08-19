@@ -17,6 +17,12 @@ PERMISO_PROCESOS = (
 PERMISO_DATOS_INTEGRALES = (
     'financiacion_educativa.consultar_datos_integrales_operativos'
 )
+PERMISO_ACCESO_REVISION_DOCUMENTAL = (
+    'financiacion_educativa.acceder_revision_documental_operativa'
+)
+PERMISO_DECIDIR_REVISION_DOCUMENTAL = (
+    'financiacion_educativa.decidir_revision_documental_operativa'
+)
 
 
 def requiere_permisos_operativos(*permisos):
@@ -43,4 +49,10 @@ def capacidades_operativas(usuario):
         'documentos': usuario.has_perm(PERMISO_DOCUMENTOS),
         'procesos': usuario.has_perm(PERMISO_PROCESOS),
         'datos_integrales': usuario.has_perm(PERMISO_DATOS_INTEGRALES),
+        'revision_documental': usuario.has_perm(
+            PERMISO_ACCESO_REVISION_DOCUMENTAL
+        ),
+        'decidir_revision_documental': usuario.has_perm(
+            PERMISO_DECIDIR_REVISION_DOCUMENTAL
+        ),
     }

@@ -1148,6 +1148,14 @@ class DocumentoFinanciacion(models.Model):
                 'revisar_documento_financiacion',
                 'Puede revisar documentos educativos',
             ),
+            (
+                'acceder_revision_documental_operativa',
+                'Puede acceder a la revision documental operativa',
+            ),
+            (
+                'decidir_revision_documental_operativa',
+                'Puede decidir revisiones documentales operativas',
+            ),
         ]
         constraints = [
             models.UniqueConstraint(
@@ -2741,6 +2749,103 @@ class DecisionRevisionEducativa(ModeloInmutableMixin, models.Model):
 
     def __str__(self):
         return f'{self.solicitud.referencia_externa} - {self.get_tipo_display()}'
+
+
+class DecisionRevisionDocumentoOperativa(ModeloInmutableMixin, models.Model):
+    class Accion(models.TextChoices):
+        ACCEPTED = 'ACCEPTED', 'Documento aceptado'
+        CORRECTION_REQUESTED = 'CORRECTION_REQUESTED', 'Correccion solicitada'
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    documento = models.ForeignKey(
+        DocumentoFinanciacion,
+        on_delete=models.PROTECT,
+        related_name='decisiones_operativas',
+    )
+    solicitud = models.ForeignKey(
+        SolicitudFinanciacionEducativa,
+        on_delete=models.PROTECT,
+        related_name='decisiones_documentales_operativas',
+    )
+    institucion = models.ForeignKey(
+        Institucion,
+        on_delete=models.PROTECT,
+        related_name='decisiones_documentales_operativas',
+    )
+    decision_solicitud = models.ForeignKey(
+        DecisionRevisionEducativa,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='decisiones_documentales',
+    )
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name='decisiones_documentales_operativas',
+    )
+    accion = models.CharField(max_length=30, choices=Accion.choices)
+    motivo = models.CharField(
+        max_length=30,
+        choices=MotivoRechazoDocumento.choices,
+        blank=True,
+    )
+    observacion_publica = models.CharField(max_length=500, blank=True)
+    nota_interna = models.CharField(max_length=1000, blank=True)
+    estado_documento_anterior = models.CharField(
+        max_length=20,
+        choices=EstadoValidacionDocumento.choices,
+    )
+    estado_documento_posterior = models.CharField(
+        max_length=20,
+        choices=EstadoValidacionDocumento.choices,
+    )
+    estado_solicitud_anterior = models.CharField(
+        max_length=40,
+        choices=EstadoSolicitudFinanciacion.choices,
+    )
+    estado_solicitud_posterior = models.CharField(
+        max_length=40,
+        choices=EstadoSolicitudFinanciacion.choices,
+    )
+    creada_en = models.DateTimeField(default=timezone.now, editable=False)
+
+    class Meta:
+        ordering = ['-creada_en', '-id']
+        verbose_name = 'Decision operativa de documento'
+        verbose_name_plural = 'Decisiones operativas de documentos'
+        indexes = [
+            models.Index(
+                fields=['documento', 'creada_en'],
+                name='dec_doc_op_doc_fecha',
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.documento_id:
+            if self.documento.solicitud_id != self.solicitud_id:
+                raise ValidationError({
+                    'solicitud': 'La solicitud no corresponde al documento.',
+                })
+            if self.solicitud.institucion_id != self.institucion_id:
+                raise ValidationError({
+                    'institucion': 'La institucion no corresponde a la solicitud.',
+                })
+        if self.accion == self.Accion.ACCEPTED and self.motivo:
+            raise ValidationError({'motivo': 'La aceptacion no usa motivo.'})
+        if self.accion == self.Accion.CORRECTION_REQUESTED:
+            if not self.motivo:
+                raise ValidationError({'motivo': 'La correccion requiere motivo.'})
+            if not self.observacion_publica:
+                raise ValidationError({
+                    'observacion_publica': (
+                        'La correccion requiere una indicacion para el solicitante.'
+                    ),
+                })
+
+    def __str__(self):
+        return f'{self.documento_id} - {self.get_accion_display()}'
 
 
 class EntregaCorreoEstadoSolicitud(models.Model):

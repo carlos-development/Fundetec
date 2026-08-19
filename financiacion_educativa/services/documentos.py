@@ -283,8 +283,13 @@ def _validar_revisor(actor):
     if (
         not actor
         or not actor.is_authenticated
-        or not actor.has_perm(
-            'financiacion_educativa.revisar_documento_financiacion'
+        or not (
+            actor.has_perm(
+                'financiacion_educativa.revisar_documento_financiacion'
+            )
+            or actor.has_perm(
+                'financiacion_educativa.decidir_revision_documental_operativa'
+            )
         )
     ):
         raise ValidationError('No tiene permiso para revisar documentos.')
