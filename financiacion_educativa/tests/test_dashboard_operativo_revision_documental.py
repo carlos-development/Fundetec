@@ -11,7 +11,13 @@ from django.core import mail
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import close_old_connections, connection, connections
-from django.test import Client, TestCase, TransactionTestCase, override_settings
+from django.test import (
+    Client,
+    RequestFactory,
+    TestCase,
+    TransactionTestCase,
+    override_settings,
+)
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
@@ -32,6 +38,9 @@ from financiacion_educativa.models import (
     OutboxCorreoEducativo,
     ProcesoAutomatizacionEducativa,
     ValidacionIADocumento,
+)
+from financiacion_educativa.dashboards.operaciones.views import (
+    previsualizar_documento_operativo_view,
 )
 from financiacion_educativa.services.documentos import revisar_documento
 from financiacion_educativa.tests.factories import crear_solicitud
@@ -392,16 +401,34 @@ class DashboardOperativoRevisionDocumentalTests(TestCase):
 
     def test_previsualizacion_privada_aplica_headers_y_no_filtra_ruta(self):
         self.client.force_login(self.auditor)
+        conexion_principal = connections['default']
+        self.assertIsNotNone(conexion_principal.connection)
+        conexion_db_principal = conexion_principal.connection
         url = reverse(
             'financiacion_educativa_web:operaciones:documento-previsualizar',
             args=[self.documento.pk],
         )
-        respuesta = self.client.get(url)
+        request = RequestFactory().get(url)
+        request.user = self.auditor
+        respuesta = previsualizar_documento_operativo_view(
+            request,
+            application_id=self.documento.pk,
+        )
         self.assertEqual(respuesta.status_code, 200)
         self.assertEqual(respuesta['X-Content-Type-Options'], 'nosniff')
         self.assertIn('no-store', respuesta['Cache-Control'])
         self.assertNotIn(self.documento.archivo.name, str(respuesta.headers))
-        respuesta.close()
+        contenido = b''.join(respuesta.streaming_content)
+        self.assertTrue(contenido.startswith(b'%PDF-1.4'))
+        archivo_respuesta = respuesta.file_to_stream
+        self.assertFalse(archivo_respuesta.closed)
+        archivo_respuesta.close()
+        self.assertTrue(archivo_respuesta.closed)
+        self.assertIs(conexion_principal.connection, conexion_db_principal)
+        self.assertTrue(conexion_principal.is_usable())
+        self.assertTrue(
+            DocumentoFinanciacion.objects.filter(pk=self.documento.pk).exists()
+        )
         self.documento.content_type = 'text/html'
         self.documento.save(update_fields=['content_type', 'actualizado_en'])
         self.assertEqual(self.client.get(url).status_code, 404)
