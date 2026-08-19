@@ -1,0 +1,9 @@
+{% extends "financiacion_educativa/dashboards/operaciones/_base.html" %}
+{% load financiacion_format %}
+
+{% block title %}Instituciones | Operaciones Aprobado{% endblock %}
+
+{% block operations_content %}
+<header class="edu-dashboard-heading"><p class="edu-eyebrow">Cobertura</p><h1>Instituciones</h1><p>Resumen consultivo de instituciones y solicitudes asociadas.</p></header>
+<section class="edu-dashboard-panel" aria-labelledby="institutions-title"><h2 id="institutions-title">Instituciones registradas</h2>{% if instituciones %}<div class="edu-dashboard-table-wrap"><table class="edu-dashboard-table"><thead><tr><th>Instituci&oacute;n</th><th>Estado</th><th>Solicitudes</th><th>Activas</th><th>Valor solicitado</th><th><span class="edu-visually-hidden">Acci&oacute;n</span></th></tr></thead><tbody>{% for institucion in instituciones %}<tr><td data-label="Instituci&oacute;n"><strong>{{ institucion.nombre_comercial }}</strong><small>{{ institucion.razon_social }}</small></td><td data-label="Estado">{% if institucion.activa %}Activa{% else %}Inactiva{% endif %}</td><td data-label="Solicitudes">{{ institucion.total_solicitudes }}</td><td data-label="Activas">{{ institucion.solicitudes_activas }}</td><td data-label="Valor">{{ institucion.valor_solicitado|default:0|cop }}</td><td>{% if institucion.total_solicitudes %}<a class="edu-dashboard-row-link" href="{% url 'financiacion_educativa_web:operaciones:solicitudes' %}?institucion={{ institucion.pk }}" aria-label="Ver solicitudes de {{ institucion.nombre_comercial }}"><i class="bi bi-chevron-right" aria-hidden="true"></i></a>{% endif %}</td></tr>{% endfor %}</tbody></table></div>{% else %}<div class="edu-dashboard-empty"><i class="bi bi-building" aria-hidden="true"></i><h3>Sin instituciones</h3></div>{% endif %}</section>
+{% endblock %}

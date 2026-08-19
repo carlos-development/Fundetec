@@ -161,6 +161,26 @@ class SolicitudFinanciacionEducativa(models.Model):
                 'revisar_solicitud_financiacion',
                 'Puede revisar y decidir solicitudes educativas',
             ),
+            (
+                'acceder_dashboard_operativo',
+                'Puede acceder al dashboard operativo educativo',
+            ),
+            (
+                'consultar_solicitudes_operativas',
+                'Puede consultar solicitudes educativas globales',
+            ),
+            (
+                'consultar_documentos_validaciones_operativas',
+                'Puede consultar documentos y validaciones educativas',
+            ),
+            (
+                'consultar_procesos_excepciones_operativas',
+                'Puede consultar procesos y excepciones educativas',
+            ),
+            (
+                'consultar_datos_integrales_operativos',
+                'Puede consultar datos personales integrales educativos',
+            ),
         ]
         constraints = [
             models.UniqueConstraint(

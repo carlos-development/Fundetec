@@ -1,0 +1,15 @@
+{% extends "financiacion_educativa/dashboards/operaciones/_base.html" %}
+{% load financiacion_format %}
+
+{% block title %}Solicitudes | Operaciones Aprobado{% endblock %}
+
+{% block operations_content %}
+<header class="edu-dashboard-heading"><p class="edu-eyebrow">Consulta global</p><h1>Solicitudes</h1><p>Consulta de todas las instituciones sin acciones sobre el dominio.</p></header>
+{% include "financiacion_educativa/dashboards/operaciones/_filtros.html" %}
+<section class="edu-dashboard-panel" aria-labelledby="operations-results-title">
+    <div class="edu-dashboard-section-heading"><div><p class="edu-eyebrow">Resultado{% if bandeja_activa %} filtrado{% endif %}</p><h2 id="operations-results-title">{{ pagina.paginator.count }} solicitud{{ pagina.paginator.count|pluralize:"es" }}</h2></div></div>
+    {% if pagina.object_list %}<div class="edu-dashboard-table-wrap"><table class="edu-dashboard-table edu-operations-table"><thead><tr><th>Referencia</th><th>Instituci&oacute;n</th><th>Solicitante</th><th>Programa</th><th>Valor</th><th>Estado</th><th>Etapa</th><th>Actualizada</th><th><span class="edu-visually-hidden">Acci&oacute;n</span></th></tr></thead><tbody>
+    {% for item in pagina.object_list %}<tr><td data-label="Referencia"><strong>{{ item.referencia }}</strong><small>{{ item.documento }}</small></td><td data-label="Instituci&oacute;n">{{ item.institucion }}</td><td data-label="Solicitante">{{ item.solicitante }}</td><td data-label="Programa">{{ item.programa }}<small>{{ item.periodo }} / {{ item.sede }}</small></td><td data-label="Valor">{{ item.valor|cop }}</td><td data-label="Estado">{% include "financiacion_educativa/dashboards/operaciones/_estado_badge.html" with estado=item.estado %}{% if item.excepcion %}<small class="edu-operations-exception"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i> Excepci&oacute;n</small>{% endif %}</td><td data-label="Etapa">{{ item.etapa }}</td><td data-label="Actualizada">{{ item.actualizada_en|date:"d/m/Y H:i" }}</td><td><a class="edu-dashboard-row-link" href="{% url 'financiacion_educativa_web:operaciones:solicitud-detalle' item.id %}" aria-label="Ver solicitud {{ item.referencia }}"><i class="bi bi-chevron-right" aria-hidden="true"></i></a></td></tr>{% endfor %}
+    </tbody></table></div>{% include "financiacion_educativa/dashboards/operaciones/_paginacion.html" %}{% else %}<div class="edu-dashboard-empty"><i class="bi bi-search" aria-hidden="true"></i><h3>Sin resultados</h3><p>No existen solicitudes para los filtros seleccionados.</p></div>{% endif %}
+</section>
+{% endblock %}

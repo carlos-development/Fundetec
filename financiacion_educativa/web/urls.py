@@ -7,6 +7,13 @@ app_name = 'financiacion_educativa_web'
 
 urlpatterns = [
     path(
+        'operaciones/',
+        include(
+            'financiacion_educativa.dashboards.operaciones.urls',
+            namespace='operaciones',
+        ),
+    ),
+    path(
         'institucion/',
         include(
             'financiacion_educativa.dashboards.institucional.urls',

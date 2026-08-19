@@ -1,0 +1,25 @@
+{% extends "financiacion_educativa/dashboards/operaciones/_base.html" %}
+{% load financiacion_format %}
+
+{% block title %}Operaciones educativas | {{ education_brand.name|default:"Aprobado" }}{% endblock %}
+
+{% block operations_content %}
+<header class="edu-dashboard-heading"><p class="edu-eyebrow">Control operativo</p><h1>Financiaci&oacute;n educativa</h1><p>Vista global y exclusivamente consultiva para el equipo autorizado de Aprobado.</p></header>
+{% include "financiacion_educativa/dashboards/operaciones/_metricas.html" %}
+
+{% if capacidades_operativas.procesos %}
+<section class="edu-dashboard-panel" aria-labelledby="operations-queues-title">
+    <div class="edu-dashboard-section-heading"><div><p class="edu-eyebrow">Prioridades</p><h2 id="operations-queues-title">Bandejas operativas</h2></div><a class="edu-dashboard-text-link" href="{% url 'financiacion_educativa_web:operaciones:bandejas' %}">Ver bandejas</a></div>
+    <div class="edu-operations-queue-grid">{% for bandeja in bandejas %}<a href="{% url 'financiacion_educativa_web:operaciones:solicitudes' %}?bandeja={{ bandeja.codigo }}"><i class="bi {{ bandeja.icono }}" aria-hidden="true"></i><span>{{ bandeja.titulo }}</span><strong>{{ bandeja.cantidad }}</strong></a>{% endfor %}</div>
+</section>
+{% endif %}
+
+<div class="edu-operations-summary-grid">
+    <section class="edu-dashboard-panel" aria-labelledby="recent-operations-title"><div class="edu-dashboard-section-heading"><div><p class="edu-eyebrow">Actividad</p><h2 id="recent-operations-title">Solicitudes recientes</h2></div>{% if capacidades_operativas.solicitudes %}<a class="edu-dashboard-text-link" href="{% url 'financiacion_educativa_web:operaciones:solicitudes' %}">Ver todas</a>{% endif %}</div>
+        {% if solicitudes_recientes %}<ul class="edu-operations-compact-list">{% for item in solicitudes_recientes %}<li><div><strong>{{ item.referencia }}</strong><span>{{ item.institucion }}</span><small>{{ item.solicitante }}</small></div>{% include "financiacion_educativa/dashboards/operaciones/_estado_badge.html" with estado=item.estado %}<a href="{% url 'financiacion_educativa_web:operaciones:solicitud-detalle' item.id %}" aria-label="Ver {{ item.referencia }}"><i class="bi bi-chevron-right" aria-hidden="true"></i></a></li>{% endfor %}</ul>{% else %}<div class="edu-dashboard-empty"><i class="bi bi-inbox" aria-hidden="true"></i><h3>Sin solicitudes visibles</h3><p>No hay actividad para mostrar con tus permisos actuales.</p></div>{% endif %}
+    </section>
+    <section class="edu-dashboard-panel" aria-labelledby="institution-distribution-title"><div class="edu-dashboard-section-heading"><div><p class="edu-eyebrow">Distribuci&oacute;n</p><h2 id="institution-distribution-title">Por instituci&oacute;n</h2></div></div>
+        {% if distribucion_instituciones %}<ul class="edu-operations-ranking">{% for institucion in distribucion_instituciones %}<li><div><strong>{{ institucion.nombre_comercial }}</strong><small>{{ institucion.valor_solicitado|default:0|cop }}</small></div><span>{{ institucion.total_solicitudes }}</span></li>{% endfor %}</ul>{% else %}<p class="edu-dashboard-muted">A&uacute;n no existen solicitudes institucionales.</p>{% endif %}
+    </section>
+</div>
+{% endblock %}

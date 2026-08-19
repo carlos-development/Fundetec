@@ -1,0 +1,8 @@
+{% extends "financiacion_educativa/dashboards/operaciones/_base.html" %}
+
+{% block title %}Bandejas | Operaciones Aprobado{% endblock %}
+
+{% block operations_content %}
+<header class="edu-dashboard-heading"><p class="edu-eyebrow">Seguimiento interno</p><h1>Bandejas operativas</h1><p>Una solicitud puede aparecer en varias bandejas. Esta vista no ejecuta acciones.</p></header>
+<section class="edu-operations-queues" aria-label="Bandejas disponibles">{% for bandeja in bandejas %}<article><i class="bi {{ bandeja.icono }}" aria-hidden="true"></i><div><h2>{{ bandeja.titulo }}</h2><p>{{ bandeja.descripcion }}</p></div><strong>{{ bandeja.cantidad }}</strong><a href="{% url 'financiacion_educativa_web:operaciones:solicitudes' %}?bandeja={{ bandeja.codigo }}">Consultar <i class="bi bi-arrow-right" aria-hidden="true"></i></a></article>{% endfor %}</section>
+{% endblock %}

@@ -1,0 +1,32 @@
+{% load static %}
+<header class="edu-navbar edu-dashboard-navbar edu-operations-navbar" data-education-navbar>
+    <div class="edu-navbar-inner">
+        <a class="edu-navbar-logo" href="{% url 'financiacion_educativa_web:operaciones:inicio' %}" aria-label="Aprobado, panel operativo">
+            <img src="{% static education_brand.logo_inverse|default:'images/logo.png' %}" alt="Aprobado">
+        </a>
+        <div class="edu-dashboard-tenant">
+            <span>Financiaci&oacute;n educativa</span>
+            <strong>Operaciones Aprobado</strong>
+            <small>Consulta interna</small>
+        </div>
+        <div class="edu-navbar-actions">
+            <div class="edu-user-menu">
+                <button class="edu-user-trigger" type="button" aria-expanded="false" data-user-menu-trigger>
+                    <span class="edu-user-avatar" aria-hidden="true"><i class="bi bi-person"></i></span>
+                    <span>{{ request.user.get_short_name|default:request.user.get_username }}</span>
+                    <span class="edu-user-caret" aria-hidden="true">&#9662;</span>
+                </button>
+                <div class="edu-user-dropdown" data-user-menu>
+                    <form method="post" action="{% url 'account_logout' %}">{% csrf_token %}<button type="submit"><i class="bi bi-box-arrow-right" aria-hidden="true"></i> Cerrar sesi&oacute;n</button></form>
+                </div>
+            </div>
+            <button class="edu-menu-toggle" type="button" aria-label="Abrir men&uacute;" aria-expanded="false" data-menu-toggle><span aria-hidden="true">&#9776;</span></button>
+        </div>
+    </div>
+    <div class="edu-mobile-menu edu-dashboard-mobile-menu" data-mobile-menu>
+        <a href="{% url 'financiacion_educativa_web:operaciones:inicio' %}">Resumen operativo</a>
+        {% if capacidades_operativas.solicitudes %}<a href="{% url 'financiacion_educativa_web:operaciones:solicitudes' %}">Solicitudes</a>{% endif %}
+        {% if capacidades_operativas.procesos %}<a href="{% url 'financiacion_educativa_web:operaciones:bandejas' %}">Bandejas</a>{% endif %}
+        <form method="post" action="{% url 'account_logout' %}">{% csrf_token %}<button type="submit"><i class="bi bi-box-arrow-right" aria-hidden="true"></i> Cerrar sesi&oacute;n</button></form>
+    </div>
+</header>
