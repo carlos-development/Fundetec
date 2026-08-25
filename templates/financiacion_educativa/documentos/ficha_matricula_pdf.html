@@ -1,135 +1,51 @@
 <!doctype html>
 <html lang="es">
 <head>
-    <meta charset="utf-8">
-    <title>Ficha de matricula {{ numero_documento }}</title>
-    <style>
-        @page { size: Letter; margin: 7mm 8mm 6mm; }
-        * { box-sizing: border-box; }
-        body { color: #111; font: 7.4pt Arial, sans-serif; margin: 0; }
-        table { border-collapse: collapse; width: 100%; }
-        .document-header td { vertical-align: middle; }
-        .document-header .logo-cell { padding: 2mm 3mm 1mm 0; width: 18%; }
-        .document-header img { display: block; height: auto; max-width: 100%; }
-        .document-header .title-cell { width: 82%; }
-        .header-line { border-bottom: .45pt solid #777; font-weight: 700; padding: 1.2mm 0; text-align: center; }
-        .header-name { font-size: 9pt; }
-        .header-title { font-size: 10pt; }
-        .meta td { border-bottom: .45pt solid #999; padding: 1.5mm .7mm; text-align: center; }
-        .meta td:first-child { text-align: left; }
-        .meta td:last-child { text-align: right; }
-        .section { break-inside: avoid; margin-top: 3mm; }
-        .section-heading { font-size: 8.6pt; font-weight: 700; margin: 0 0 1.5mm; }
-        .section-heading::after { background: #bcbcbc; content: ""; display: block; height: 1.8pt; margin-top: 1mm; width: 37%; }
-        .personal-layout .data-cell { padding-right: 3mm; width: 84%; }
-        .personal-layout .photo-cell { vertical-align: top; width: 16%; }
-        .photo-placeholder { border: .6pt solid #888; color: #888; height: 29mm; margin: 0 auto; padding-top: 13mm; text-align: center; width: 22mm; }
-        .plain-fields td { padding: .8mm 1.2mm; vertical-align: top; width: 50%; }
-        .plain-fields .label { display: inline-block; font-weight: 700; margin-right: 1mm; min-width: 27mm; text-align: right; }
-        .plain-fields .value { overflow-wrap: anywhere; }
-        .striped { margin: 0 3.5mm; width: calc(100% - 7mm); }
-        .striped td { border-bottom: .35pt solid #999; padding: 1mm 2mm; width: 50%; }
-        .striped tr:nth-child(odd) td { background: #dedede; }
-        .striped .label { display: inline-block; font-weight: 700; min-width: 42mm; text-align: right; }
-        .retirement { margin: 0 4mm; width: calc(100% - 8mm); }
-        .retirement th, .retirement td { border: .45pt solid #999; height: 5mm; padding: .7mm; text-align: center; }
-        .retirement th { font-weight: 700; }
-        .retirement .date-cell { color: #bbb; width: 16%; }
-        .retirement .reason-cell { width: 30%; }
-        .signatures { margin: 24mm 14mm 0; }
-        .signatures td { padding: 0 5mm 13mm; text-align: center; width: 50%; }
-        .signature-line { border-top: .55pt solid #111; display: block; padding-top: 1.5mm; }
-        .footer { border-top: .45pt solid #999; color: #444; font-size: 6.2pt; margin-top: 0; padding-top: 1mm; }
-        .footer td:last-child { text-align: right; }
-    </style>
+  <meta charset="utf-8">
+  <title>Ficha de matr&iacute;cula {{ numero_documento }}</title>
+  <style>
+    @page { size: Letter; margin: 0; }
+    * { box-sizing: border-box; }
+    body { color: #111; font: 6.7pt Arial, Helvetica, sans-serif; margin: 0; }
+    .ficha-page { height: 279.4mm; overflow: hidden; padding: 10mm 11mm 9mm; position: relative; width: 215.9mm; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { vertical-align: top; }
+    .ficha-header td { border: 0; padding: 0; vertical-align: middle; }
+    .ficha-header .ficha-logo { padding: 0 4mm 1mm 0; width: 18%; }
+    .ficha-header img { display: block; height: auto; max-width: 100%; }
+    .ficha-header .ficha-institution, .ficha-header .ficha-title { border-bottom: .55pt solid #777; font-weight: 700; padding: 1.1mm 0; text-align: center; }
+    .ficha-header .ficha-institution { font-size: 8.5pt; }
+    .ficha-header .ficha-title { font-size: 10pt; }
+    .ficha-meta { margin: 0 0 2.2mm; }
+    .ficha-meta td { border: 0; border-bottom: .45pt solid #999; font-size: 6.3pt; padding: 1.3mm .6mm; text-align: center; }
+    .ficha-meta td:first-child { text-align: left; }
+    .ficha-meta td:last-child { text-align: right; }
+    .ficha-section { break-inside: avoid; margin-top: 2.2mm; }
+    .ficha-section h2 { font-size: 8pt; margin: 0 0 1mm; }
+    .ficha-section h2::after { background: #bcbcbc; content: ""; display: block; height: 1.5pt; margin-top: .7mm; width: 38%; }
+    .ficha-personal-layout td { border: 0; padding: 0; vertical-align: top; }
+    .ficha-personal-layout .ficha-data-cell { padding-right: 3mm; width: 84%; }
+    .ficha-personal-layout .ficha-photo-cell { width: 16%; }
+    .ficha-photo-label { font-size: 6pt; margin-bottom: .6mm; text-align: center; }
+    .ficha-photo-box { border: .55pt solid #888; height: 27mm; margin: 0 auto; width: 21mm; }
+    .ficha-fields th, .ficha-fields td, .ficha-striped th, .ficha-striped td { border: 0; padding: .65mm 1mm; }
+    .ficha-fields th, .ficha-striped th { font-weight: 700; text-align: right; width: 18%; }
+    .ficha-fields td, .ficha-striped td { overflow-wrap: anywhere; width: 32%; }
+    .ficha-striped tr:nth-child(odd) { background: #e4e4e4; }
+    .ficha-striped tr { border-bottom: .35pt solid #999; }
+    .ficha-retirement th, .ficha-retirement td { border: .45pt solid #999; height: 5mm; padding: .8mm; text-align: center; }
+    .ficha-signature-note { border: .45pt solid #aaa; font-size: 6.1pt; margin-top: 2.5mm; padding: 1.2mm; text-align: center; }
+    .ficha-signatures { margin-top: 7mm; }
+    .ficha-signatures td { border: 0; padding: 0 5mm 6mm; text-align: center; width: 50%; }
+    .ficha-signatures span { border-bottom: .55pt solid #222; display: block; font-weight: 700; padding-bottom: 1mm; }
+    .ficha-signatures strong, .ficha-signatures small { display: block; font-weight: 400; padding-top: .8mm; }
+    .ficha-signatures small { color: #555; font-size: 5.7pt; }
+    .ficha-footer { border-top: .45pt solid #999; color: #444; font-size: 5.8pt; margin-top: 0; padding-top: 1mm; text-align: center; }
+  </style>
 </head>
 <body>
-    <table class="document-header">
-        <tr>
-            <td class="logo-cell" rowspan="2"><img src="{{ fundetec_logo_url }}" alt="FUNDETEC"></td>
-            <td class="title-cell header-line header-name">FUNDETEC</td>
-        </tr>
-        <tr><td class="title-cell header-line header-title">FICHA DE MATR&Iacute;CULA</td></tr>
-    </table>
-    <table class="meta">
-        <tr>
-            <td>C&oacute;digo: FO-AD-005</td>
-            <td>Versi&oacute;n: 2</td>
-            <td>Fecha versi&oacute;n: 13/06/2011</td>
-            <td>P&aacute;gina: 1 de 1</td>
-        </tr>
-    </table>
-
-    <div class="section">
-        <h2 class="section-heading">Informaci&oacute;n Personal</h2>
-        <table class="personal-layout">
-            <tr>
-                <td class="data-cell">
-                    <table class="plain-fields">
-                        <tr><td><span class="label">Nombres:</span><span class="value">{{ ficha.datos.nombres }}</span></td><td><span class="label">Apellidos:</span><span class="value">{{ ficha.datos.apellidos }}</span></td></tr>
-                        <tr><td><span class="label">Identificaci&oacute;n:</span><span class="value">{{ ficha.datos.identificacion }}</span></td><td><span class="label">Mun. de expedici&oacute;n:</span><span class="value">{{ ficha.datos.municipio_expedicion }}</span></td></tr>
-                        <tr><td><span class="label">Tel&eacute;fono:</span><span class="value">{{ ficha.datos.telefono }}</span></td><td><span class="label">Celular:</span><span class="value">{{ ficha.datos.celular }}</span></td></tr>
-                        <tr><td><span class="label">Email:</span><span class="value">{{ ficha.datos.email }}</span></td><td><span class="label">Direcci&oacute;n:</span><span class="value">{{ ficha.datos.direccion }}</span></td></tr>
-                        <tr><td><span class="label">Fecha de nacimiento:</span><span class="value">{{ ficha.datos.fecha_nacimiento }}</span></td><td><span class="label">Mun. de nacimiento:</span><span class="value">{{ ficha.datos.municipio_nacimiento }}</span></td></tr>
-                    </table>
-                </td>
-                <td class="photo-cell"><div class="photo-placeholder">Foto</div></td>
-            </tr>
-        </table>
-    </div>
-
-    <div class="section">
-        <h2 class="section-heading">Informaci&oacute;n de Matr&iacute;cula</h2>
-        <table class="plain-fields">
-            <tr><td><span class="label">C&oacute;digo de matr&iacute;cula:</span><span class="value">{{ ficha.datos.codigo_matricula }}</span></td><td><span class="label">Per&iacute;odo:</span><span class="value">{{ ficha.datos.periodo }}</span></td></tr>
-            <tr><td><span class="label">Sede - jornada:</span><span class="value">{{ ficha.datos.sede_jornada }}</span></td><td><span class="label">Fecha matr&iacute;cula:</span><span class="value">{{ ficha.datos.fecha_matricula }}</span></td></tr>
-            <tr><td><span class="label">Programa:</span><span class="value">{{ ficha.datos.programa }}</span></td><td><span class="label">Fecha renovaci&oacute;n:</span><span class="value">{{ ficha.datos.fecha_renovacion }}</span></td></tr>
-        </table>
-    </div>
-
-    <div class="section">
-        <h2 class="section-heading">Informaci&oacute;n Acudiente</h2>
-        <table class="striped">
-            <tr><td><span class="label">Nombre completo:</span> {{ ficha.datos.acudiente_nombre }}</td><td><span class="label">Identificaci&oacute;n:</span> {{ ficha.datos.acudiente_identificacion }}</td></tr>
-            <tr><td><span class="label">Tel&eacute;fono:</span> {{ ficha.datos.acudiente_telefono }}</td><td><span class="label">Celular:</span> {{ ficha.datos.acudiente_celular }}</td></tr>
-            <tr><td><span class="label">Direcci&oacute;n:</span> {{ ficha.datos.acudiente_direccion }}</td><td><span class="label">Email:</span> {{ ficha.datos.acudiente_email }}</td></tr>
-            <tr><td><span class="label">Ocupaci&oacute;n:</span> {{ ficha.datos.acudiente_ocupacion }}</td><td><span class="label">Parentesco:</span> {{ ficha.datos.acudiente_parentesco }}</td></tr>
-        </table>
-    </div>
-
-    <div class="section">
-        <h2 class="section-heading">Informaci&oacute;n Acad&eacute;mica</h2>
-        <table class="striped">
-            <tr><td><span class="label">Instituci&oacute;n:</span></td><td><span class="label">&Uacute;ltimo A&ntilde;o:</span></td></tr>
-            <tr><td><span class="label">Municipio:</span></td><td><span class="label">&Uacute;ltimo Nivel Aprobado:</span></td></tr>
-            <tr><td><span class="label">Nivel Acad&eacute;mico:</span></td><td><span class="label">T&iacute;tulo Alcanzado:</span></td></tr>
-        </table>
-    </div>
-
-    <div class="section">
-        <h2 class="section-heading">Informaci&oacute;n Laboral</h2>
-        <table class="striped">
-            <tr><td><span class="label">Empresa:</span></td><td><span class="label">Tel&eacute;fono:</span></td></tr>
-            <tr><td><span class="label">Municipio:</span></td><td><span class="label">Cargo:</span></td></tr>
-            <tr><td><span class="label">Fecha ingreso:</span></td><td><span class="label">Fecha terminaci&oacute;n:</span></td></tr>
-        </table>
-    </div>
-
-    <div class="section">
-        <h2 class="section-heading">Informaci&oacute;n de Retiro</h2>
-        <table class="retirement">
-            <tr><th>Fecha</th><th class="reason-cell">Motivo</th><th>Firma Acudiente</th><th>Firma Rector</th></tr>
-            <tr><td class="date-cell">DD &nbsp; MM &nbsp; AAAA</td><td></td><td></td><td></td></tr>
-            <tr><td class="date-cell">DD &nbsp; MM &nbsp; AAAA</td><td></td><td></td><td></td></tr>
-        </table>
-    </div>
-
-    <table class="signatures">
-        <tr><td><span class="signature-line">Firma del Padre / Madre y/o Acudiente</span></td><td><span class="signature-line">Firma del Estudiante</span></td></tr>
-        <tr><td><span class="signature-line">Firma de la Secretario(a)</span></td><td><span class="signature-line">Director General</span></td></tr>
-    </table>
-    <table class="footer">
-        <tr><td>{{ numero_documento }} &middot; Fuente {{ ficha.fuente_version }}</td><td>Fecha de impresi&oacute;n: {{ generado_en|date:"d/m/Y" }}</td></tr>
-    </table>
+  <section class="ficha-page">
+    {% include "financiacion_educativa/documentos/_ficha_matricula_contenido.html" %}
+  </section>
 </body>
 </html>

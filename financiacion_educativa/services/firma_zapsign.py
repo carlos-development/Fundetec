@@ -447,7 +447,9 @@ def enviar_pagare_educativo(
             pdf = archivo.read(MAX_UNSIGNED_PDF_BYTES + 1)
         resultado = backend.enviar(
             pdf=pdf,
-            nombre_documento=f'Pagare educativo {artefacto.numero_documento}',
+            nombre_documento=(
+                f'Paquete contractual educativo {artefacto.numero_documento}'
+            ),
             external_id=proceso.external_id,
             firmante=firmante,
         )

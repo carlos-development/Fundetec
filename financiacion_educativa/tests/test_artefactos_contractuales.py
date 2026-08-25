@@ -1,10 +1,14 @@
 import hashlib
 import re
 from datetime import date
+from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
+from django.core.files.base import ContentFile
 from django.db import transaction
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -43,13 +47,16 @@ from financiacion_educativa.tests.factories import (
     FINANCIACION_EDUCATIVA_ACREEDOR_DOMICILIO='Bogota D.C.',
     FINANCIACION_EDUCATIVA_PAGARE_VERSION_JURIDICA='1',
     FINANCIACION_EDUCATIVA_PAGARE_CLAUSULA_OBLIGACION=(
-        'CLAUSULA DE OBLIGACION EDUCATIVA APROBADA PARA PRUEBAS.'
+        'La obligacion se rige por los terminos completos contenidos en este '
+        'pagare educativo.'
     ),
     FINANCIACION_EDUCATIVA_PAGARE_CLAUSULA_CARTA_INSTRUCCIONES=(
-        'CLAUSULA DE CARTA DE INSTRUCCIONES APROBADA PARA PRUEBAS.'
+        'Estas instrucciones se aplican exclusivamente a la obligacion '
+        'educativa identificada en este paquete.'
     ),
     FINANCIACION_EDUCATIVA_PAGARE_CLAUSULA_INCUMPLIMIENTO=(
-        'CLAUSULA DE INCUMPLIMIENTO APROBADA PARA PRUEBAS.'
+        'El incumplimiento produce unicamente los efectos legales y '
+        'contractuales expresamente establecidos en este documento.'
     ),
 )
 class ArtefactosContractualesTests(TestCase):
@@ -144,7 +151,7 @@ class ArtefactosContractualesTests(TestCase):
             )
         return re.sub(r'\s+', ' ', texto)
 
-    def test_genera_dos_pdfs_privados_versionados_e_idempotentes(self):
+    def test_genera_paquete_y_ficha_privados_versionados_e_idempotentes(self):
         self._participante()
         fotografia = self._preparar_finanzas()
 
@@ -179,20 +186,192 @@ class ArtefactosContractualesTests(TestCase):
         self.assertIn('1142711', texto_pagare.replace('.', '').replace(',', ''))
         self.assertNotIn('libranza', texto_pagare.lower())
         self.assertNotIn('nomina', texto_pagare.lower())
-        self.assertNotIn('desembolso', texto_pagare.lower())
+        self.assertNotIn('he recibido un desembolso', texto_pagare.lower())
+        self.assertIn('no implica entrega ni desembolso', texto_pagare.lower())
         self.assertIn('CARTA DE INSTRUCCIONES', texto_pagare)
+        self.assertIn('HABEAS DATA', texto_pagare.upper())
+        self.assertIn('FICHA DE MATR', texto_pagare)
+        self.assertNotIn('financiera No.', texto_pagare)
+        self.assertNotIn('PRUEBAS', texto_pagare.upper())
         self.assertEqual(
             primera.pagare.version_plantilla,
-            'PAGARE-2.0-EDU-1',
+            'PAQUETE-EDU-3.0-1',
         )
-        self.assertIn('FICHA DE MATRÍCULA', texto_ficha)
-        self.assertIn('Información de Matrícula', texto_ficha)
-        self.assertIn('Información de Retiro', texto_ficha)
-        self.assertNotIn('38557506', texto_ficha)
+        self.assertEqual(
+            primera.ficha_matricula.version_plantilla,
+            'FO-AD-005-V2-EDU-2',
+        )
+        self.assertIn('ficha de matr', texto_ficha.lower())
+        self.assertIn('informaci', texto_ficha.lower())
+        self.assertIn('matr', texto_ficha.lower())
+        self.assertIn('retiro', texto_ficha.lower())
+        self.assertIn('No aplica', texto_ficha)
+        self.assertNotIn('No aplica / no informado', texto_ficha)
         with primera.ficha_matricula.archivo.open('rb') as archivo:
             lector = PdfReader(archivo)
             self.assertEqual(len(lector.pages), 1)
             self.assertGreaterEqual(len(lector.pages[0].images), 1)
+
+        with primera.pagare.archivo.open('rb') as archivo:
+            lector = PdfReader(archivo)
+            self.assertEqual(len(lector.pages), 4)
+            paginas = [re.sub(r'\s+', ' ', p.extract_text() or '') for p in lector.pages]
+        self.assertIn('PAGAR', paginas[0])
+        self.assertIn('CARTA DE INSTRUCCIONES', paginas[1])
+        self.assertIn('HABEAS DATA', paginas[2].upper())
+        self.assertIn('FICHA DE MATR', paginas[3])
+
+    def test_paquete_presentado_no_expone_marcadores_tecnicos_o_de_desarrollo(self):
+        self._participante()
+        self._preparar_finanzas()
+
+        resultado = generar_artefactos_contractuales(
+            solicitud=self.solicitud,
+            actor=self.usuario,
+        )
+        texto = self._texto_pdf(resultado.pagare)
+        plantilla = (
+            Path(settings.BASE_DIR)
+            / 'templates'
+            / 'financiacion_educativa'
+            / 'documentos'
+            / 'paquete_contractual_v3.html'
+        ).read_text(encoding='utf-8')
+
+        self.assertNotIn('Fotograf&iacute;a financiera No.', plantilla)
+        self.assertNotIn('Fotografia financiera No.', plantilla)
+        self.assertNotIn('PRUEBAS', plantilla.upper())
+        self.assertNotIn('PLACEHOLDER', plantilla.upper())
+        self.assertNotIn('financiera No.', texto)
+        self.assertNotIn('PRUEBAS', texto.upper())
+        self.assertNotIn('PLACEHOLDER', texto.upper())
+
+    def test_paquete_usa_desglose_de_fotografia_bloqueada_sin_recalcular(self):
+        self._participante()
+        fotografia = self._preparar_finanzas()
+
+        resultado = generar_artefactos_contractuales(
+            solicitud=self.solicitud,
+            actor=self.usuario,
+        )
+        texto = self._texto_pdf(resultado.pagare)
+
+        self.assertTrue(fotografia.bloqueada)
+        self.assertIn('1.000.000', texto)
+        self.assertIn('100.000', texto)
+        self.assertIn('19.000', texto)
+        self.assertIn('20.000', texto)
+        self.assertIn('3.711', texto)
+        self.assertIn('1.142.711', texto)
+        self.assertIn(fotografia.proveedor_fondo_garantias, texto)
+        self.assertIn(fotografia.proveedor_seguro_vida, texto)
+
+    def test_ficha_usa_datos_reales_y_no_inventa_campos_ausentes(self):
+        self.solicitud.codigo_matricula = 'MAT-SINTETICA-2026'
+        self.solicitud.periodo_academico = '2026-2'
+        self.solicitud.sede = 'Sede Centro'
+        self.solicitud.jornada = 'Nocturna'
+        self.solicitud.save(
+            update_fields=[
+                'codigo_matricula',
+                'periodo_academico',
+                'sede',
+                'jornada',
+            ]
+        )
+        self._participante()
+        self._preparar_finanzas()
+
+        resultado = generar_artefactos_contractuales(
+            solicitud=self.solicitud,
+            actor=self.usuario,
+        )
+        texto = self._texto_pdf(resultado.pagare)
+
+        self.assertIn('MAT-SINTETICA-2026', texto)
+        self.assertIn('2026-2', texto)
+        self.assertIn('Sede:Sede Centro', texto)
+        self.assertIn('Jornada:Nocturna', texto)
+        self.assertIn('TECNICO EN SISTEMAS', texto.upper())
+        self.assertIn('No informado', texto)
+        self.assertNotIn('Firma Rector', texto)
+        self.assertNotIn('Firma de la Secretario', texto)
+
+    def test_artefactos_historicos_no_se_regeneran_ni_reversionan(self):
+        self._participante()
+        fotografia = self._preparar_finanzas()
+        historicos = {}
+        for tipo, prefijo, version in (
+            (
+                TipoArtefactoContractualEducativo.PROMISSORY_NOTE,
+                'PE-HISTORICO',
+                'PAGARE-2.0-EDU-1',
+            ),
+            (
+                TipoArtefactoContractualEducativo.ENROLLMENT_FORM,
+                'FM-HISTORICA',
+                'FO-AD-005-V2-EDU-1',
+            ),
+        ):
+            contenido = f'%PDF-1.4\n% {prefijo}\n%%EOF'.encode()
+            artefacto = ArtefactoContractualEducativo(
+                solicitud=self.solicitud,
+                fotografia_financiera=fotografia,
+                tipo=tipo,
+                numero_version=1,
+                numero_documento=prefijo,
+                version_plantilla=version,
+                hash_sha256=hashlib.sha256(contenido).hexdigest(),
+                tamano_bytes=len(contenido),
+                generado_por=self.usuario,
+            )
+            artefacto.archivo.save(
+                f'{prefijo}.pdf',
+                ContentFile(contenido),
+                save=False,
+            )
+            artefacto.full_clean()
+            artefacto.save()
+            historicos[tipo] = (artefacto, contenido)
+
+        resultado = generar_artefactos_contractuales(
+            solicitud=self.solicitud,
+            actor=self.usuario,
+        )
+
+        self.assertEqual(resultado.pagare.pk, historicos[TipoArtefactoContractualEducativo.PROMISSORY_NOTE][0].pk)
+        self.assertEqual(resultado.ficha_matricula.pk, historicos[TipoArtefactoContractualEducativo.ENROLLMENT_FORM][0].pk)
+        for artefacto, contenido in historicos.values():
+            artefacto.refresh_from_db()
+            with artefacto.archivo.open('rb') as archivo:
+                self.assertEqual(archivo.read(), contenido)
+        self.assertEqual(resultado.pagare.version_plantilla, 'PAGARE-2.0-EDU-1')
+        self.assertEqual(resultado.ficha_matricula.version_plantilla, 'FO-AD-005-V2-EDU-1')
+
+    def test_generacion_no_invoca_centrales_ni_servicios_http(self):
+        self._participante()
+        self._preparar_finanzas()
+
+        with patch('requests.sessions.Session.request') as request_http:
+            resultado = generar_artefactos_contractuales(
+                solicitud=self.solicitud,
+                actor=self.usuario,
+            )
+
+        request_http.assert_not_called()
+        texto = self._texto_pdf(resultado.pagare)
+        self.assertIn('DataCr', texto)
+
+    def test_assets_contractuales_no_incluyen_pdfs_de_referencia(self):
+        assets = (
+            Path(settings.BASE_DIR)
+            / 'financiacion_educativa'
+            / 'assets'
+            / 'contractual'
+        )
+
+        self.assertTrue((assets / 'membrete_aprobado_v3.png').is_file())
+        self.assertEqual(list(assets.rglob('*.pdf')), [])
 
     def test_rechaza_renderizar_weasyprint_dentro_de_transaccion_aplicativa(self):
         self._participante()

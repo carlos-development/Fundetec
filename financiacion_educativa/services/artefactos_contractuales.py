@@ -29,7 +29,8 @@ from financiacion_educativa.services.formato_contractual import (
 )
 
 
-VERSION_PLANTILLA_FICHA = 'FO-AD-005-V2-EDU-1'
+VERSION_PLANTILLA_PAQUETE = 'PAQUETE-EDU-3.0'
+VERSION_PLANTILLA_FICHA = 'FO-AD-005-V2-EDU-2'
 
 
 @dataclass(frozen=True)
@@ -110,7 +111,7 @@ def _contexto_base(solicitud, fotografia):
     if len(textos_juridicos['pagare_version_juridica']) > 18:
         raise ValidationError('La version juridica del pagare es demasiado larga.')
     responsable = _responsable_contractual(solicitud)
-    intereses = fotografia.total_estimado - fotografia.capital_financiado
+    intereses = fotografia.interes_total_estimado
     otros_conceptos = fotografia.capital_financiado - fotografia.valor_financiado
     return {
         'solicitud': solicitud,
@@ -119,7 +120,10 @@ def _contexto_base(solicitud, fotografia):
         **textos_juridicos,
         'responsable': responsable,
         'estudiante': _estudiante(solicitud),
-        'generado_en': timezone.localtime(),
+        'programa_tenant': solicitud.institucion.nombre_comercial,
+        'curso_financiado': solicitud.nombre_curso,
+        # La fecha de la fotografia hace reproducible el contenido contractual.
+        'generado_en': timezone.localtime(fotografia.fecha_calculo),
         'modo_educativo': True,
         'numero_pagare': '',
         'deudor_nombres': responsable.nombre_completo,
@@ -135,6 +139,26 @@ def _contexto_base(solicitud, fotografia):
         'beneficiario_domicilio': datos_acreedor['acreedor_domicilio'],
         'monto_numeros': formatear_cop(fotografia.capital_financiado),
         'monto_letras': numero_cop_a_letras(fotografia.capital_financiado),
+        'valor_solicitado': formatear_cop(fotografia.valor_financiado),
+        'tasa_originacion': format(fotografia.tasa_comision, 'f'),
+        'valor_originacion': formatear_cop(fotografia.valor_comision),
+        'tasa_iva_originacion': format(fotografia.tasa_iva_comision, 'f'),
+        'valor_iva_originacion': formatear_cop(fotografia.valor_iva_comision),
+        'tasa_fondo_garantias': format(
+            fotografia.tasa_fondo_garantias,
+            'f',
+        ),
+        'valor_fondo_garantias': formatear_cop(
+            fotografia.valor_fondo_garantias
+        ),
+        'proveedor_fondo_garantias': (
+            fotografia.proveedor_fondo_garantias or 'No informado'
+        ),
+        'tasa_seguro_vida': format(fotografia.tasa_seguro_vida, 'f'),
+        'valor_seguro_vida': formatear_cop(fotografia.valor_seguro_vida),
+        'proveedor_seguro_vida': (
+            fotografia.proveedor_seguro_vida or 'No informado'
+        ),
         'tasa_interes': format(fotografia.tasa_interes_mensual, 'f'),
         'plazo_cuotas': fotografia.plazo_meses,
         'periodicidad': 'mensuales',
@@ -144,11 +168,16 @@ def _contexto_base(solicitud, fotografia):
         'modalidad_descuento': 'Plan de pagos de financiacion educativa',
         'capital_valor': formatear_cop(fotografia.capital_financiado),
         'intereses_valor': formatear_cop(intereses),
+        'total_estimado_valor': formatear_cop(fotografia.total_estimado),
         'otros_conceptos_valor': formatear_cop(otros_conceptos),
         'ciudad_firma_visible': datos_acreedor['acreedor_domicilio'],
         'fecha_firma_texto': '',
         'membrete_url': (
-            Path(settings.BASE_DIR) / 'static' / 'images' / 'membrete_aprobado.jpg'
+            Path(settings.BASE_DIR)
+            / 'financiacion_educativa'
+            / 'assets'
+            / 'contractual'
+            / 'membrete_aprobado_v3.png'
         ).resolve().as_uri(),
         'fundetec_logo_url': (
             Path(settings.BASE_DIR) / 'static' / 'images' / 'fundetec-logo.png'
@@ -307,26 +336,30 @@ def generar_artefactos_contractuales(*, solicitud, actor=None):
             ficha_matricula=ficha_existente,
         )
     contexto = _contexto_base(solicitud, fotografia)
+    contexto_ficha = {
+        'mapeo_ficha': construir_mapeo_ficha_matricula(solicitud),
+        'ficha': construir_datos_ficha_matricula(solicitud),
+    }
     preparados = {
         TipoArtefactoContractualEducativo.PROMISSORY_NOTE: _preparar_artefacto(
             solicitud=solicitud,
             tipo=TipoArtefactoContractualEducativo.PROMISSORY_NOTE,
             version_plantilla=(
-                f'PAGARE-2.0-EDU-{contexto["pagare_version_juridica"]}'
+                f'{VERSION_PLANTILLA_PAQUETE}-'
+                f'{contexto["pagare_version_juridica"]}'
             ),
-            plantilla='pagares/pagare_v2.0.html',
-            contexto=contexto,
+            plantilla=(
+                'financiacion_educativa/documentos/'
+                'paquete_contractual_v3.html'
+            ),
+            contexto={**contexto, **contexto_ficha},
         ),
         TipoArtefactoContractualEducativo.ENROLLMENT_FORM: _preparar_artefacto(
             solicitud=solicitud,
             tipo=TipoArtefactoContractualEducativo.ENROLLMENT_FORM,
             version_plantilla=VERSION_PLANTILLA_FICHA,
             plantilla='financiacion_educativa/documentos/ficha_matricula_pdf.html',
-            contexto={
-                **contexto,
-                'mapeo_ficha': construir_mapeo_ficha_matricula(solicitud),
-                'ficha': construir_datos_ficha_matricula(solicitud),
-            },
+            contexto={**contexto, **contexto_ficha},
         ),
     }
     archivos_creados = []

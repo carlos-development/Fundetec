@@ -272,9 +272,10 @@ comandos se conservan para operacion, diagnostico y recuperacion.
 `POST .../documentacion/completar/` comprueba propiedad, CSRF, terminos,
 participantes y la politica documental unica. Cuando todos los soportes son
 concluyentes, la orquestacion bloquea una sola fotografia financiera activa,
-genera el pagare desde `templates/pagares/pagare_v2.0.html`, genera la ficha
-`FO-AD-005 V2`, prepara un unico firmante y envia el pagare mediante el puerto
-educativo de ZapSign. La solicitud queda `PENDING_SIGNATURE`; solo un webhook
+genera el paquete contractual `PAQUETE-EDU-3.0` con pagare, carta de
+instrucciones, Habeas Data y ficha `FO-AD-005 V2`, prepara un unico firmante y
+envia ese unico PDF mediante el puerto educativo de ZapSign. La solicitud queda
+`PENDING_SIGNATURE`; solo un webhook
 valido para el pagare vigente puede llevarla a `APPROVED`, autorizar el curso y
 publicar `financial_terms`.
 
@@ -411,30 +412,35 @@ pruebas.
 
 ## Artefactos contractuales
 
-El pagare educativo reutiliza `templates/pagares/pagare_v2.0.html` como fuente
-visual y conserva las clausulas generales del formato existente. Los apartados
-que no tienen equivalente educativo aprobado fallan de forma cerrada y se
-inyectan exclusivamente desde configuracion juridica versionada:
+Los artefactos nuevos usan
+`templates/financiacion_educativa/documentos/paquete_contractual_v3.html` y el
+membrete versionado del modulo. El PDF contiene, en orden, pagare, carta de
+instrucciones, Habeas Data y ficha de matricula. Los artefactos historicos
+conservan su archivo y version anterior. Los apartados que requieren aprobacion
+juridica fallan de forma cerrada y se inyectan exclusivamente desde
+configuracion juridica versionada:
 
 - `FINANCIACION_EDUCATIVA_PAGARE_VERSION_JURIDICA`;
 - `FINANCIACION_EDUCATIVA_PAGARE_CLAUSULA_OBLIGACION`;
 - `FINANCIACION_EDUCATIVA_PAGARE_CLAUSULA_CARTA_INSTRUCCIONES`;
 - `FINANCIACION_EDUCATIVA_PAGARE_CLAUSULA_INCUMPLIMIENTO`.
 
-No existen textos predeterminados para esas variables. El modo educativo
-elimina variables de libranza, pagaduria, nomina y desembolso, y toma firmante,
-valores y fechas exclusivamente de la solicitud y su fotografia financiera
-activa y bloqueada. La version juridica forma parte de `version_plantilla`; la
-version y el hash del PDF quedan persistidos y un artefacto enviado no se
-modifica.
+No existen textos predeterminados para esas variables. El modo educativo no usa
+libranza, pagaduria ni nomina y aclara que no existe desembolso de dinero al
+estudiante. Firmante, valores y fechas provienen exclusivamente de la solicitud
+y su fotografia financiera activa y bloqueada. La version juridica forma parte
+de `version_plantilla`; la version y el hash del PDF quedan persistidos y un
+artefacto enviado no se modifica.
 
 La ficha usa como fuente `FO-AD-005 V2`, identificada por el hash documentado
 en `services/ficha_matricula.py`. El PDF recibido es plano, no contiene
 AcroForm y trae datos personales de ejemplo incrustados; superponer campos lo
 dejaria con PII residual. Por eso se aplica la tercera estrategia permitida:
 una reproduccion de una pagina con la misma estructura de secciones. El mapeo
-usa solo datos reales y deja en blanco telefono alterno, municipios,
-renovacion, ocupacion y demas valores no disponibles.
+usa solo datos reales y marca como `No informado` telefono alterno, municipios,
+renovacion, ocupacion y demas valores no disponibles. Esta pagina forma parte
+del PDF firmado y tambien se conserva como artefacto independiente para
+compatibilidad con las consultas existentes.
 
 Antes de una firma real deben aprobarse juridicamente los tres textos
 configurables, su version, la representacion del menor y los datos legales del

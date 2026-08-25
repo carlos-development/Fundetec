@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Paquete contractual {{ numero_documento }}</title>
+  <style>
+    @page contract {
+      size: Letter;
+      margin: 39mm 40mm 24mm 17mm;
+      background-image: url("{{ membrete_url }}");
+      background-position: -17mm -39mm;
+      background-repeat: no-repeat;
+      background-size: 215.9mm 279.4mm;
+    }
+    @page ficha { size: Letter; margin: 10mm 11mm 9mm; }
+    * { box-sizing: border-box; }
+    body { color: #12253a; font-family: Arial, Helvetica, sans-serif; margin: 0; }
+    .contract-page { break-after: page; page: contract; }
+    .contract-content { font-size: 8pt; line-height: 1.24; }
+    h1 { color: #074f9f; font-size: 14pt; letter-spacing: 0; margin: 0 0 3mm; text-align: center; }
+    h2 { border-bottom: .6pt solid #129cd5; color: #074f9f; font-size: 9pt; margin: 2.5mm 0 1.2mm; padding-bottom: .7mm; }
+    p { margin: 0 0 1.7mm; orphans: 3; text-align: justify; widows: 3; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: .45pt solid #8ba4b8; padding: 1.1mm 1.4mm; vertical-align: top; }
+    th { background: #e7f5fb; color: #074f9f; font-weight: 700; text-align: left; }
+    .document-meta { margin-bottom: 2mm; }
+    .document-meta th { width: 21%; }
+    .financial th { width: 28%; }
+    .financial td { width: 22%; }
+    .legal-list { margin: 0; padding-left: 5mm; }
+    .legal-list li { margin: 0 0 1.8mm; padding-left: 1mm; text-align: justify; }
+    .signature-box { border: .6pt solid #8ba4b8; margin-top: 3mm; padding: 2mm; }
+    .signature-box p { margin: 0 0 1mm; }
+    .ficha-page { color: #111; font-size: 6.7pt; min-height: 260.4mm; page: ficha; position: relative; }
+    .ficha-header td { border: 0; padding: 0; vertical-align: middle; }
+    .ficha-header .ficha-logo { padding: 0 4mm 1mm 0; width: 18%; }
+    .ficha-header img { display: block; height: auto; max-width: 100%; }
+    .ficha-header .ficha-institution, .ficha-header .ficha-title { border-bottom: .55pt solid #777; font-weight: 700; padding: 1.1mm 0; text-align: center; }
+    .ficha-header .ficha-institution { font-size: 8.5pt; }
+    .ficha-header .ficha-title { font-size: 10pt; }
+    .ficha-meta { margin: 0 0 2.2mm; }
+    .ficha-meta td { border: 0; border-bottom: .45pt solid #999; font-size: 6.3pt; padding: 1.3mm .6mm; text-align: center; }
+    .ficha-meta td:first-child { text-align: left; }
+    .ficha-meta td:last-child { text-align: right; }
+    .ficha-section { break-inside: avoid; margin-top: 2.2mm; }
+    .ficha-section h2 { border: 0; color: #111; font-size: 8pt; margin: 0 0 1mm; padding: 0; }
+    .ficha-section h2::after { background: #bcbcbc; content: ""; display: block; height: 1.5pt; margin-top: .7mm; width: 38%; }
+    .ficha-personal-layout td { border: 0; padding: 0; vertical-align: top; }
+    .ficha-personal-layout .ficha-data-cell { padding-right: 3mm; width: 84%; }
+    .ficha-personal-layout .ficha-photo-cell { width: 16%; }
+    .ficha-photo-label { font-size: 6pt; margin-bottom: .6mm; text-align: center; }
+    .ficha-photo-box { border: .55pt solid #888; height: 27mm; margin: 0 auto; width: 21mm; }
+    .ficha-fields th, .ficha-fields td, .ficha-striped th, .ficha-striped td { border: 0; padding: .65mm 1mm; }
+    .ficha-fields th, .ficha-striped th { background: transparent; color: #111; text-align: right; width: 18%; }
+    .ficha-fields td, .ficha-striped td { overflow-wrap: anywhere; width: 32%; }
+    .ficha-striped tr:nth-child(odd) { background: #e4e4e4; }
+    .ficha-striped tr { border-bottom: .35pt solid #999; }
+    .ficha-retirement th, .ficha-retirement td { border: .45pt solid #999; height: 5mm; padding: .8mm; text-align: center; }
+    .ficha-retirement th { background: transparent; color: #111; }
+    .ficha-signature-note { border: .45pt solid #aaa; font-size: 6.1pt; margin-top: 2.5mm; padding: 1.2mm; text-align: center; }
+    .ficha-signatures { margin-top: 7mm; }
+    .ficha-signatures td { border: 0; padding: 0 5mm 6mm; text-align: center; width: 50%; }
+    .ficha-signatures span { border-bottom: .55pt solid #222; display: block; font-weight: 700; padding-bottom: 1mm; }
+    .ficha-signatures strong, .ficha-signatures small { display: block; font-weight: 400; padding-top: .8mm; }
+    .ficha-signatures small { color: #555; font-size: 5.7pt; }
+    .ficha-footer { border-top: .45pt solid #999; color: #444; font-size: 5.8pt; margin-top: 0; padding-top: 1mm; text-align: center; }
+  </style>
+</head>
+<body>
+  <section class="contract-page">
+    <div class="contract-content">
+      <h1>PAGAR&Eacute; EDUCATIVO</h1>
+      <table class="document-meta">
+        <tr><th>Pagar&eacute; No.</th><td>{{ numero_pagare }}</td><th>Versi&oacute;n jur&iacute;dica</th><td>{{ pagare_version_juridica }}</td></tr>
+        <tr><th>Acreedor</th><td colspan="3">{{ acreedor_razon_social }} &middot; NIT {{ acreedor_nit }}</td></tr>
+      </table>
+      <p>
+        Yo, <strong>{{ deudor_nombres }}</strong>, mayor de edad, identificado con
+        {{ tipo_documento_deudor }} No. <strong>{{ cedula_deudor }}</strong>, obrando
+        en mi propio nombre o en la calidad indicada en este documento, declaro:
+      </p>
+      <p>
+        <strong>PRIMERO.</strong> EL ACREEDOR ha autorizado una financiaci&oacute;n
+        educativa destinada exclusivamente al curso <strong>{{ curso_financiado }}</strong>
+        del programa <strong>{{ programa_tenant }}</strong>. Esta operaci&oacute;n no
+        implica entrega ni desembolso de dinero al estudiante; su finalidad es
+        autorizar el acceso al curso o programa educativo. En virtud de dicha
+        obligaci&oacute;n me comprometo a pagar, solidaria, indivisible, irrevocable e
+        incondicionalmente, el capital financiado, intereses, costos, comisiones,
+        impuestos, seguros y dem&aacute;s conceptos incorporados en la fotograf&iacute;a
+        financiera contractual. {{ pagare_clausula_obligacion }}
+      </p>
+      <table class="financial">
+        <tr><th>Valor solicitado</th><td>{{ valor_solicitado }}</td><th>Capital total financiado</th><td>{{ capital_valor }}</td></tr>
+        <tr><th>Capital en letras</th><td colspan="3">{{ monto_letras }}</td></tr>
+        <tr><th>Originaci&oacute;n ({{ tasa_originacion }}%)</th><td>{{ valor_originacion }}</td><th>IVA originaci&oacute;n ({{ tasa_iva_originacion }}%)</th><td>{{ valor_iva_originacion }}</td></tr>
+        <tr><th>Fondo de garant&iacute;as ({{ tasa_fondo_garantias }}%)</th><td>{{ valor_fondo_garantias }}<br>{{ proveedor_fondo_garantias }}</td><th>Seguro de vida ({{ tasa_seguro_vida }}%)</th><td>{{ valor_seguro_vida }}<br>{{ proveedor_seguro_vida }}</td></tr>
+        <tr><th>Intereses estimados</th><td>{{ intereses_valor }}</td><th>Total estimado</th><td>{{ total_estimado_valor }}</td></tr>
+        <tr><th>Plazo</th><td>{{ plazo_cuotas }} cuotas {{ periodicidad }}</td><th>Cuota estimada</th><td>{{ valor_cuota }}</td></tr>
+        <tr><th>Tasa mensual</th><td>{{ tasa_interes }}% M.V.</td><th>Vencimientos</th><td>{{ fecha_primer_pago|date:"d/m/Y" }} a {{ fecha_ultimo_pago|date:"d/m/Y" }}</td></tr>
+      </table>
+      <p><strong>SEGUNDO.</strong> Pagar&eacute; intereses moratorios a la tasa m&aacute;xima legalmente autorizada sobre la suma de capital insoluto.</p>
+      <p><strong>TERCERO.</strong> Acepto cualquier endoso o cesi&oacute;n de este pagar&eacute; y reconozco al endosatario o cesionario dentro de cualquier proceso judicial o extrajudicial.</p>
+      <p><strong>CUARTO.</strong> Renuncio expresamente a cualquier requerimiento para ser constituido en mora en los casos permitidos por la ley.</p>
+      <p><strong>QUINTO.</strong> EL ACREEDOR podr&aacute; acogerse al art&iacute;culo 886 del C&oacute;digo de Comercio para el cobro de intereses. Este pagar&eacute; no requiere presentaci&oacute;n para pago ni aviso de rechazo y podr&aacute; diligenciarse conforme a la carta adjunta y al art&iacute;culo 622 del C&oacute;digo de Comercio. {{ pagare_clausula_incumplimiento }}</p>
+    </div>
+  </section>
+
+  <section class="contract-page">
+    <div class="contract-content">
+      <h1>CARTA DE INSTRUCCIONES</h1>
+      <p>
+        Yo, <strong>{{ deudor_nombres }}</strong>, identificado con
+        {{ tipo_documento_deudor }} No. <strong>{{ cedula_deudor }}</strong>, autorizo
+        e instruyo irrevocablemente a <strong>{{ acreedor_razon_social }}</strong>
+        (NIT {{ acreedor_nit }}), su representante legal o apoderado, para diligenciar
+        el pagar&eacute; No. <strong>{{ numero_pagare }}</strong>, suscrito junto con esta carta.
+        {{ pagare_clausula_carta_instrucciones }}
+      </p>
+      <ol class="legal-list">
+        <li>EL ACREEDOR podr&aacute; diligenciar el pagar&eacute; por una suma igual al capital insoluto registrado a mi cargo, m&aacute;s los intereses causados y no pagados y las dem&aacute;s sumas debidas por la financiaci&oacute;n educativa.</li>
+        <li>La fecha de pago ser&aacute; la que determine EL ACREEDOR, no anterior a la fecha en que efectivamente incurra en mora ni posterior al plazo de prescripci&oacute;n de la obligaci&oacute;n respaldada.</li>
+        <li>Los espacios en blanco podr&aacute;n llenarse con sujeci&oacute;n a esta carta, sin perjuicio de la validez del pagar&eacute; y sin requerir una nueva firma de mi parte.</li>
+        <li>Los intereses moratorios se liquidar&aacute;n a la tasa m&aacute;xima legal autorizada vigente al diligenciar el pagar&eacute;, sobre el capital vencido y no pagado o las cuotas vencidas y no pagadas.</li>
+        <li>Acepto que el pagar&eacute; no requiere presentaci&oacute;n para pago, aviso de rechazo ni las notificaciones e instrucciones previstas en los art&iacute;culos 621 a 625 del C&oacute;digo de Comercio.</li>
+        <li>EL ACREEDOR podr&aacute; endosar o ceder este pagar&eacute; junto con esta carta a una persona natural o jur&iacute;dica, quien tendr&aacute; los mismos derechos del acreedor original.</li>
+        <li>Renuncio a exigir la presentaci&oacute;n del pagar&eacute; y a los dem&aacute;s requisitos formales renunciables; pagar&eacute; los gastos de cobro, incluidos honorarios de abogados y cobranza judicial o extrajudicial.</li>
+        <li>Esta carta y el pagar&eacute; constituyen un solo documento; las obligaciones contenidas son solidarias, indivisibles, irrevocables e incondicionales.</li>
+      </ol>
+      <h2>Datos del responsable contractual</h2>
+      <table>
+        <tr><th>Nombre</th><td>{{ deudor_nombres }}</td><th>Identificaci&oacute;n</th><td>{{ tipo_documento_deudor }} {{ cedula_deudor }}</td></tr>
+        <tr><th>Direcci&oacute;n</th><td>{{ direccion_deudor|default:"No informado" }}</td><th>Celular</th><td>{{ telefono_deudor|default:"No informado" }}</td></tr>
+        <tr><th>Correo</th><td colspan="3">{{ email_deudor|default:"No informado" }}</td></tr>
+      </table>
+      <div class="signature-box">
+        <p><strong>Manifestaci&oacute;n de voluntad.</strong> Declaro que he le&iacute;do, entendido y aceptado el pagar&eacute;, esta carta y sus anexos.</p>
+        <p>La firma electr&oacute;nica del paquete corresponde a: <strong>{{ deudor_nombres }}</strong>, {{ tipo_documento_deudor }} {{ cedula_deudor }}.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="contract-page">
+    <div class="contract-content">
+      <h1>AUTORIZACI&Oacute;N PARA EL TRATAMIENTO DE DATOS PERSONALES</h1>
+      <h2>Habeas Data y centrales de informaci&oacute;n</h2>
+      <p>
+        <strong>SEXTO.</strong> El suscriptor, como titular de la informaci&oacute;n y de
+        manera libre, voluntaria, previa, expresa, espec&iacute;fica e informada,
+        autoriza a <strong>{{ acreedor_razon_social }}</strong> (NIT {{ acreedor_nit }}),
+        o a quien represente sus derechos, para consultar, reportar, procesar,
+        actualizar y divulgar ante las centrales de informaci&oacute;n financiera
+        legalmente autorizadas en Colombia, incluyendo DataCr&eacute;dito Experian,
+        TransUnion (CIFIN), Procr&eacute;dito y operadores equivalentes de terceros
+        pa&iacute;ses, la informaci&oacute;n relativa a su comportamiento financiero,
+        crediticio, comercial y de servicios.
+      </p>
+      <p>
+        La autorizaci&oacute;n tiene como finalidad evaluar, otorgar, gestionar y cobrar
+        la financiaci&oacute;n educativa amparada por este t&iacute;tulo y cumplir las
+        obligaciones legales de reporte conforme a las Leyes 1266 de 2008 y 1581
+        de 2012.
+      </p>
+      <p>
+        El cumplimiento o incumplimiento quedar&aacute; registrado en las bases de
+        datos cuando legalmente corresponda. En caso de mora, el reporte negativo
+        se realizar&aacute; previa notificaci&oacute;n con al menos veinte (20) d&iacute;as
+        calendario de antelaci&oacute;n, y la informaci&oacute;n permanecer&aacute; por el
+        t&eacute;rmino legal aplicable.
+      </p>
+      <p>
+        No existe entrega ni desembolso de dinero al estudiante. Si se causa un
+        costo de consulta previamente informado y legalmente procedente, este se
+        tratar&aacute; dentro de los conceptos de la financiaci&oacute;n educativa y no como
+        descuento de un desembolso al estudiante.
+      </p>
+      <p>
+        El titular podr&aacute; ejercer sus derechos de acceso, rectificaci&oacute;n,
+        actualizaci&oacute;n, supresi&oacute;n y revocatoria mediante los canales
+        dispuestos en aprobado.com.co, o presentar reclamaci&oacute;n ante la
+        Superintendencia de Industria y Comercio (SIC) o la Superintendencia
+        Financiera de Colombia (SFC), seg&uacute;n corresponda.
+      </p>
+      <h2>Constancia contractual</h2>
+      <p>
+        Este contenido es parte integral del pagar&eacute; No. {{ numero_pagare }} y
+        del paquete firmado electr&oacute;nicamente. La financiaci&oacute;n corresponde al
+        curso <strong>{{ curso_financiado }}</strong> para el estudiante
+        <strong>{{ estudiante.nombre_completo }}</strong>.
+      </p>
+      <div class="signature-box">
+        <p><strong>Responsable contractual y firmante:</strong> {{ deudor_nombres }}</p>
+        <p><strong>Documento:</strong> {{ tipo_documento_deudor }} {{ cedula_deudor }}</p>
+        <p><strong>Ciudad contractual:</strong> {{ ciudad_firma_visible }}</p>
+        <p><strong>Fecha de firma:</strong> se incorporar&aacute; mediante la evidencia del proveedor de firma electr&oacute;nica.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="ficha-page">
+    {% include "financiacion_educativa/documentos/_ficha_matricula_contenido.html" %}
+  </section>
+</body>
+</html>

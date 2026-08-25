@@ -1,7 +1,7 @@
 import hashlib
 import json
 from datetime import date
-from io import StringIO
+from io import BytesIO, StringIO
 from tempfile import TemporaryDirectory
 
 from django.contrib.auth import get_user_model
@@ -10,6 +10,7 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
+from pypdf import PdfReader
 
 from financiacion_educativa.choices import (
     EstadoArtefactoContractualEducativo,
@@ -188,6 +189,15 @@ class FirmaEducativaTests(TestCase):
         self.assertEqual(len(RecordingEducationalSignatureBackend.submissions), 1)
         envio = RecordingEducationalSignatureBackend.submissions[0]
         self.assertTrue(envio['pdf'].startswith(b'%PDF'))
+        paginas = PdfReader(BytesIO(envio['pdf'])).pages
+        self.assertEqual(len(paginas), 4)
+        texto = ' '.join(pagina.extract_text() or '' for pagina in paginas)
+        self.assertIn('CARTA DE INSTRUCCIONES', texto)
+        self.assertIn('HABEAS DATA', texto.upper())
+        self.assertIn('FICHA DE MATR', texto)
+        self.assertTrue(
+            envio['nombre_documento'].startswith('Paquete contractual educativo')
+        )
         self.assertEqual(envio['external_id'], self.proceso.external_id)
         self.assertEqual(envio['firmante'].nombre_completo, 'FIRMANTE EDUCATIVO')
         self.assertEqual(primero.pk, segundo.pk)

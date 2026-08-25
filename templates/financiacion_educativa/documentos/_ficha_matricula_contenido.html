@@ -1,0 +1,111 @@
+<table class="ficha-header">
+  <tr>
+    <td class="ficha-logo" rowspan="2"><img src="{{ fundetec_logo_url }}" alt="FUNDETEC"></td>
+    <td class="ficha-institution">FUNDETEC</td>
+  </tr>
+  <tr><td class="ficha-title">FICHA DE MATR&Iacute;CULA</td></tr>
+</table>
+
+<table class="ficha-meta">
+  <tr>
+    <td>C&oacute;digo: FO-AD-005</td>
+    <td>Versi&oacute;n: 2</td>
+    <td>Fecha versi&oacute;n: 13/06/2011</td>
+    <td>Anexo contractual: 4 de 4</td>
+  </tr>
+</table>
+
+<section class="ficha-section">
+  <h2>Informaci&oacute;n personal</h2>
+  <table class="ficha-personal-layout">
+    <tr>
+      <td class="ficha-data-cell">
+        <table class="ficha-fields">
+          <tr><th>Nombres:</th><td>{{ ficha.datos.nombres|default:"No informado" }}</td><th>Apellidos:</th><td>{{ ficha.datos.apellidos|default:"No informado" }}</td></tr>
+          <tr><th>Identificaci&oacute;n:</th><td>{{ ficha.datos.identificacion|default:"No informado" }}</td><th>Mun. de expedici&oacute;n:</th><td>{{ ficha.datos.municipio_expedicion|default:"No informado" }}</td></tr>
+          <tr><th>Tel&eacute;fono:</th><td>{{ ficha.datos.telefono|default:"No informado" }}</td><th>Celular:</th><td>{{ ficha.datos.celular|default:"No informado" }}</td></tr>
+          <tr><th>Correo:</th><td>{{ ficha.datos.email|default:"No informado" }}</td><th>Direcci&oacute;n:</th><td>{{ ficha.datos.direccion|default:"No informado" }}</td></tr>
+          <tr><th>Fecha de nacimiento:</th><td>{{ ficha.datos.fecha_nacimiento|default:"No informado" }}</td><th>Mun. de nacimiento:</th><td>{{ ficha.datos.municipio_nacimiento|default:"No informado" }}</td></tr>
+        </table>
+      </td>
+      <td class="ficha-photo-cell">
+        <div class="ficha-photo-label">Fotograf&iacute;a</div>
+        <div class="ficha-photo-box"></div>
+      </td>
+    </tr>
+  </table>
+</section>
+
+<section class="ficha-section">
+  <h2>Informaci&oacute;n de matr&iacute;cula</h2>
+  <table class="ficha-fields">
+    <tr><th>C&oacute;digo de matr&iacute;cula:</th><td>{{ ficha.datos.codigo_matricula|default:"No informado" }}</td><th>Per&iacute;odo acad&eacute;mico:</th><td>{{ ficha.datos.periodo|default:"No informado" }}</td></tr>
+    <tr><th>Sede:</th><td>{{ solicitud.sede|default:"No informado" }}</td><th>Jornada:</th><td>{{ solicitud.jornada|default:"No informado" }}</td></tr>
+    <tr><th>Fecha de matr&iacute;cula:</th><td>{{ ficha.datos.fecha_matricula|default:"No informado" }}</td><th>Fecha de renovaci&oacute;n:</th><td>{{ ficha.datos.fecha_renovacion|default:"No informado" }}</td></tr>
+    <tr><th>Programa:</th><td>{{ programa_tenant|default:"No informado" }}</td><th>Curso financiado:</th><td>{{ ficha.datos.programa|default:"No informado" }}</td></tr>
+  </table>
+</section>
+
+<section class="ficha-section">
+  <h2>Acudiente o tutor</h2>
+  <table class="ficha-striped">
+    {% if ficha.datos.acudiente_nombre %}
+      <tr><th>Nombre completo:</th><td>{{ ficha.datos.acudiente_nombre }}</td><th>Identificaci&oacute;n:</th><td>{{ ficha.datos.acudiente_identificacion|default:"No informado" }}</td></tr>
+      <tr><th>Tel&eacute;fono:</th><td>{{ ficha.datos.acudiente_telefono|default:"No informado" }}</td><th>Celular:</th><td>{{ ficha.datos.acudiente_celular|default:"No informado" }}</td></tr>
+      <tr><th>Direcci&oacute;n:</th><td>{{ ficha.datos.acudiente_direccion|default:"No informado" }}</td><th>Correo:</th><td>{{ ficha.datos.acudiente_email|default:"No informado" }}</td></tr>
+      <tr><th>Ocupaci&oacute;n:</th><td>{{ ficha.datos.acudiente_ocupacion|default:"No informado" }}</td><th>Parentesco:</th><td>{{ ficha.datos.acudiente_parentesco|default:"No informado" }}</td></tr>
+    {% else %}
+      <tr><th>Nombre completo:</th><td>No aplica</td><th>Identificaci&oacute;n:</th><td>No aplica</td></tr>
+      <tr><th>Tel&eacute;fono:</th><td>No aplica</td><th>Celular:</th><td>No aplica</td></tr>
+      <tr><th>Direcci&oacute;n:</th><td>No aplica</td><th>Correo:</th><td>No aplica</td></tr>
+      <tr><th>Ocupaci&oacute;n:</th><td>No aplica</td><th>Parentesco:</th><td>No aplica</td></tr>
+    {% endif %}
+  </table>
+</section>
+
+<section class="ficha-section">
+  <h2>Informaci&oacute;n acad&eacute;mica previa</h2>
+  <table class="ficha-striped">
+    <tr><th>Instituci&oacute;n:</th><td>No informado</td><th>&Uacute;ltimo a&ntilde;o:</th><td>No informado</td></tr>
+    <tr><th>Municipio:</th><td>No informado</td><th>&Uacute;ltimo nivel aprobado:</th><td>No informado</td></tr>
+    <tr><th>Nivel acad&eacute;mico:</th><td>No informado</td><th>T&iacute;tulo alcanzado:</th><td>No informado</td></tr>
+  </table>
+</section>
+
+<section class="ficha-section">
+  <h2>Informaci&oacute;n laboral</h2>
+  <table class="ficha-striped">
+    <tr><th>Empresa:</th><td>No informado</td><th>Tel&eacute;fono:</th><td>No informado</td></tr>
+    <tr><th>Municipio:</th><td>No informado</td><th>Cargo:</th><td>No informado</td></tr>
+    <tr><th>Fecha de ingreso:</th><td>No informado</td><th>Fecha de terminaci&oacute;n:</th><td>No informado</td></tr>
+  </table>
+</section>
+
+<section class="ficha-section">
+  <h2>Informaci&oacute;n de retiro</h2>
+  <table class="ficha-retirement">
+    <tr><th>Fecha</th><th>Motivo</th><th>Observaci&oacute;n administrativa</th></tr>
+    <tr><td>No informado</td><td>No informado</td><td>Sin registro en el expediente</td></tr>
+  </table>
+</section>
+
+<section class="ficha-signature-note">
+  Esta ficha forma parte del mismo paquete firmado electr&oacute;nicamente. No contiene
+  firmas manuscritas ni constancias independientes de funcionarios acad&eacute;micos.
+</section>
+
+<table class="ficha-signatures">
+  <tr>
+    <td><span>Responsable contractual</span><strong>{{ responsable.nombre_completo }}</strong><small>Firma electr&oacute;nica incorporada al paquete</small></td>
+    <td><span>Estudiante</span><strong>{{ estudiante.nombre_completo }}</strong><small>Sin firma independiente registrada</small></td>
+  </tr>
+  <tr>
+    <td><span>Secretar&iacute;a acad&eacute;mica</span><strong>Sin registro en el expediente</strong></td>
+    <td><span>Direcci&oacute;n general</span><strong>Sin registro en el expediente</strong></td>
+  </tr>
+</table>
+
+<footer class="ficha-footer">
+  {{ numero_documento }} &middot; Fuente estructural {{ ficha.fuente_version }} &middot;
+  Generado con datos vigentes del expediente educativo
+</footer>
