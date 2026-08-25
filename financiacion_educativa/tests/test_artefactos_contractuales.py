@@ -9,8 +9,9 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.core.files.base import ContentFile
-from django.db import transaction
-from django.test import TestCase, override_settings
+from django.db import connections, transaction
+from django.http import Http404
+from django.test import RequestFactory, TestCase, override_settings
 from django.urls import reverse
 from pypdf import PdfReader
 
@@ -35,6 +36,9 @@ from financiacion_educativa.services.reglas_financieras import (
 from financiacion_educativa.tests.factories import (
     crear_configuracion_financiera,
     crear_solicitud,
+)
+from financiacion_educativa.web.views import (
+    descargar_artefacto_contractual_view,
 )
 
 
@@ -446,13 +450,42 @@ class ArtefactosContractualesTests(TestCase):
             },
         )
 
-        self.client.force_login(self.otro_usuario)
-        self.assertEqual(self.client.get(url).status_code, 404)
-        self.client.force_login(self.usuario)
-        respuesta = self.client.get(url)
+        request_ajeno = RequestFactory().get(url)
+        request_ajeno.user = self.otro_usuario
+        with self.assertRaises(Http404):
+            descargar_artefacto_contractual_view(
+                request_ajeno,
+                solicitud_id=self.solicitud.pk,
+                artefacto_id=artefacto.pk,
+            )
+
+        conexion_principal = connections['default']
+        self.assertIsNotNone(conexion_principal.connection)
+        conexion_db_principal = conexion_principal.connection
+        request = RequestFactory().get(url)
+        request.user = self.usuario
+        respuesta = descargar_artefacto_contractual_view(
+            request,
+            solicitud_id=self.solicitud.pk,
+            artefacto_id=artefacto.pk,
+        )
         self.assertEqual(respuesta.status_code, 200)
         self.assertEqual(respuesta['Content-Type'], 'application/pdf')
-        respuesta.close()
+        contenido = b''.join(respuesta.streaming_content)
+        self.assertTrue(contenido.startswith(b'%PDF'))
+        archivo_respuesta = respuesta.file_to_stream
+        self.assertIsNotNone(archivo_respuesta)
+        self.assertFalse(archivo_respuesta.closed)
+        archivo_respuesta.close()
+        self.assertTrue(archivo_respuesta.closed)
+
+        self.assertIs(conexion_principal.connection, conexion_db_principal)
+        self.assertTrue(conexion_principal.is_usable())
+        self.assertTrue(
+            ArtefactoContractualEducativo.objects.filter(
+                pk=artefacto.pk,
+            ).exists()
+        )
 
     def test_tipo_de_artefacto_es_separable(self):
         self._participante()
