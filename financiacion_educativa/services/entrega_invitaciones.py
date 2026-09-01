@@ -12,13 +12,17 @@ from django.utils.module_loading import import_string
 
 from financiacion_educativa.choices import (
     EstadoEntregaInvitacion,
+    TipoEventoCorreoEducativo,
     TipoEventoInvitacion,
 )
 from financiacion_educativa.models import EntregaInvitacionContinuacion
 from financiacion_educativa.services.invitaciones import (
     registrar_evento_invitacion,
 )
-from financiacion_educativa.services.correos import normalizar_destinatario
+from financiacion_educativa.services.correos import (
+    normalizar_destinatario,
+    obtener_email_logo_url,
+)
 
 
 CODIGO_ERROR_ENTREGA = 'DELIVERY_BACKEND_ERROR'
@@ -51,7 +55,13 @@ def calcular_hmac_destinatario(correo):
 
 class DjangoEmailInvitationDeliveryBackend:
     def deliver(
-        self, *, recipient, continuation_url, expires_at, message_id=None
+        self,
+        *,
+        recipient,
+        continuation_url,
+        expires_at,
+        message_id=None,
+        email_context=None,
     ):
         recipient = normalizar_destinatario(recipient)
         timeout = int(
@@ -63,10 +73,113 @@ class DjangoEmailInvitationDeliveryBackend:
         )
         connection = get_connection(timeout=max(1, timeout))
         brand_name = getattr(settings, 'EDUCATION_BRAND_NAME', 'Aprobado')
+        email_context = email_context or {}
+        tipo_evento = email_context.get(
+            'event_type',
+            TipoEventoCorreoEducativo.INITIAL_INVITATION,
+        )
+        mensajes = {
+            TipoEventoCorreoEducativo.INITIAL_INVITATION: {
+                'subject': f'Continua tu solicitud educativa con {brand_name}',
+                'title': 'Recibimos tu solicitud educativa',
+                'intro': 'Completa tu registro para continuar con el proceso.',
+                'step': 'El siguiente paso es confirmar tu cuenta y revisar los terminos.',
+                'badge_text': 'Solicitud recibida',
+                'badge_background': '#EAF2FE',
+                'badge_color': '#2D7FE0',
+                'final_notice': False,
+            },
+            TipoEventoCorreoEducativo.CONTINUATION_REMINDER_1H: {
+                'subject': 'Tu solicitud educativa te esta esperando',
+                'title': 'Tu solicitud educativa te esta esperando',
+                'intro': 'Puedes continuar desde el punto donde la dejaste.',
+                'step': 'Confirma tu cuenta para avanzar al siguiente paso.',
+                'badge_text': 'Solicitud pendiente',
+                'badge_background': '#FFF3D6',
+                'badge_color': '#8A6A00',
+                'final_notice': False,
+            },
+            TipoEventoCorreoEducativo.CONTINUATION_REMINDER_6H: {
+                'subject': 'Continua donde dejaste tu solicitud educativa',
+                'title': 'Estas a un paso de continuar tu proceso educativo',
+                'intro': 'Retoma tu solicitud desde el punto donde la dejaste.',
+                'step': 'Usa el enlace seguro para retomar el proceso.',
+                'badge_text': 'Continua donde la dejaste',
+                'badge_background': '#EAF7EE',
+                'badge_color': '#237A43',
+                'final_notice': False,
+            },
+            TipoEventoCorreoEducativo.CONTINUATION_REMINDER_24H: {
+                'subject': 'Completa el siguiente paso de tu financiacion educativa',
+                'title': 'Completa el siguiente paso',
+                'intro': 'Aun puedes continuar con tu solicitud educativa.',
+                'step': 'Ingresa con el enlace seguro y completa el registro pendiente.',
+                'badge_text': 'Solicitud pendiente',
+                'badge_background': '#FFF3D6',
+                'badge_color': '#8A6A00',
+                'final_notice': False,
+            },
+            TipoEventoCorreoEducativo.CONTINUATION_REMINDER_48H: {
+                'subject': 'Ultimo recordatorio automatico de tu solicitud educativa',
+                'title': 'Ultimo recordatorio automatico',
+                'intro': 'Este es el ultimo aviso automatico sobre esta solicitud.',
+                'step': 'Si deseas continuar, utiliza el enlace seguro antes de su vencimiento.',
+                'badge_text': 'Ultimo recordatorio automatico',
+                'badge_background': '#FFF3D6',
+                'badge_color': '#8A6A00',
+                'final_notice': True,
+            },
+        }
+        contenido = dict(mensajes.get(tipo_evento, mensajes[
+            TipoEventoCorreoEducativo.INITIAL_INVITATION
+        ]))
+        eventos_recordatorio = (
+            TipoEventoCorreoEducativo.CONTINUATION_REMINDER_1H,
+            TipoEventoCorreoEducativo.CONTINUATION_REMINDER_6H,
+            TipoEventoCorreoEducativo.CONTINUATION_REMINDER_24H,
+            TipoEventoCorreoEducativo.CONTINUATION_REMINDER_48H,
+        )
+        maximo_mensajes = int(
+            getattr(
+                settings,
+                'FINANCIACION_EDUCATIVA_CONTINUATION_MAX_MESSAGES',
+                4,
+            )
+        )
+        cantidad_recordatorios = min(
+            max(maximo_mensajes - 1, 0),
+            len(eventos_recordatorio),
+        )
+        evento_final = (
+            eventos_recordatorio[cantidad_recordatorios - 1]
+            if cantidad_recordatorios
+            else None
+        )
+        if tipo_evento == evento_final:
+            contenido.update({
+                'subject': (
+                    'Ultimo recordatorio automatico de tu solicitud educativa'
+                ),
+                'title': 'Ultimo recordatorio automatico',
+                'intro': (
+                    'Este es el ultimo aviso automatico sobre esta solicitud.'
+                ),
+                'step': (
+                    'Si deseas continuar, utiliza el enlace seguro antes de '
+                    'su vencimiento.'
+                ),
+                'badge_text': 'Ultimo recordatorio automatico',
+                'badge_background': '#FFF3D6',
+                'badge_color': '#8A6A00',
+                'final_notice': True,
+            })
         context = {
             'brand_name': brand_name,
             'continuation_url': continuation_url,
             'expires_at': expires_at,
+            'email_logo_url': obtener_email_logo_url(),
+            **email_context,
+            **contenido,
         }
         text_body = render_to_string(
             'emails/financiacion_educativa/invitacion_continuacion.txt',
@@ -77,7 +190,7 @@ class DjangoEmailInvitationDeliveryBackend:
             context,
         )
         message = EmailMultiAlternatives(
-            subject=f'Continua tu solicitud educativa con {brand_name}',
+            subject=contenido['subject'],
             body=text_body,
             from_email=settings.DEFAULT_FROM_EMAIL,
             to=[recipient],

@@ -22,6 +22,7 @@ from financiacion_educativa.choices import (
     EstadoEntregaInvitacion,
     EstadoInvitacionContinuacion,
     EstadoOutboxCorreoEducativo,
+    EstadoSolicitudFinanciacion,
     TipoEventoCorreoEducativo,
     TipoEventoEnlaceCapturaMovil,
     TipoEventoInvitacion,
@@ -31,6 +32,7 @@ from financiacion_educativa.models import (
     EntregaCorreoEstadoSolicitud,
     EntregaInvitacionContinuacion,
     OutboxCorreoEducativo,
+    SolicitudFinanciacionEducativa,
 )
 from financiacion_educativa.services.correos import (
     ConfiguracionSMTPInvalida,
@@ -39,6 +41,7 @@ from financiacion_educativa.services.correos import (
     construir_correo_continuacion_automatica,
     construir_correo_decision_educativa,
     construir_correo_expediente_recibido,
+    construir_correo_nueva_solicitud_interna,
     normalizar_destinatario,
     validar_configuracion_smtp,
 )
@@ -59,6 +62,7 @@ CODIGOS_PERMANENTES = {
     'SMTP_AUTHENTICATION_ERROR',
     'SMTP_RECIPIENT_REFUSED',
     'MESSAGE_CONTEXT_INVALID',
+    'INVITATION_NO_LONGER_ELIGIBLE',
 }
 
 
@@ -68,6 +72,10 @@ class EntregaCorreoNoIniciada(Exception):
 
 class EntregaCorreoAmbigua(Exception):
     codigo = 'SMTP_DELIVERY_AMBIGUOUS'
+
+
+class EntregaInvitacionNoElegible(Exception):
+    codigo = 'INVITATION_NO_LONGER_ELIGIBLE'
 
 
 @dataclass(frozen=True)
@@ -204,8 +212,13 @@ def crear_correo_continuacion_automatica(*, solicitud, fotografia_id):
     )
 
 
-def crear_correo_invitacion(*, entrega):
-    tipo = (
+def crear_correo_invitacion(
+    *,
+    entrega,
+    tipo_evento=None,
+    clave_idempotencia=None,
+):
+    tipo = tipo_evento or (
         TipoEventoCorreoEducativo.INITIAL_INVITATION
         if entrega.origen == 'INITIAL'
         else TipoEventoCorreoEducativo.INVITATION_REISSUE
@@ -213,11 +226,50 @@ def crear_correo_invitacion(*, entrega):
     return crear_intencion_correo(
         solicitud=entrega.solicitud,
         tipo_evento=tipo,
-        clave_idempotencia=f'invitation-delivery:{entrega.pk}',
+        clave_idempotencia=(
+            clave_idempotencia or f'invitation-delivery:{entrega.pk}'
+        ),
         codigo_mensaje=CodigoMensajeCorreoEducativo.INVITATION,
         destinatarios=[entrega.solicitud.correo],
         entrega_invitacion=entrega,
     )
+
+
+def crear_correo_nueva_solicitud_interna(*, solicitud, destinatarios):
+    return crear_intencion_correo(
+        solicitud=solicitud,
+        tipo_evento=TipoEventoCorreoEducativo.NEW_APPLICATION_INTERNAL,
+        clave_idempotencia=f'new-application-internal:{solicitud.pk}',
+        codigo_mensaje=CodigoMensajeCorreoEducativo.NEW_APPLICATION_INTERNAL,
+        destinatarios=destinatarios,
+    )
+
+
+def programar_notificacion_nueva_solicitud_interna(*, solicitud):
+    destinatarios = getattr(
+        settings,
+        'EDUCATIONAL_OPERATIONS_NOTIFICATION_EMAILS',
+        (),
+    )
+    if not destinatarios:
+        logger.info(
+            'Notificacion interna educativa omitida: solicitud_id=%s '
+            'codigo=NO_INTERNAL_RECIPIENTS',
+            solicitud.pk,
+        )
+        return None, False
+    try:
+        return crear_correo_nueva_solicitud_interna(
+            solicitud=solicitud,
+            destinatarios=destinatarios,
+        )
+    except (ValidationError, ImproperlyConfigured):
+        logger.warning(
+            'Notificacion interna educativa omitida: solicitud_id=%s '
+            'codigo=INVALID_INTERNAL_RECIPIENTS',
+            solicitud.pk,
+        )
+        return None, False
 
 
 def crear_correo_captura(*, enlace):
@@ -273,10 +325,17 @@ def reclamar_correo_pendiente():
 
 def _invocar_backend(backend, *, message_id, **kwargs):
     firma = inspect.signature(backend.deliver)
-    if 'message_id' in firma.parameters or any(
+    acepta_kwargs = any(
         p.kind == inspect.Parameter.VAR_KEYWORD for p in firma.parameters.values()
-    ):
+    )
+    if 'message_id' in firma.parameters or acepta_kwargs:
         kwargs['message_id'] = message_id
+    if not acepta_kwargs:
+        kwargs = {
+            nombre: valor
+            for nombre, valor in kwargs.items()
+            if nombre in firma.parameters
+        }
     return backend.deliver(**kwargs)
 
 
@@ -300,6 +359,17 @@ def _preparar_enlace_personal(*, outbox_id, lease_id):
         entrega = EntregaInvitacionContinuacion.objects.select_for_update().get(
             pk=outbox.entrega_invitacion_id
         )
+        solicitud = SolicitudFinanciacionEducativa.objects.select_for_update().get(
+            pk=entrega.solicitud_id
+        )
+        if (
+            solicitud.estado
+            != EstadoSolicitudFinanciacion.PENDING_USER_REGISTRATION
+            or solicitud.usuario_id
+            or entrega.invitacion.estado
+            != EstadoInvitacionContinuacion.ACTIVE
+        ):
+            raise EntregaInvitacionNoElegible()
         if entrega.estado in {
             EstadoEntregaInvitacion.SENT,
             EstadoEntregaInvitacion.CANCELLED,
@@ -376,6 +446,8 @@ def _construir_mensaje(outbox, connection_mail):
         mensaje = construir_correo_expediente_recibido(
             recipient=outbox.destinatarios[0],
             referencia_externa=outbox.solicitud.referencia_externa,
+            program_name=outbox.solicitud.institucion.nombre_comercial,
+            course_name=outbox.solicitud.nombre_curso,
             cc=outbox.destinatarios_copia,
             connection=connection_mail,
         )
@@ -394,6 +466,15 @@ def _construir_mensaje(outbox, connection_mail):
     elif outbox.codigo_mensaje == CodigoMensajeCorreoEducativo.AUTOMATIC_CONTINUATION:
         mensaje = construir_correo_continuacion_automatica(
             recipient=outbox.destinatarios[0],
+            connection=connection_mail,
+        )
+    elif (
+        outbox.codigo_mensaje
+        == CodigoMensajeCorreoEducativo.NEW_APPLICATION_INTERNAL
+    ):
+        mensaje = construir_correo_nueva_solicitud_interna(
+            solicitud=outbox.solicitud,
+            recipients=outbox.destinatarios,
             connection=connection_mail,
         )
     else:
@@ -420,6 +501,15 @@ def _entregar(outbox, lease_id):
             recipient=outbox.destinatarios[0],
             continuation_url=url,
             expires_at=vence_en,
+            email_context={
+                'event_type': outbox.tipo_evento,
+                'first_name': (
+                    str(outbox.solicitud.nombres or '').strip().split(' ')[0]
+                ),
+                'program_name': outbox.solicitud.institucion.nombre_comercial,
+                'course_name': outbox.solicitud.nombre_curso,
+                'reference': outbox.solicitud.referencia_externa,
+            },
             message_id=outbox.message_id,
         )
     if settings.EMAIL_BACKEND in SMTP_BACKENDS:
@@ -435,11 +525,11 @@ def _entregar(outbox, lease_id):
 def _clasificar_error(error):
     codigo = getattr(error, 'codigo', '')
     if codigo:
-        return codigo, (
-            EstadoOutboxCorreoEducativo.RETRYING
-            if codigo in CODIGOS_TEMPORALES
-            else EstadoOutboxCorreoEducativo.AMBIGUOUS
-        )
+        if codigo in CODIGOS_TEMPORALES:
+            return codigo, EstadoOutboxCorreoEducativo.RETRYING
+        if codigo in CODIGOS_PERMANENTES:
+            return codigo, EstadoOutboxCorreoEducativo.FAILED
+        return codigo, EstadoOutboxCorreoEducativo.AMBIGUOUS
     if isinstance(error, ConfiguracionSMTPInvalida):
         return 'SMTP_CONFIGURATION_ERROR', EstadoOutboxCorreoEducativo.FAILED
     if isinstance(error, smtplib.SMTPAuthenticationError):
@@ -568,10 +658,12 @@ def procesar_siguiente_correo():
     except Exception as error:
         codigo, estado = _clasificar_error(error)
         logger.warning(
-            'Fallo controlado del outbox educativo: outbox_id=%s tipo=%s codigo=%s',
+            'Fallo controlado del outbox educativo: outbox_id=%s tipo=%s '
+            'codigo=%s clase=%s',
             outbox.pk,
             outbox.tipo_evento,
             codigo,
+            error.__class__.__name__,
         )
     actualizado = _finalizar(
         outbox_id=outbox.pk,

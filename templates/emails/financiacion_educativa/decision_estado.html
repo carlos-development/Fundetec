@@ -1,35 +1,11 @@
-<!doctype html>
-<html lang="es">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{{ title }}</title>
-</head>
-<body style="margin:0;background:#f4f7fb;color:#10233f;font-family:Arial,sans-serif;">
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f4f7fb;padding:24px;">
-        <tr>
-            <td align="center">
-                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:620px;background:#ffffff;border:1px solid #dce4ee;">
-                    <tr>
-                        <td style="padding:32px;">
-                            <p style="margin:0 0 10px;color:#087ea4;font-size:13px;font-weight:bold;">{{ brand_name }}</p>
-                            <h1 style="margin:0 0 18px;font-size:26px;">{{ title }}</h1>
-                            <p style="margin:0 0 18px;line-height:1.6;">{{ message }}</p>
-                            {% if course_authorized %}
-                            <p style="margin:0;padding:16px;background:#eef8f2;border-left:4px solid #238636;line-height:1.5;">
-                                La instituci&oacute;n aliada puede activar el curso.
-                                Esta autorizaci&oacute;n no representa un desembolso de dinero.
-                            </p>
-                            {% else %}
-                            <p style="margin:0;line-height:1.6;">
-                                Ingresa a la plataforma con tu cuenta para consultar el estado vigente.
-                            </p>
-                            {% endif %}
-                        </td>
-                    </tr>
-                </table>
-            </td>
-        </tr>
-    </table>
-</body>
-</html>
+{% extends "emails/financiacion_educativa/_base.html" %}
+{% block email_title %}{{ title }}{% endblock %}
+{% block preheader %}Consulta la actualizacion de tu solicitud educativa.{% endblock %}
+{% block content %}
+  {% include "emails/financiacion_educativa/_status_badge.html" with badge_text=status_label badge_background=status_background badge_color=status_color %}
+  <h1 class="email-title" style="margin:0 0 14px;font-size:26px;line-height:32px;font-weight:800;color:#0B2E59;">{{ title }}</h1>
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;margin:0 0 22px;background-color:{{ status_background }};border-left:4px solid {{ status_border }};border-radius:6px;"><tr><td style="padding:15px 18px;color:#081F3D;font-size:15px;line-height:23px;">{{ message }}</td></tr></table>
+  <p style="margin:0 0 8px;font-size:13px;line-height:20px;font-weight:700;color:#8A97A8;text-transform:uppercase;letter-spacing:0.5px;">Siguiente paso</p>
+  <p style="margin:0;font-size:15px;line-height:23px;color:#5B6B82;">{{ next_step }}</p>
+  {% if course_authorized %}<p style="margin:20px 0 0;padding:14px 16px;background-color:#EAF7EE;border-left:4px solid #33A55A;font-size:14px;line-height:21px;color:#237A43;">La instituci&oacute;n aliada puede activar el curso autorizado.</p>{% endif %}
+{% endblock %}

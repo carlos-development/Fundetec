@@ -3,6 +3,7 @@ from datetime import timedelta
 from decimal import Decimal
 from uuid import uuid4
 
+from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
@@ -41,6 +42,7 @@ PAYLOAD_VALIDO = {
 }
 
 
+@override_settings(EDUCATIONAL_OPERATIONS_NOTIFICATION_EMAILS=[])
 class APIInstitucionalFinanciacionTests(APITestCase):
     def setUp(self):
         self.institucion = self._crear_institucion('1')

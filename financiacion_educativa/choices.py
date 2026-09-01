@@ -223,6 +223,7 @@ class OrigenEntregaInvitacion(models.TextChoices):
     INITIAL = 'INITIAL', 'Inicial'
     AUTOMATIC_RETRY = 'AUTOMATIC_RETRY', 'Reintento automatico'
     MANUAL_REISSUE = 'MANUAL_REISSUE', 'Reemision manual'
+    SCHEDULED_REMINDER = 'SCHEDULED_REMINDER', 'Recordatorio programado'
 
 
 class EstadoEnlaceCapturaMovil(models.TextChoices):
@@ -333,6 +334,26 @@ class EstadoOutboxCorreoEducativo(models.TextChoices):
 class TipoEventoCorreoEducativo(models.TextChoices):
     INITIAL_INVITATION = 'INITIAL_INVITATION', 'Invitacion inicial'
     INVITATION_REISSUE = 'INVITATION_REISSUE', 'Reemision de invitacion'
+    CONTINUATION_REMINDER_1H = (
+        'CONTINUATION_REMINDER_1H',
+        'Recordatorio de continuacion 1 hora',
+    )
+    CONTINUATION_REMINDER_6H = (
+        'CONTINUATION_REMINDER_6H',
+        'Recordatorio de continuacion 6 horas',
+    )
+    CONTINUATION_REMINDER_24H = (
+        'CONTINUATION_REMINDER_24H',
+        'Recordatorio de continuacion 24 horas',
+    )
+    CONTINUATION_REMINDER_48H = (
+        'CONTINUATION_REMINDER_48H',
+        'Recordatorio de continuacion 48 horas',
+    )
+    NEW_APPLICATION_INTERNAL = (
+        'NEW_APPLICATION_INTERNAL',
+        'Nueva solicitud para operaciones',
+    )
     MOBILE_CAPTURE_LINK = 'MOBILE_CAPTURE_LINK', 'Enlace de captura movil'
     DOSSIER_RECEIVED = 'DOSSIER_RECEIVED', 'Expediente recibido'
     REVIEW_DECISION = 'REVIEW_DECISION', 'Decision de revision'
@@ -345,6 +366,10 @@ class TipoEventoCorreoEducativo(models.TextChoices):
 
 class CodigoMensajeCorreoEducativo(models.TextChoices):
     INVITATION = 'INVITATION', 'Invitacion de continuacion'
+    NEW_APPLICATION_INTERNAL = (
+        'NEW_APPLICATION_INTERNAL',
+        'Nueva solicitud para operaciones',
+    )
     MOBILE_CAPTURE = 'MOBILE_CAPTURE', 'Captura movil'
     DOSSIER_RECEIVED = 'DOSSIER_RECEIVED', 'Expediente recibido'
     REVIEW_DECISION = 'REVIEW_DECISION', 'Decision de revision'

@@ -16,6 +16,9 @@ El outbox cubre:
 - correccion documental automatica.
 - continuacion a preparacion contractual despues de una validacion automatica
   concluyente.
+- recordatorios de continuacion ya vencidos;
+- notificacion interna de una solicitud nueva, cuando existen destinatarios
+  operativos configurados.
 
 `enviar_correos_prueba_educacion` queda fuera del flujo: es una herramienta
 operativa explicita que genera muestras inertes sin solicitud ni evento de
@@ -68,6 +71,8 @@ de expediente conserva el CC operativo configurado.
 ```bash
 python manage.py procesar_outbox_educativo --once
 python manage.py procesar_outbox_educativo --limit 20
+python manage.py programar_recordatorios_solicitudes_educativas --dry-run
+python manage.py programar_recordatorios_solicitudes_educativas --batch-size 100
 python manage.py diagnosticar_outbox_educativo
 python manage.py diagnosticar_outbox_educativo --solicitud-id UUID
 python manage.py recuperar_outbox_educativo --recover-leases --dry-run
@@ -90,7 +95,21 @@ FINANCIACION_EDUCATIVA_EMAIL_OUTBOX_LEASE_SECONDS=120
 FINANCIACION_EDUCATIVA_EMAIL_OUTBOX_MAX_ATTEMPTS=3
 FINANCIACION_EDUCATIVA_EMAIL_OUTBOX_BACKOFF_BASE_SECONDS=30
 FINANCIACION_EDUCATIVA_EMAIL_OUTBOX_BACKOFF_MAX_SECONDS=600
+FINANCIACION_EDUCATIVA_CONTINUATION_REMINDER_1_HOURS=1
+FINANCIACION_EDUCATIVA_CONTINUATION_REMINDER_2_HOURS=6
+FINANCIACION_EDUCATIVA_CONTINUATION_REMINDER_3_HOURS=24
+FINANCIACION_EDUCATIVA_CONTINUATION_REMINDER_FINAL_HOURS=48
+FINANCIACION_EDUCATIVA_CONTINUATION_MAX_MESSAGES=4
+FINANCIACION_EDUCATIVA_CONTINUATION_REMINDER_BATCH_SIZE=100
+EDUCATIONAL_OPERATIONS_NOTIFICATION_EMAILS=
 ```
+
+La invitacion inicial cuenta dentro de `CONTINUATION_MAX_MESSAGES`. El valor
+seguro `4` permite recordatorios a 1 y 6 horas, seguido del ultimo recordatorio
+automatico a las 24 horas. El evento de 48 horas permanece disponible, pero
+solo queda habilitado si se aprueba y configura un maximo de `5`. La lista
+operativa vacia omite la notificacion interna y registra un codigo no sensible
+en logs, sin impedir la creacion de la solicitud.
 
 `EMAIL_QA_MODE`, `EMAIL_LIVE_DELIVERY_ENABLED`, `EMAIL_TIMEOUT` y la validacion
 de `SafeRoutingEmailBackend` siguen aplicando. El outbox no habilita entregas
@@ -108,6 +127,21 @@ Antes de iniciarla se ejecuta `diagnosticar_outbox_educativo`. El comando
 muestra conteos agregados de `PENDING`, `RETRYING`, `FAILED`, `AMBIGUOUS` y los
 demas estados sin imprimir destinatarios ni datos de solicitudes. Cualquier
 `AMBIGUOUS` debe conciliarse; nunca se reenvia automaticamente.
+
+### Propuesta de ejecucion horaria
+
+El worker de outbox permanece continuo. El programador de recordatorios debe
+ejecutarse una vez por hora mediante un `systemd timer` o cron administrado,
+con el usuario de servicio y el mismo `EnvironmentFile` de staging:
+
+```bash
+/var/www/fundetec-staging/shared/venv/bin/python \
+  /var/www/fundetec-staging/current/manage.py \
+  programar_recordatorios_solicitudes_educativas --batch-size 100
+```
+
+El comando solo crea intenciones persistentes; no contacta SMTP. Esta propuesta
+no autoriza crear ni activar unidades en servidores.
 
 ## Riesgos fuera de este bloque
 

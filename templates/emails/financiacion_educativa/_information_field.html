@@ -1,0 +1,4 @@
+<tr><td valign="top" style="padding:14px 18px;background-color:#F5F8FC;{% if not is_last %}border-bottom:1px solid #E6EBF2;{% endif %}">
+  <p style="margin:0 0 6px;color:#8A97A8;font-size:12px;line-height:17px;font-weight:400;">{{ label }}</p>
+  <p style="margin:0;color:#0B2E59;font-size:14px;line-height:21px;font-weight:700;word-break:break-word;">{% if value_is_money %}COP ${{ value|floatformat:0 }}{% elif value_is_date %}{{ value|date:"d/m/Y H:i T" }}{% else %}{{ value }}{% endif %}</p>
+</td></tr>

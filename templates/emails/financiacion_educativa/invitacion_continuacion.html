@@ -1,41 +1,20 @@
-<!doctype html>
-<html lang="es">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Continua tu solicitud educativa</title>
-</head>
-<body style="margin:0;background:#f3f7f9;color:#172634;font-family:Arial,sans-serif;">
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
-    <tr>
-      <td align="center" style="padding:32px 16px;">
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;background:#fff;border:1px solid #dbe4ea;">
-          <tr>
-            <td style="height:8px;background:#28aae1;font-size:0;line-height:0;">&nbsp;</td>
-          </tr>
-          <tr>
-            <td style="padding:32px;">
-              <p style="margin:0 0 24px;color:#1178a8;font-size:14px;font-weight:bold;">APROBADO</p>
-              <h1 style="color:#071827;font-size:24px;margin:0 0 16px;">Contin&uacute;a tu solicitud educativa</h1>
-              <p style="line-height:1.5;margin:0 0 24px;">
-                Usa el siguiente enlace para registrarte o iniciar sesi&oacute;n y continuar con {{ brand_name }}.
-              </p>
-              <p style="margin:0 0 24px;">
-                <a href="{{ continuation_url }}" style="display:inline-block;background:#28aae1;color:#071827;padding:12px 18px;text-decoration:none;font-weight:bold;">
-                  Continuar mi solicitud
-                </a>
-              </p>
-              <p style="font-size:14px;line-height:1.5;margin:0 0 8px;">
-                El enlace vence el {{ expires_at|date:"Y-m-d H:i T" }} y solo puede utilizarse una vez.
-              </p>
-              <p style="font-size:14px;line-height:1.5;margin:0;">
-                No compartas este enlace. Si no esperabas este mensaje, puedes ignorarlo.
-              </p>
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>
+{% extends "emails/financiacion_educativa/_base.html" %}
+{% block email_title %}{{ title }}{% endblock %}
+{% block preheader %}{{ intro }}{% endblock %}
+{% block content %}
+  {% include "emails/financiacion_educativa/_status_badge.html" with badge_text=badge_text badge_background=badge_background badge_color=badge_color %}
+  <p style="margin:0 0 14px;font-size:15px;line-height:22px;color:#5B6B82;">Hola{% if first_name %}, {{ first_name|title }}{% endif %}.</p>
+  <h1 class="email-title" style="margin:0 0 14px;font-size:26px;line-height:32px;font-weight:800;color:#0B2E59;">{{ title }}</h1>
+  <p style="margin:0 0 24px;font-size:15px;line-height:23px;color:#5B6B82;">{{ intro }}</p>
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;margin:0 0 24px;background-color:#F5F8FC;border:1px solid #E6EBF2;border-radius:8px;overflow:hidden;border-collapse:separate;">
+    {% include "emails/financiacion_educativa/_information_field.html" with label="Programa" value=program_name|default:"Financiacion educativa" %}
+    {% include "emails/financiacion_educativa/_information_field.html" with label="Curso" value=course_name|default:"Solicitud educativa" %}
+    {% include "emails/financiacion_educativa/_information_field.html" with label="Referencia" value=reference|default:"No disponible" is_last=True %}
   </table>
-</body>
-</html>
+  <p style="margin:0 0 16px;font-size:15px;line-height:23px;color:#5B6B82;">{{ step }}</p>
+  {% include "emails/financiacion_educativa/_cta_button.html" with action_url=continuation_url action_label="Continuar mi solicitud" %}
+  {% if final_notice %}<p style="margin:0 0 16px;color:#8A6A00;font-size:13px;line-height:20px;font-weight:700;">No enviaremos m&aacute;s recordatorios autom&aacute;ticos despu&eacute;s de este mensaje.</p>{% endif %}
+  {% with warning_text="El enlace es personal, vence en la fecha indicada y solo puede utilizarse una vez. No lo compartas." %}{% include "emails/financiacion_educativa/_warning_box.html" %}{% endwith %}
+  <p style="margin:0 0 16px;font-size:13px;line-height:20px;color:#5B6B82;"><strong>Vencimiento:</strong> {{ expires_at|date:"d/m/Y H:i T" }}. Si no reconoces la solicitud, ignora este mensaje.</p>
+  {% include "emails/financiacion_educativa/_alternate_link.html" with link_intro="Si el boton no funciona, abre este enlace en tu navegador:" action_url=continuation_url %}
+{% endblock %}

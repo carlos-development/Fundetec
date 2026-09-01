@@ -97,6 +97,7 @@ REGISTRO = {
 @override_settings(
     BRAND_PUBLIC_BASE_URL='https://credito.example.com',
     FINANCIACION_EDUCATIVA_INVITATION_DELIVERY_BACKEND=BACKEND_EXITO,
+    EDUCATIONAL_OPERATIONS_NOTIFICATION_EMAILS=[],
 )
 class OrquestacionInvitacionFase6Tests(APITestCase):
     def setUp(self):

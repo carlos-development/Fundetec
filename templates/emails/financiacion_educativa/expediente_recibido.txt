@@ -2,8 +2,12 @@ Expediente recibido
 
 Recibimos los documentos de tu solicitud de financiacion educativa.
 
+{% if program_name %}Programa: {{ program_name }}
+{% endif %}{% if course_name %}Curso: {{ course_name }}
+{% endif %}
 Referencia: {{ referencia_externa }}
+Estado: Disponible para validacion
 
-El expediente quedo disponible para validacion. Te informaremos cuando exista un nuevo paso.
+Te informaremos cuando exista un nuevo paso en el proceso. No necesitas realizar ninguna accion por ahora.
 
 {{ brand_name }}

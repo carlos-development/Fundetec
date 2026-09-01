@@ -1,0 +1,20 @@
+{% extends "emails/financiacion_educativa/_base.html" %}
+{% block email_title %}Nueva solicitud educativa{% endblock %}
+{% block preheader %}Se registro una nueva solicitud educativa para seguimiento operativo.{% endblock %}
+{% block content %}
+  {% include "emails/financiacion_educativa/_status_badge.html" with badge_text="Nueva solicitud" badge_background="#EAF2FE" badge_color="#2D7FE0" %}
+  <p style="margin:0 0 8px;color:#2D7FE0;font-size:12px;line-height:18px;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;">Notificaci&oacute;n interna</p>
+  <h1 class="email-title" style="margin:0 0 14px;font-size:26px;line-height:32px;font-weight:800;color:#0B2E59;">Nueva solicitud educativa</h1>
+  <p style="margin:0 0 24px;font-size:14px;line-height:22px;color:#5B6B82;">Se registr&oacute; una solicitud v&aacute;lida para seguimiento operativo. Esta notificaci&oacute;n no representa una decisi&oacute;n de aprobaci&oacute;n o rechazo.</p>
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;margin:0 0 24px;background-color:#F5F8FC;border:1px solid #E6EBF2;border-radius:8px;overflow:hidden;border-collapse:separate;">
+    {% include "emails/financiacion_educativa/_information_field.html" with label="Referencia" value=reference %}
+    {% include "emails/financiacion_educativa/_information_field.html" with label="Programa" value=program_name %}
+    {% include "emails/financiacion_educativa/_information_field.html" with label="Curso" value=course_name %}
+    {% include "emails/financiacion_educativa/_information_field.html" with label="Solicitante" value=applicant_name %}
+    {% if masked_document %}{% include "emails/financiacion_educativa/_information_field.html" with label="Documento" value=masked_document %}{% endif %}
+    {% include "emails/financiacion_educativa/_information_field.html" with label="Valor solicitado" value=requested_amount value_is_money=True %}
+    {% include "emails/financiacion_educativa/_information_field.html" with label="Fecha" value=created_at value_is_date=True %}
+    {% include "emails/financiacion_educativa/_information_field.html" with label="Estado" value=status_label is_last=True %}
+  </table>
+  {% if detail_url %}{% include "emails/financiacion_educativa/_cta_button.html" with action_url=detail_url action_label="Ver solicitud" %}{% endif %}
+{% endblock %}

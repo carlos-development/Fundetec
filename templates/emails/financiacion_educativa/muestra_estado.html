@@ -1,62 +1,12 @@
-<!doctype html>
-<html lang="es">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="x-apple-disable-message-reformatting">
-  <title>{{ titulo }}</title>
-</head>
-<body style="margin:0;padding:0;background:#f3f7f9;color:#172634;font-family:Arial,sans-serif;">
-  <div style="display:none;max-height:0;overflow:hidden;opacity:0;">Muestra visual del flujo educativo de Aprobado.</div>
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;background:#f3f7f9;">
-    <tr>
-      <td align="center" style="padding:24px 12px;">
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:600px;background:#ffffff;border:1px solid #dbe4ea;border-collapse:collapse;">
-          <tr>
-            <td style="height:7px;background:#28aae1;font-size:0;line-height:0;">&nbsp;</td>
-          </tr>
-          <tr>
-            <td style="padding:28px 32px 16px;">
-              {% if email_logo_url %}
-                <img src="{{ email_logo_url }}" width="142" alt="Aprobado" style="display:block;width:142px;max-width:100%;height:auto;border:0;">
-              {% else %}
-                <strong style="font-size:21px;color:#071827;">APROBADO</strong>
-              {% endif %}
-            </td>
-          </tr>
-          <tr>
-            <td style="padding:8px 32px 32px;">
-              <p style="display:inline-block;margin:0 0 16px;padding:5px 9px;background:#fff3bf;color:#624b00;font-size:11px;font-weight:bold;">MUESTRA DE CORREO</p>
-              <h1 style="margin:0 0 16px;color:#071827;font-size:25px;line-height:1.25;">{{ titulo }}</h1>
-              <p style="margin:0 0 16px;color:#334b5c;font-size:15px;line-height:1.6;">{{ introduccion }}</p>
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;margin:20px 0;background:#f7fafb;border-left:4px solid #ffdc38;">
-                <tr>
-                  <td style="padding:15px 16px;color:#334b5c;font-size:14px;line-height:1.55;">{{ detalle }}</td>
-                </tr>
-              </table>
-              {% if nota %}
-                <p style="margin:0 0 18px;color:#657a89;font-size:13px;line-height:1.5;">{{ nota }}</p>
-              {% endif %}
-              <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:22px 0;">
-                <tr>
-                  <td bgcolor="#28aae1" style="background:#28aae1;">
-                    <a href="{{ action_url }}" style="display:inline-block;padding:14px 22px;color:#071827;text-decoration:none;font-size:15px;font-weight:bold;">{{ boton }}</a>
-                  </td>
-                </tr>
-              </table>
-              <p style="margin:0;color:#657a89;font-size:12px;line-height:1.5;">
-                Esta muestra usa datos ficticios. El botón dirige a una dirección reservada que no ejecuta acciones.
-              </p>
-            </td>
-          </tr>
-          <tr>
-            <td style="padding:20px 32px;background:#071827;color:#d9e5ec;font-size:12px;line-height:1.5;">
-              Comunicación de muestra del flujo de financiación educativa de {{ brand_name }}.
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>
-  </table>
-</body>
-</html>
+{% extends "emails/financiacion_educativa/_base.html" %}
+{% block email_title %}{{ titulo }}{% endblock %}
+{% block preheader %}Muestra visual del flujo educativo de Aprobado.{% endblock %}
+{% block content %}
+  <p style="display:inline-block;margin:0 0 16px;padding:5px 9px;background-color:#fff3bf;color:#624b00;font-size:11px;font-weight:bold;">MUESTRA DE CORREO</p>
+  <h1 style="margin:0 0 16px;color:#0b2f52;font-size:25px;line-height:1.25;">{{ titulo }}</h1>
+  <p style="margin:0 0 16px;font-size:15px;line-height:1.6;">{{ introduccion }}</p>
+  <p style="margin:0 0 18px;padding:14px 16px;background-color:#f5f9fc;border-left:4px solid #f5c400;font-size:14px;line-height:1.55;">{{ detalle }}</p>
+  {% if nota %}<p style="margin:0 0 18px;color:#526575;font-size:13px;line-height:1.5;">{{ nota }}</p>{% endif %}
+  <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:0 0 20px;"><tr><td bgcolor="#169bd5" style="background-color:#169bd5;"><a href="{{ action_url }}" style="display:inline-block;padding:13px 22px;color:#ffffff;text-decoration:none;font-size:15px;font-weight:bold;">{{ boton }}</a></td></tr></table>
+  <p style="margin:0;color:#526575;font-size:12px;line-height:1.5;">Esta muestra usa datos ficticios y no ejecuta acciones.</p>
+{% endblock %}

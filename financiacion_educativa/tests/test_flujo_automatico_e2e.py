@@ -94,6 +94,7 @@ PAYLOAD = {
 
 @override_settings(
     DEBUG=True,
+    EDUCATIONAL_OPERATIONS_NOTIFICATION_EMAILS=[],
     EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
     BRAND_PUBLIC_BASE_URL='https://credito.example.com',
     FINANCIACION_EDUCATIVA_INVITATION_DELIVERY_BACKEND=INVITATION_BACKEND,

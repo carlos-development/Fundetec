@@ -22,7 +22,10 @@ from financiacion_educativa.models import (
 from financiacion_educativa.services.entrega_invitaciones import (
     calcular_hmac_destinatario,
 )
-from financiacion_educativa.services.outbox_correos import crear_correo_invitacion
+from financiacion_educativa.services.outbox_correos import (
+    crear_correo_invitacion,
+    programar_notificacion_nueva_solicitud_interna,
+)
 from financiacion_educativa.services.idempotencia import (
     crear_solicitud_idempotente,
 )
@@ -62,6 +65,8 @@ def _crear_entrega(
     origen,
     actor=None,
     reemplaza_a=None,
+    tipo_evento_correo=None,
+    clave_idempotencia_correo=None,
 ):
     entrega = EntregaInvitacionContinuacion(
         solicitud=solicitud,
@@ -81,7 +86,11 @@ def _crear_entrega(
         actor=actor,
         metadata={'delivery_id': str(entrega.pk), 'channel': entrega.canal},
     )
-    crear_correo_invitacion(entrega=entrega)
+    crear_correo_invitacion(
+        entrega=entrega,
+        tipo_evento=tipo_evento_correo,
+        clave_idempotencia=clave_idempotencia_correo,
+    )
     return entrega
 
 
@@ -123,6 +132,9 @@ def crear_solicitud_institucional_orquestada(
     )
     if not resultado.repetida:
         programar_invitacion_inicial(solicitud=resultado.solicitud)
+        programar_notificacion_nueva_solicitud_interna(
+            solicitud=resultado.solicitud,
+        )
     return resultado
 
 

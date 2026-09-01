@@ -3,7 +3,7 @@
 {% endif %}Continúa la captura desde tu celular
 
 Solicitaste continuar la verificación de identidad desde otro dispositivo.
-El enlace abre la captura del frente y el reverso de tu documento:
+El enlace abre la captura segura del documento solicitado:
 
 {{ continuation_url }}
 

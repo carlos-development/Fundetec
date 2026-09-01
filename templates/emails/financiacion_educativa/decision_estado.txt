@@ -1,7 +1,12 @@
 {{ title }}
 
+Estado: {{ status_label }}
+
 {{ message }}
 
-{% if course_authorized %}La institucion aliada puede activar el curso. Esta autorizacion no representa un desembolso de dinero.{% else %}Ingresa a la plataforma con tu cuenta para consultar el estado vigente.{% endif %}
+Siguiente paso:
+{{ next_step }}
 
+{% if course_authorized %}La institucion aliada puede activar el curso autorizado.
+{% endif %}
 {{ brand_name }}

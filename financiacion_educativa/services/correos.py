@@ -2,12 +2,14 @@ from dataclasses import dataclass
 from email.utils import parseaddr
 import smtplib
 import socket
+from urllib.parse import urlsplit
 
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured, ValidationError
 from django.core.mail import EmailMultiAlternatives
 from django.core.validators import validate_email
 from django.template.loader import render_to_string
+from django.urls import reverse
 
 from financiacion_educativa.choices import TipoDecisionRevisionEducativa
 
@@ -30,6 +32,42 @@ class ConfiguracionSMTPInvalida(ImproperlyConfigured):
     pass
 
 
+def _presentacion_decision(tipo):
+    presentaciones = {
+        TipoDecisionRevisionEducativa.APPROVED: {
+            'status_label': 'Expediente validado',
+            'status_background': '#EAF7EE',
+            'status_color': '#237A43',
+            'status_border': '#33A55A',
+            'next_step': (
+                'Consulta el estado vigente en la plataforma. La solicitud '
+                'solo continuara cuando corresponda segun el flujo educativo.'
+            ),
+        },
+        TipoDecisionRevisionEducativa.REJECTED: {
+            'status_label': 'Solicitud finalizada',
+            'status_background': '#FDECEC',
+            'status_color': '#A33A3A',
+            'status_border': '#C94A4A',
+            'next_step': (
+                'Consulta el estado vigente en la plataforma si necesitas '
+                'revisar la informacion comunicada.'
+            ),
+        },
+        TipoDecisionRevisionEducativa.CORRECTION_REQUESTED: {
+            'status_label': 'Accion requerida',
+            'status_background': '#FFF3D6',
+            'status_color': '#8A6A00',
+            'status_border': '#E0A800',
+            'next_step': (
+                'Revisa la solicitud en la plataforma y completa el ajuste '
+                'indicado para continuar.'
+            ),
+        },
+    }
+    return presentaciones[tipo]
+
+
 def normalizar_destinatario(correo):
     normalizado = (correo or '').strip().casefold()
     try:
@@ -39,6 +77,12 @@ def normalizar_destinatario(correo):
             'El destinatario configurado no es valido.'
         ) from exc
     return normalizado
+
+
+def obtener_email_logo_url():
+    url = str(getattr(settings, 'EDUCATION_EMAIL_LOGO_URL', '')).strip()
+    partes = urlsplit(url)
+    return url if partes.scheme == 'https' and partes.netloc else ''
 
 
 def clasificar_error_entrega(error):
@@ -133,9 +177,7 @@ def construir_correo_captura_movil(
         'continuation_url': continuation_url,
         'expires_at': expires_at,
         'es_prueba': es_prueba,
-        'email_logo_url': str(
-            getattr(settings, 'EDUCATION_EMAIL_LOGO_URL', '')
-        ).strip(),
+        'email_logo_url': obtener_email_logo_url(),
     }
     texto = render_to_string(
         'emails/financiacion_educativa/captura_movil.txt',
@@ -177,9 +219,10 @@ def construir_correo_correccion_automatica(
         'title': titulo,
         'message': detalle,
         'course_authorized': False,
-        'email_logo_url': str(
-            getattr(settings, 'EDUCATION_EMAIL_LOGO_URL', '')
-        ).strip(),
+        **_presentacion_decision(
+            TipoDecisionRevisionEducativa.CORRECTION_REQUESTED
+        ),
+        'email_logo_url': obtener_email_logo_url(),
     }
     texto = render_to_string(
         'emails/financiacion_educativa/decision_estado.txt', contexto
@@ -211,9 +254,8 @@ def construir_correo_continuacion_automatica(*, recipient, connection=None):
             'completar la firma.'
         ),
         'course_authorized': False,
-        'email_logo_url': str(
-            getattr(settings, 'EDUCATION_EMAIL_LOGO_URL', '')
-        ).strip(),
+        **_presentacion_decision(TipoDecisionRevisionEducativa.APPROVED),
+        'email_logo_url': obtener_email_logo_url(),
     }
     texto = render_to_string(
         'emails/financiacion_educativa/decision_estado.txt', contexto
@@ -256,9 +298,8 @@ def construir_correo_decision_educativa(
         'title': titulos[decision.tipo],
         'message': decision.mensaje_solicitante,
         'course_authorized': False,
-        'email_logo_url': str(
-            getattr(settings, 'EDUCATION_EMAIL_LOGO_URL', '')
-        ).strip(),
+        **_presentacion_decision(decision.tipo),
+        'email_logo_url': obtener_email_logo_url(),
     }
     texto = render_to_string(
         'emails/financiacion_educativa/decision_estado.txt',
@@ -283,6 +324,8 @@ def construir_correo_expediente_recibido(
     *,
     recipient,
     referencia_externa,
+    program_name='',
+    course_name='',
     cc=None,
     connection=None,
 ):
@@ -296,6 +339,9 @@ def construir_correo_expediente_recibido(
     contexto = {
         'brand_name': 'Aprobado',
         'referencia_externa': str(referencia_externa or '').strip(),
+        'program_name': str(program_name or '').strip(),
+        'course_name': str(course_name or '').strip(),
+        'email_logo_url': obtener_email_logo_url(),
     }
     texto = render_to_string(
         'emails/financiacion_educativa/expediente_recibido.txt',
@@ -311,6 +357,73 @@ def construir_correo_expediente_recibido(
         from_email=settings.DEFAULT_FROM_EMAIL,
         to=[recipient],
         cc=destinatarios_copia,
+        connection=connection,
+    )
+    mensaje.attach_alternative(html, 'text/html')
+    return mensaje
+
+
+def _url_detalle_operativo(solicitud):
+    base = str(getattr(settings, 'BRAND_PUBLIC_BASE_URL', '')).rstrip('/')
+    partes = urlsplit(base)
+    if partes.scheme not in {'http', 'https'} or not partes.netloc:
+        return ''
+    if partes.scheme != 'https' and not settings.DEBUG:
+        return ''
+    ruta = reverse(
+        'financiacion_educativa_web:operaciones:solicitud-detalle',
+        kwargs={'application_id': solicitud.pk},
+    )
+    return f'{base}{ruta}'
+
+
+def construir_correo_nueva_solicitud_interna(
+    *,
+    solicitud,
+    recipients,
+    connection=None,
+):
+    destinatarios = []
+    for correo in recipients or []:
+        normalizado = normalizar_destinatario(correo)
+        if normalizado not in destinatarios:
+            destinatarios.append(normalizado)
+    if not destinatarios:
+        raise ConfiguracionSMTPInvalida(
+            'La notificacion interna requiere destinatarios validos.'
+        )
+    obtener_estado = getattr(solicitud, 'get_estado_display', None)
+    estado = (
+        obtener_estado()
+        if callable(obtener_estado)
+        else str(getattr(solicitud, 'estado', '') or 'Recibida')
+    )
+    contexto = {
+        'brand_name': 'Aprobado',
+        'reference': solicitud.referencia_externa,
+        'program_name': solicitud.institucion.nombre_comercial,
+        'course_name': solicitud.nombre_curso,
+        'applicant_name': f'{solicitud.nombres} {solicitud.apellidos}'.strip(),
+        'requested_amount': solicitud.valor_plan,
+        'created_at': solicitud.creada_en,
+        'status_label': estado,
+        'masked_document': solicitud.identificacion_estudiante_enmascarada,
+        'detail_url': _url_detalle_operativo(solicitud),
+        'email_logo_url': obtener_email_logo_url(),
+    }
+    texto = render_to_string(
+        'emails/financiacion_educativa/nueva_solicitud_interna.txt',
+        contexto,
+    )
+    html = render_to_string(
+        'emails/financiacion_educativa/nueva_solicitud_interna.html',
+        contexto,
+    )
+    mensaje = EmailMultiAlternatives(
+        subject=f'Nueva solicitud educativa | {solicitud.referencia_externa}',
+        body=texto,
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        to=destinatarios,
         connection=connection,
     )
     mensaje.attach_alternative(html, 'text/html')
@@ -462,9 +575,7 @@ def construir_correos_prueba(*, destinatario, connection=None):
             'boton': muestra.boton,
             'nota': muestra.nota,
             'action_url': URL_MUESTRA_INERTE,
-            'email_logo_url': str(
-                getattr(settings, 'EDUCATION_EMAIL_LOGO_URL', '')
-            ).strip(),
+        'email_logo_url': obtener_email_logo_url(),
         }
         texto = render_to_string(
             'emails/financiacion_educativa/muestra_estado.txt',

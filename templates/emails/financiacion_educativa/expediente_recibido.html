@@ -1,31 +1,16 @@
-<!doctype html>
-<html lang="es">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Expediente recibido</title>
-</head>
-<body style="margin:0;background:#f4f7fb;color:#10233f;font-family:Arial,sans-serif;">
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f4f7fb;padding:24px;">
-        <tr>
-            <td align="center">
-                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:620px;background:#ffffff;border:1px solid #dce4ee;">
-                    <tr>
-                        <td style="padding:32px;">
-                            <p style="margin:0 0 10px;color:#087ea4;font-size:13px;font-weight:bold;">{{ brand_name }}</p>
-                            <h1 style="margin:0 0 18px;font-size:26px;">Expediente recibido</h1>
-                            <p style="margin:0 0 18px;line-height:1.6;">
-                                Recibimos los documentos de tu solicitud de financiaci&oacute;n educativa.
-                            </p>
-                            <p style="margin:0 0 18px;line-height:1.6;"><strong>Referencia:</strong> {{ referencia_externa }}</p>
-                            <p style="margin:0;line-height:1.6;">
-                                El expediente qued&oacute; disponible para validaci&oacute;n. Te informaremos cuando exista un nuevo paso.
-                            </p>
-                        </td>
-                    </tr>
-                </table>
-            </td>
-        </tr>
-    </table>
-</body>
-</html>
+{% extends "emails/financiacion_educativa/_base.html" %}
+{% block email_title %}Expediente recibido{% endblock %}
+{% block preheader %}Recibimos los documentos de tu solicitud educativa.{% endblock %}
+{% block content %}
+  {% include "emails/financiacion_educativa/_status_badge.html" with badge_text="Informacion recibida" badge_background="#EAF7EE" badge_color="#237A43" %}
+  <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:0 0 18px;"><tr><td width="46" height="46" align="center" valign="middle" bgcolor="#EAF7EE" style="width:46px;height:46px;border:1px solid #33A55A;border-radius:24px;color:#237A43;font-size:22px;line-height:22px;font-weight:800;">&#10003;</td></tr></table>
+  <h1 class="email-title" style="margin:0 0 14px;font-size:26px;line-height:32px;font-weight:800;color:#0B2E59;">Expediente recibido</h1>
+  <p style="margin:0 0 24px;font-size:15px;line-height:23px;color:#5B6B82;">Recibimos los documentos de tu solicitud de financiaci&oacute;n educativa.</p>
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;margin:0 0 24px;background-color:#F5F8FC;border:1px solid #E6EBF2;border-radius:8px;overflow:hidden;border-collapse:separate;">
+    {% if program_name %}{% include "emails/financiacion_educativa/_information_field.html" with label="Programa" value=program_name %}{% endif %}
+    {% if course_name %}{% include "emails/financiacion_educativa/_information_field.html" with label="Curso" value=course_name %}{% endif %}
+    {% include "emails/financiacion_educativa/_information_field.html" with label="Referencia" value=referencia_externa %}
+    {% include "emails/financiacion_educativa/_information_field.html" with label="Estado" value="Disponible para validación" is_last=True %}
+  </table>
+  <p style="margin:0;font-size:15px;line-height:23px;color:#5B6B82;">Te informaremos cuando exista un nuevo paso en el proceso. No necesitas realizar ninguna acci&oacute;n por ahora.</p>
+{% endblock %}

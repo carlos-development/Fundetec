@@ -1,71 +1,12 @@
-<!doctype html>
-<html lang="es">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="x-apple-disable-message-reformatting">
-  <title>Continúa la captura desde tu celular</title>
-</head>
-<body style="margin:0;padding:0;background:#f3f7f9;color:#172634;font-family:Arial,sans-serif;">
-  <div style="display:none;max-height:0;overflow:hidden;opacity:0;">
-    Enlace seguro y de un solo uso para continuar la verificación de identidad.
-  </div>
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;background:#f3f7f9;">
-    <tr>
-      <td align="center" style="padding:24px 12px;">
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:600px;background:#ffffff;border:1px solid #dbe4ea;border-collapse:collapse;">
-          <tr>
-            <td style="height:7px;background:#28aae1;font-size:0;line-height:0;">&nbsp;</td>
-          </tr>
-          <tr>
-            <td style="padding:28px 32px 16px;">
-              {% if email_logo_url %}
-                <img src="{{ email_logo_url }}" width="142" alt="Aprobado" style="display:block;width:142px;max-width:100%;height:auto;border:0;">
-              {% else %}
-                <strong style="font-size:21px;color:#071827;">APROBADO</strong>
-              {% endif %}
-            </td>
-          </tr>
-          <tr>
-            <td style="padding:8px 32px 32px;">
-              {% if es_prueba %}
-                <p style="display:inline-block;margin:0 0 16px;padding:5px 9px;background:#fff3bf;color:#624b00;font-size:11px;font-weight:bold;">MUESTRA DE CORREO</p>
-              {% endif %}
-              <h1 style="margin:0 0 16px;color:#071827;font-size:25px;line-height:1.25;">Continúa la captura desde tu celular</h1>
-              <p style="margin:0 0 16px;color:#334b5c;font-size:15px;line-height:1.6;">
-                Solicitaste continuar la verificación de identidad desde otro dispositivo. El botón abre la captura del frente y el reverso de tu documento.
-              </p>
-              <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:24px 0;">
-                <tr>
-                  <td bgcolor="#28aae1" style="background:#28aae1;">
-                    <a href="{{ continuation_url }}" style="display:inline-block;padding:14px 22px;color:#071827;text-decoration:none;font-size:15px;font-weight:bold;">Continuar desde mi celular</a>
-                  </td>
-                </tr>
-              </table>
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;margin:0 0 20px;background:#f7fafb;border-left:4px solid #ffdc38;">
-                <tr>
-                  <td style="padding:15px 16px;color:#334b5c;font-size:14px;line-height:1.55;">
-                    El enlace vence en 30 minutos, solo puede utilizarse una vez y no debe compartirse.
-                  </td>
-                </tr>
-              </table>
-              <p style="margin:0 0 8px;color:#526879;font-size:13px;line-height:1.55;">Si el botón no funciona, abre este enlace desde tu celular:</p>
-              <p style="margin:0 0 20px;color:#1178a8;font-size:12px;line-height:1.5;word-break:break-all;">
-                <a href="{{ continuation_url }}" style="color:#1178a8;">{{ continuation_url }}</a>
-              </p>
-              <p style="margin:0;color:#526879;font-size:13px;line-height:1.55;">
-                Si no solicitaste este mensaje, puedes ignorarlo. Aprobado nunca te pedirá tu contraseña por correo.
-              </p>
-            </td>
-          </tr>
-          <tr>
-            <td style="padding:20px 32px;background:#071827;color:#d9e5ec;font-size:12px;line-height:1.5;">
-              Este es un mensaje de seguridad de {{ brand_name }}. No respondas con documentos ni información confidencial.
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>
-  </table>
-</body>
-</html>
+{% extends "emails/financiacion_educativa/_base.html" %}
+{% block email_title %}Continua la captura desde tu celular{% endblock %}
+{% block preheader %}Enlace seguro y de un solo uso para continuar la verificacion de identidad.{% endblock %}
+{% block content %}
+  {% if es_prueba %}{% include "emails/financiacion_educativa/_status_badge.html" with badge_text="Muestra de correo" badge_background="#EAF2FE" badge_color="#2D7FE0" %}{% else %}{% include "emails/financiacion_educativa/_status_badge.html" with badge_text="Verificacion de identidad" badge_background="#FFF3D6" badge_color="#8A6A00" %}{% endif %}
+  <h1 class="email-title" style="margin:0 0 14px;font-size:26px;line-height:32px;font-weight:800;color:#0B2E59;">Contin&uacute;a la captura desde tu celular</h1>
+  <p style="margin:0 0 22px;font-size:15px;line-height:23px;color:#5B6B82;">Solicitaste continuar la verificaci&oacute;n de identidad desde otro dispositivo. El enlace abre la captura segura del documento solicitado.</p>
+  {% include "emails/financiacion_educativa/_cta_button.html" with action_url=continuation_url action_label="Continuar desde mi celular" %}
+  {% with warning_text="El enlace vence en 30 minutos, es de un solo uso y no debe compartirse." %}{% include "emails/financiacion_educativa/_warning_box.html" %}{% endwith %}
+  {% include "emails/financiacion_educativa/_alternate_link.html" with link_intro="Si el boton no funciona, abre este enlace desde tu celular:" action_url=continuation_url %}
+  <p style="margin:20px 0 0;font-size:13px;line-height:20px;color:#8A97A8;">Si no solicitaste este mensaje, puedes ignorarlo. Aprobado nunca te pedir&aacute; tu contrase&ntilde;a por correo.</p>
+{% endblock %}

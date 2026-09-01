@@ -132,6 +132,7 @@ def pdf(nombre):
 
 @override_settings(
     EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
+    EDUCATIONAL_OPERATIONS_NOTIFICATION_EMAILS=[],
     EMAIL_QA_MODE=False,
     EMAIL_LIVE_DELIVERY_ENABLED=False,
     FINANCIACION_EDUCATIVA_AUTOMATION_ENABLED=True,

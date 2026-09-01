@@ -93,6 +93,7 @@ def jpeg(nombre):
 @override_settings(
     BRAND_PUBLIC_BASE_URL='https://credito.example.com',
     FINANCIACION_EDUCATIVA_INVITATION_DELIVERY_BACKEND=BACKEND,
+    EDUCATIONAL_OPERATIONS_NOTIFICATION_EMAILS=[],
 )
 class FlujoIntegralFinanciacionEducativaTests(APITestCase):
     def setUp(self):

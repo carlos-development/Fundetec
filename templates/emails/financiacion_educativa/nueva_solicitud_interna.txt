@@ -1,0 +1,16 @@
+Nueva solicitud educativa
+
+Se registro una solicitud valida para seguimiento operativo. Esta notificacion no representa una decision.
+
+Referencia: {{ reference }}
+Programa: {{ program_name }}
+Curso: {{ course_name }}
+Solicitante: {{ applicant_name }}
+{% if masked_document %}Documento: {{ masked_document }}
+{% endif %}Valor solicitado: COP ${{ requested_amount|floatformat:0 }}
+Fecha: {{ created_at|date:"d/m/Y H:i T" }}
+Estado: {{ status_label }}
+{% if detail_url %}
+Ver solicitud:
+{{ detail_url }}
+{% endif %}
