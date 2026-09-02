@@ -14,6 +14,7 @@ from financiacion_educativa.choices import (
     EstadoValidacionDocumento,
     MotivoRechazoDocumento,
     OrigenCapturaDocumento,
+    ORIGENES_CAPTURA_IDENTIDAD,
     RolParticipante,
     TipoDocumentoFinanciacion,
     TIPOS_DOCUMENTO_IDENTIDAD_CAMARA,
@@ -160,7 +161,7 @@ def registrar_documento(
     if archivo:
         datos_archivo = _validar_archivo(archivo)
         if tipo in TIPOS_CAPTURA_CAMARA:
-            if origen_captura != OrigenCapturaDocumento.CAMERA:
+            if origen_captura not in ORIGENES_CAPTURA_IDENTIDAD:
                 raise ValidationError({
                     'archivo': 'La identificacion debe capturarse desde la camara.',
                 })
@@ -168,7 +169,7 @@ def registrar_documento(
                 raise ValidationError({
                     'archivo': 'La captura de identificacion debe ser una imagen.',
                 })
-        elif origen_captura == OrigenCapturaDocumento.CAMERA:
+        elif origen_captura in ORIGENES_CAPTURA_IDENTIDAD:
             raise ValidationError({
                 'tipo': 'El origen camara solo admite capturas de identificacion.',
             })
@@ -256,7 +257,7 @@ def reemplazar_documento(
         raise ValidationError('El documento ya fue reemplazado.')
     if (
         anterior.tipo in TIPOS_CAPTURA_CAMARA
-        and origen_captura != OrigenCapturaDocumento.CAMERA
+        and origen_captura not in ORIGENES_CAPTURA_IDENTIDAD
     ):
         raise ValidationError(
             'La identificacion solo puede reemplazarse desde la camara.'

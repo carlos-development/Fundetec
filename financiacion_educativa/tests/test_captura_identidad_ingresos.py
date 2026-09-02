@@ -119,10 +119,13 @@ class CapturaIdentidadEIngresosTests(TestCase):
             participante_id=participante_id,
         )
 
-    def _capturar(self, lado, archivo):
+    def _capturar(self, lado, archivo, *, metodo='webrtc'):
+        datos = {'lado': lado, 'captura': archivo}
+        if metodo is not None:
+            datos['metodo_captura'] = metodo
         return self.client.post(
             self.url_camara,
-            {'lado': lado, 'captura': archivo},
+            datos,
         )
 
     def _autorizar_captura_movil(self, cliente=None):
@@ -156,31 +159,71 @@ class CapturaIdentidadEIngresosTests(TestCase):
         respuesta = self.client.get(self.url_camara)
 
         self.assertEqual(respuesta.status_code, 200)
-        self.assertContains(respuesta, 'data-camera-capture')
+        self.assertContains(respuesta, 'data-identity-camera')
         self.assertContains(respuesta, 'data-camera-video')
         self.assertContains(respuesta, 'type="file"')
-        self.assertContains(respuesta, 'accept="image/*"')
+        self.assertContains(respuesta, 'accept="image/jpeg,image/png"')
         self.assertContains(respuesta, 'capture="environment"')
+        self.assertContains(respuesta, 'Abrir c&aacute;mara del tel&eacute;fono')
+        self.assertNotContains(respuesta, 'Usar modalidad alternativa')
+        self.assertNotContains(respuesta, 'Seleccionar archivo')
+        self.assertNotContains(respuesta, 'Subir desde galer&iacute;a')
         self.assertContains(respuesta, 'data-min-width="800"')
         self.assertContains(respuesta, 'data-min-height="500"')
+        for estado in (
+            'INTRO',
+            'REQUESTING_PERMISSION',
+            'LIVE_CAMERA',
+            'CAPTURED_REVIEW',
+            'UPLOADING',
+            'COMPLETED',
+            'PERMISSION_DENIED',
+            'CAMERA_UNAVAILABLE',
+            'UPLOAD_ERROR',
+        ):
+            self.assertContains(respuesta, estado)
+        self.assertContains(respuesta, 'Usar foto')
+        self.assertContains(respuesta, 'Repetir')
+        self.assertContains(respuesta, 'Safari para iPhone')
+        self.assertContains(respuesta, 'Chrome para Android')
+        self.assertNotContains(respuesta, 'linterna', html=False)
+        self.assertNotContains(respuesta, 'selfie', html=False)
+        self.assertNotContains(respuesta, 'biometr', html=False)
         javascript = (
             Path(settings.BASE_DIR)
             / 'static'
             / 'js'
-            / 'financiacion_educativa.js'
+            / 'financiacion_educativa_camara.js'
         ).read_text(encoding='utf-8')
-        self.assertIn('navigator.mediaDevices.getUserMedia', javascript)
+        self.assertIn('mediaDevices.getUserMedia', javascript)
         self.assertIn("facingMode: { ideal: 'environment' }", javascript)
         self.assertIn('NotAllowedError', javascript)
         self.assertIn('NotFoundError', javascript)
         self.assertIn('track.stop()', javascript)
-        self.assertIn('const evaluarCalidad', javascript)
-        self.assertIn('const variance', javascript)
-        repeat_handler = javascript.split(
-            "repeatButton.addEventListener('click'", 1
-        )[1].split('});', 1)[0]
-        self.assertIn('stopCamera();', repeat_handler)
-        self.assertIn("window.addEventListener('pagehide', stopCamera)", javascript)
+        self.assertIn('getCapabilities', javascript)
+        self.assertIn('applyConstraints', javascript)
+        self.assertIn('takePhoto', javascript)
+        self.assertIn('revokeObjectURL', javascript)
+        self.assertNotIn('localStorage', javascript)
+        self.assertNotIn('sessionStorage', javascript)
+        self.assertNotIn('torch', javascript.casefold())
+
+    def test_escritorio_solo_muestra_handoff_y_no_renderiza_camara(self):
+        self.client.force_login(self.usuario)
+
+        respuesta = self.client.get(
+            self.url_camara,
+            HTTP_USER_AGENT=(
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+                'AppleWebKit/537.36 Chrome/126.0 Safari/537.36'
+            ),
+        )
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertContains(respuesta, 'Contin&uacute;a la captura en tu tel&eacute;fono')
+        self.assertContains(respuesta, 'Enviar enlace a mi correo')
+        self.assertNotContains(respuesta, 'data-identity-camera')
+        self.assertNotContains(respuesta, 'data-camera-video')
 
     def test_captura_frente_y_reverso_como_evidencias_distintas(self):
         self._autorizar_captura_movil()
@@ -204,7 +247,7 @@ class CapturaIdentidadEIngresosTests(TestCase):
         )
         self.assertTrue(
             all(
-                origen == OrigenCapturaDocumento.CAMERA
+                origen == OrigenCapturaDocumento.WEBRTC_CAMERA
                 for origen in documentos.values_list(
                     'origen_captura',
                     flat=True,
@@ -250,6 +293,7 @@ class CapturaIdentidadEIngresosTests(TestCase):
             {
                 'lado': 'frente',
                 'captura': jpeg(marca=b'segunda'),
+                'metodo_captura': 'webrtc',
                 'confirmar_reemplazo': '1',
             },
         )
@@ -263,7 +307,64 @@ class CapturaIdentidadEIngresosTests(TestCase):
             activo=True,
         )
         self.assertEqual(actual.reemplaza_a, anterior)
-        self.assertEqual(actual.origen_captura, OrigenCapturaDocumento.CAMERA)
+        self.assertEqual(
+            actual.origen_captura,
+            OrigenCapturaDocumento.WEBRTC_CAMERA,
+        )
+
+    def test_control_nativo_del_telefono_registra_origen_diferenciado(self):
+        self._autorizar_captura_movil()
+
+        respuesta = self._capturar(
+            'frente',
+            jpeg(marca=b'nativa'),
+            metodo='native',
+        )
+
+        self.assertEqual(respuesta.status_code, 200)
+        documento = self.solicitud.documentos.get(
+            tipo=TipoDocumentoFinanciacion.STUDENT_ID_FRONT,
+            activo=True,
+        )
+        self.assertEqual(
+            documento.origen_captura,
+            OrigenCapturaDocumento.NATIVE_CAMERA_FALLBACK,
+        )
+
+    def test_modalidad_ausente_o_manipulada_se_rechaza_sin_persistir(self):
+        self._autorizar_captura_movil()
+
+        for indice, metodo in enumerate(
+            (None, '', 'CAMERA', 'USER_UPLOAD', 'WEBRTC_CAMERA', 'desconocido')
+        ):
+            with self.subTest(metodo=metodo):
+                respuesta = self._capturar(
+                    'frente',
+                    jpeg(marca=f'manipulada-{indice}'.encode()),
+                    metodo=metodo,
+                )
+                self.assertEqual(respuesta.status_code, 400)
+                self.assertEqual(
+                    respuesta.json()['error'],
+                    'La modalidad de captura no esta permitida.',
+                )
+        self.assertFalse(self.solicitud.documentos.exists())
+
+    def test_origen_camera_historico_se_conserva_sin_reinterpretacion(self):
+        documento = registrar_documento(
+            solicitud=self.solicitud,
+            participante=self.estudiante,
+            tipo=TipoDocumentoFinanciacion.STUDENT_ID_FRONT,
+            origen_captura=OrigenCapturaDocumento.CAMERA,
+            archivo=jpeg(marca=b'historica'),
+            actor=self.usuario,
+        )
+
+        documento.refresh_from_db()
+        self.assertEqual(
+            documento.origen_captura,
+            OrigenCapturaDocumento.CAMERA,
+        )
 
     def test_camara_rechaza_pdf_y_servicio_rechaza_carga_convencional(self):
         self._autorizar_captura_movil()

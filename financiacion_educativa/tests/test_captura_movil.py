@@ -444,7 +444,11 @@ class CapturaMovilTests(TestCase):
         captura_url = continuar.url
         captura = movil.post(
             captura_url,
-            {'lado': 'frente', 'captura': jpeg()},
+            {
+                'lado': 'frente',
+                'captura': jpeg(),
+                'metodo_captura': 'webrtc',
+            },
         )
 
         self.assertEqual(captura.status_code, 200)
@@ -493,17 +497,26 @@ class CapturaMovilTests(TestCase):
 
         primera = movil.post(
             captura_url,
-            {'lado': 'frente', 'captura': jpeg('primera.jpg', b'primera')},
+            {
+                'lado': 'frente',
+                'captura': jpeg('primera.jpg', b'primera'),
+                'metodo_captura': 'webrtc',
+            },
         )
         sin_confirmar = movil.post(
             captura_url,
-            {'lado': 'frente', 'captura': jpeg('segunda.jpg', b'segunda')},
+            {
+                'lado': 'frente',
+                'captura': jpeg('segunda.jpg', b'segunda'),
+                'metodo_captura': 'webrtc',
+            },
         )
         confirmada = movil.post(
             captura_url,
             {
                 'lado': 'frente',
                 'captura': jpeg('segunda.jpg', b'segunda'),
+                'metodo_captura': 'webrtc',
                 'confirmar_reemplazo': '1',
             },
         )

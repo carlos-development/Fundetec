@@ -135,6 +135,10 @@ MIME_PREVISUALIZABLES = {
     'image/jpeg',
     'image/png',
 }
+ORIGEN_CAPTURA_POR_METODO_CLIENTE = {
+    'webrtc': OrigenCapturaDocumento.WEBRTC_CAMERA,
+    'native': OrigenCapturaDocumento.NATIVE_CAMERA_FALLBACK,
+}
 
 
 def _sin_referer(response):
@@ -913,9 +917,20 @@ def capturar_identidad_view(request, solicitud_id, persona):
             )
         tipo = configuracion.get(lado)
         captura = request.FILES.get('captura')
+        origen_captura = ORIGEN_CAPTURA_POR_METODO_CLIENTE.get(
+            request.POST.get('metodo_captura', '')
+        )
         if not tipo or not captura:
             return JsonResponse(
                 {'ok': False, 'error': 'Indica el lado y realiza la captura.'},
+                status=400,
+            )
+        if not origen_captura:
+            return JsonResponse(
+                {
+                    'ok': False,
+                    'error': 'La modalidad de captura no esta permitida.',
+                },
                 status=400,
             )
         existente = solicitud.documentos.filter(
@@ -940,14 +955,14 @@ def capturar_identidad_view(request, solicitud_id, persona):
                     documento=existente,
                     archivo=captura,
                     actor=request.user,
-                    origen_captura=OrigenCapturaDocumento.CAMERA,
+                    origen_captura=origen_captura,
                 )
             else:
                 documento = registrar_documento(
                     solicitud=solicitud,
                     participante=participante,
                     tipo=tipo,
-                    origen_captura=OrigenCapturaDocumento.CAMERA,
+                    origen_captura=origen_captura,
                     archivo=captura,
                     actor=request.user,
                 )

@@ -47,6 +47,7 @@ from .choices import (
     OrigenIntentoEscaneoDocumento,
     OrigenValidacionIADocumento,
     OrigenCapturaDocumento,
+    ORIGENES_CAPTURA_IDENTIDAD,
     PoliticaCausacionInteres,
     PoliticaRedondeoFinanciero,
     PropositoInvitacionContinuacion,
@@ -1176,7 +1177,9 @@ class DocumentoFinanciacion(models.Model):
             models.CheckConstraint(
                 condition=(
                     ~models.Q(tipo__in=TIPOS_DOCUMENTO_IDENTIDAD_CAMARA)
-                    | models.Q(origen_captura=OrigenCapturaDocumento.CAMERA)
+                    | models.Q(
+                        origen_captura__in=ORIGENES_CAPTURA_IDENTIDAD
+                    )
                 ),
                 name='doc_identidad_origen_camara',
             ),
@@ -1190,7 +1193,7 @@ class DocumentoFinanciacion(models.Model):
         super().clean()
         if (
             self.tipo in TIPOS_DOCUMENTO_IDENTIDAD_CAMARA
-            and self.origen_captura != OrigenCapturaDocumento.CAMERA
+            and self.origen_captura not in ORIGENES_CAPTURA_IDENTIDAD
         ):
             raise ValidationError({
                 'origen_captura': (

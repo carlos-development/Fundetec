@@ -165,7 +165,19 @@ class OrigenCapturaDocumento(models.TextChoices):
     INSTITUTION_API = 'INSTITUTION_API', 'API institucional'
     USER_UPLOAD = 'USER_UPLOAD', 'Carga del usuario'
     CAMERA = 'CAMERA', 'Camara'
+    WEBRTC_CAMERA = 'WEBRTC_CAMERA', 'Camara WebRTC'
+    NATIVE_CAMERA_FALLBACK = (
+        'NATIVE_CAMERA_FALLBACK',
+        'Camara nativa del telefono',
+    )
     INTERNAL = 'INTERNAL', 'Generado internamente'
+
+
+ORIGENES_CAPTURA_IDENTIDAD = (
+    OrigenCapturaDocumento.CAMERA,
+    OrigenCapturaDocumento.WEBRTC_CAMERA,
+    OrigenCapturaDocumento.NATIVE_CAMERA_FALLBACK,
+)
 
 
 class MetodoCalculoFinanciero(models.TextChoices):
