@@ -3,7 +3,13 @@ from unittest.mock import patch
 
 from django.test import SimpleTestCase, override_settings
 from pypdf import PdfWriter
-from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
+from pypdf.generic import (
+    ArrayObject,
+    DecodedStreamObject,
+    DictionaryObject,
+    NameObject,
+    TextStringObject,
+)
 
 from financiacion_educativa.services.procesamiento_pdf import (
     ErrorProcesamientoPDF,
@@ -34,6 +40,15 @@ def pdf_sintetico(*, textos=('',), cifrado=False):
             pagina[NameObject('/Contents')] = writer._add_object(flujo)
     if cifrado:
         writer.encrypt('clave-prueba')
+    salida = BytesIO()
+    writer.write(salida)
+    return salida.getvalue()
+
+
+def pdf_configurado(configurar):
+    writer = PdfWriter()
+    writer.add_blank_page(width=612, height=792)
+    configurar(writer)
     salida = BytesIO()
     writer.write(salida)
     return salida.getvalue()
@@ -108,18 +123,101 @@ class ProcesamientoPDFSeguroTests(SimpleTestCase):
     def test_rechaza_archivo_demasiado_grande(self):
         self.assert_codigo(pdf_sintetico(), 'PDF_TOO_LARGE')
 
-    def test_rechaza_contenido_activo(self):
-        error = self.assert_codigo(
-            b'%PDF-1.7\n/OpenAction /JavaScript\n%%EOF',
-            'PDF_ACTIVE_CONTENT',
+    def test_tokens_accidentales_en_stream_no_son_contenido_activo(self):
+        resultado = procesar_pdf_seguro(
+            pdf_sintetico(textos=('/JavaScript /OpenAction /Launch',))
         )
-        self.assertTrue(error.metadata['contenido_activo_detectado'])
+
+        self.assertEqual(resultado.numero_paginas, 1)
+        self.assertFalse(resultado.contenido_activo_detectado)
+
+    def test_enlace_uri_pasivo_continua(self):
+        resultado = procesar_pdf_seguro(pdf_configurado(
+            lambda writer: writer.add_uri(
+                0,
+                'https://example.invalid/documento',
+                (10, 10, 100, 30),
+            )
+        ))
+
+        self.assertEqual(resultado.numero_paginas, 1)
+
+    def test_formulario_pasivo_sin_javascript_continua(self):
+        def configurar(writer):
+            writer._root_object[NameObject('/AcroForm')] = writer._add_object(
+                DictionaryObject({NameObject('/Fields'): ArrayObject()})
+            )
+
+        resultado = procesar_pdf_seguro(pdf_configurado(configurar))
+
+        self.assertEqual(resultado.numero_paginas, 1)
+
+    def test_rechaza_javascript_estructural_con_codigo_exacto(self):
+        error = self.assert_codigo(
+            pdf_configurado(lambda writer: writer.add_js('void(0);')),
+            'PDF_JAVASCRIPT',
+        )
+        self.assertEqual(
+            error.metadata['caracteristicas_seguridad'],
+            ['JAVASCRIPT'],
+        )
+
+    def test_rechaza_open_action_estructural_con_codigo_exacto(self):
+        def configurar(writer):
+            writer._root_object[NameObject('/OpenAction')] = DictionaryObject({
+                NameObject('/S'): NameObject('/Named'),
+                NameObject('/N'): NameObject('/Print'),
+            })
+
+        self.assert_codigo(
+            pdf_configurado(configurar),
+            'PDF_OPEN_ACTION',
+        )
+
+    def test_rechaza_launch_estructural_con_codigo_exacto(self):
+        def configurar(writer):
+            writer._root_object[NameObject('/OpenAction')] = DictionaryObject({
+                NameObject('/S'): NameObject('/Launch'),
+                NameObject('/F'): TextStringObject('programa-no-ejecutable'),
+            })
+
+        self.assert_codigo(
+            pdf_configurado(configurar),
+            'PDF_LAUNCH_ACTION',
+        )
+
+    def test_rechaza_accion_adicional_con_codigo_exacto(self):
+        def configurar(writer):
+            writer._root_object[NameObject('/AA')] = DictionaryObject({
+                NameObject('/WC'): DictionaryObject({
+                    NameObject('/S'): NameObject('/Named'),
+                    NameObject('/N'): NameObject('/Print'),
+                }),
+            })
+
+        self.assert_codigo(
+            pdf_configurado(configurar),
+            'PDF_ADDITIONAL_ACTION',
+        )
+
+    def test_rechaza_xfa_con_codigo_exacto(self):
+        def configurar(writer):
+            writer._root_object[NameObject('/AcroForm')] = writer._add_object(
+                DictionaryObject({
+                    NameObject('/Fields'): ArrayObject(),
+                    NameObject('/XFA'): TextStringObject('xfa-sintetico'),
+                })
+            )
+
+        self.assert_codigo(
+            pdf_configurado(configurar),
+            'PDF_XFA_ACTIVE_CONTENT',
+        )
 
     def test_rechaza_adjunto_embebido(self):
-        self.assert_codigo(
-            b'%PDF-1.7\n/EmbeddedFiles\n%%EOF',
-            'PDF_EMBEDDED_FILE',
-        )
+        self.assert_codigo(pdf_configurado(
+            lambda writer: writer.add_attachment('prueba.txt', b'inofensivo')
+        ), 'PDF_EMBEDDED_FILE')
 
     @override_settings(FINANCIACION_EDUCATIVA_PDF_MAX_OBJECT_BYTES=10)
     def test_rechaza_objeto_declarado_anormalmente_grande(self):

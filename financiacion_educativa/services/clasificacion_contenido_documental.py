@@ -70,12 +70,16 @@ CODIGOS_RAZON = frozenset({
     'REQUIRED_CONTENT_MISSING',
     'TAMPERING_SIGNALS',
     'PDF_ACTIVE_CONTENT',
+    'PDF_ADDITIONAL_ACTION',
     'PDF_CORRUPT',
     'PDF_EMBEDDED_FILE',
     'PDF_ENCRYPTED',
     'PDF_INVALID_SIGNATURE',
+    'PDF_JAVASCRIPT',
+    'PDF_LAUNCH_ACTION',
     'PDF_NO_PAGES',
     'PDF_OBJECT_TOO_LARGE',
+    'PDF_OPEN_ACTION',
     'PDF_PIXEL_LIMIT_EXCEEDED',
     'PDF_PROCESSING_TIMEOUT',
     'PDF_RENDER_ERROR',
@@ -85,11 +89,163 @@ CODIGOS_RAZON = frozenset({
     'PDF_TOO_LARGE',
     'PDF_TOO_MANY_OBJECTS',
     'PDF_TOO_MANY_PAGES',
+    'PDF_RICH_MEDIA',
+    'PDF_SUBMIT_FORM',
+    'PDF_XFA_ACTIVE_CONTENT',
     'PROVIDER_ERROR',
     'INVALID_RESPONSE',
     'IMAGE_CORRUPT',
     'IMAGE_TOO_LARGE',
 })
+
+RAZONES_SEGURIDAD_PDF = frozenset({
+    'PDF_ACTIVE_CONTENT',
+    'PDF_ADDITIONAL_ACTION',
+    'PDF_EMBEDDED_FILE',
+    'PDF_JAVASCRIPT',
+    'PDF_LAUNCH_ACTION',
+    'PDF_OPEN_ACTION',
+    'PDF_RICH_MEDIA',
+    'PDF_SUBMIT_FORM',
+    'PDF_XFA_ACTIVE_CONTENT',
+})
+OBSERVACION_POR_RAZON = {
+    'CATEGORY_MISMATCH': (
+        MotivoRechazoDocumento.WRONG_DOCUMENT,
+        'El contenido no corresponde al tipo documental solicitado.',
+    ),
+    'DATA_MISMATCH': (
+        MotivoRechazoDocumento.DATA_MISMATCH,
+        'Los datos del documento no coinciden con la solicitud.',
+    ),
+    'INSTITUTION_MISMATCH': (
+        MotivoRechazoDocumento.DATA_MISMATCH,
+        'La institucion o el curso del documento no coincide con la solicitud.',
+    ),
+    'DOCUMENT_UNREADABLE': (
+        MotivoRechazoDocumento.UNREADABLE,
+        'El contenido del documento no es legible.',
+    ),
+    'PDF_CORRUPT': (
+        MotivoRechazoDocumento.UNREADABLE,
+        'El PDF esta corrupto o no puede leerse de forma segura.',
+    ),
+    'PDF_RENDER_ERROR': (
+        MotivoRechazoDocumento.UNREADABLE,
+        'El PDF no pudo representarse de forma segura.',
+    ),
+    'REQUIRED_CONTENT_MISSING': (
+        MotivoRechazoDocumento.INCOMPLETE,
+        'El documento no contiene toda la informacion requerida.',
+    ),
+    'CONTENT_INSUFFICIENT': (
+        MotivoRechazoDocumento.INCOMPLETE,
+        'El contenido aportado es insuficiente para continuar.',
+    ),
+    'PDF_EMBEDDED_FILE': (
+        MotivoRechazoDocumento.OTHER,
+        'El PDF contiene archivos incrustados. Carga una version sin adjuntos.',
+    ),
+    'PDF_JAVASCRIPT': (
+        MotivoRechazoDocumento.OTHER,
+        'El PDF contiene JavaScript. Carga una version sin contenido activo.',
+    ),
+    'PDF_OPEN_ACTION': (
+        MotivoRechazoDocumento.OTHER,
+        'El PDF contiene una accion automatica de apertura.',
+    ),
+    'PDF_ADDITIONAL_ACTION': (
+        MotivoRechazoDocumento.OTHER,
+        'El PDF contiene acciones automaticas adicionales.',
+    ),
+    'PDF_LAUNCH_ACTION': (
+        MotivoRechazoDocumento.OTHER,
+        'El PDF contiene una accion de lanzamiento no permitida.',
+    ),
+    'PDF_XFA_ACTIVE_CONTENT': (
+        MotivoRechazoDocumento.OTHER,
+        'El PDF contiene un formulario XFA activo no permitido.',
+    ),
+    'PDF_RICH_MEDIA': (
+        MotivoRechazoDocumento.OTHER,
+        'El PDF contiene contenido multimedia activo no permitido.',
+    ),
+    'PDF_SUBMIT_FORM': (
+        MotivoRechazoDocumento.OTHER,
+        'El PDF contiene una accion de envio de formulario no permitida.',
+    ),
+    'PDF_ACTIVE_CONTENT': (
+        MotivoRechazoDocumento.OTHER,
+        'El PDF contiene una caracteristica activa no permitida.',
+    ),
+    'PDF_ENCRYPTED': (
+        MotivoRechazoDocumento.OTHER,
+        'El PDF esta protegido con contrasena y no puede validarse.',
+    ),
+    'PDF_INVALID_SIGNATURE': (
+        MotivoRechazoDocumento.UNREADABLE,
+        'El archivo no tiene una estructura PDF valida.',
+    ),
+    'PDF_NO_PAGES': (
+        MotivoRechazoDocumento.UNREADABLE,
+        'El PDF no contiene paginas que puedan validarse.',
+    ),
+    'PDF_OBJECT_TOO_LARGE': (
+        MotivoRechazoDocumento.OTHER,
+        'El PDF contiene un objeto que supera el limite permitido.',
+    ),
+    'PDF_PIXEL_LIMIT_EXCEEDED': (
+        MotivoRechazoDocumento.OTHER,
+        'Una pagina del PDF supera el limite de resolucion permitido.',
+    ),
+    'PDF_TEXT_LIMIT_EXCEEDED': (
+        MotivoRechazoDocumento.OTHER,
+        'El texto del PDF supera el limite permitido.',
+    ),
+    'PDF_TOO_LARGE': (
+        MotivoRechazoDocumento.OTHER,
+        'El PDF supera el tamano permitido.',
+    ),
+    'PDF_TOO_MANY_OBJECTS': (
+        MotivoRechazoDocumento.OTHER,
+        'La estructura del PDF supera el limite permitido.',
+    ),
+    'PDF_TOO_MANY_PAGES': (
+        MotivoRechazoDocumento.OTHER,
+        'El PDF supera la cantidad de paginas permitida.',
+    ),
+}
+PRIORIDAD_RAZONES_CORRECCION = (
+    *sorted(RAZONES_SEGURIDAD_PDF),
+    'PDF_ENCRYPTED',
+    'DATA_MISMATCH',
+    'INSTITUTION_MISMATCH',
+    'CATEGORY_MISMATCH',
+    'DOCUMENT_UNREADABLE',
+    'PDF_CORRUPT',
+    'PDF_RENDER_ERROR',
+    'REQUIRED_CONTENT_MISSING',
+    'CONTENT_INSUFFICIENT',
+    'PDF_INVALID_SIGNATURE',
+    'PDF_NO_PAGES',
+    'PDF_OBJECT_TOO_LARGE',
+    'PDF_PIXEL_LIMIT_EXCEEDED',
+    'PDF_TEXT_LIMIT_EXCEEDED',
+    'PDF_TOO_LARGE',
+    'PDF_TOO_MANY_OBJECTS',
+    'PDF_TOO_MANY_PAGES',
+)
+
+
+def resolver_rechazo_contenido(codigos_razon):
+    razones = set(codigos_razon)
+    for codigo in PRIORIDAD_RAZONES_CORRECCION:
+        if codigo in razones and codigo in OBSERVACION_POR_RAZON:
+            return OBSERVACION_POR_RAZON[codigo]
+    return (
+        MotivoRechazoDocumento.OTHER,
+        'El documento requiere correccion antes de continuar.',
+    )
 
 
 class ErrorClasificacionContenido(Exception):
@@ -190,7 +346,10 @@ class OpenAIContentDocumentClassificationBackend:
                             'type': 'input_text',
                             'text': (
                                 'Clasifica evidencia documental educativa sin evaluar '
-                                'solvencia, riesgo o autenticidad oficial. No infieras '
+                                'solvencia, riesgo o autenticidad oficial. Para evidencia '
+                                'de ingresos admite certificados laborales, comprobantes '
+                                'de nomina, extractos y certificados de ingresos o de '
+                                'ingresos y retenciones; no exijas un titulo literal. No infieras '
                                 'datos ausentes. Los numeros de cuenta no deben '
                                 'devolverse. Una duda legitima produce MANUAL_EXCEPTION; '
                                 'un documento distinto o contradictorio produce '
@@ -714,6 +873,25 @@ def _finalizar(
                 metadata_pdf.get('contenido_activo_detectado')
             ),
         )
+        caracteristicas = metadata_pdf.get('caracteristicas_seguridad', ())
+        permitidas = {
+            'ADDITIONAL_ACTION',
+            'EMBEDDED_FILE',
+            'JAVASCRIPT',
+            'LAUNCH_ACTION',
+            'OPEN_ACTION',
+            'RICH_MEDIA',
+            'SUBMIT_FORM',
+            'XFA',
+        }
+        seguras = sorted({
+            valor for valor in caracteristicas
+            if isinstance(valor, str) and valor in permitidas
+        })
+        if seguras:
+            valores['campos_estructurados'] = {
+                'pdf_security_features': seguras,
+            }
     if resultado:
         valores.update(
             clasificacion=resultado.categoria,
@@ -750,13 +928,11 @@ def _finalizar(
         documento.revisado_en = timezone.now()
     elif estado == EstadoProcesamientoContenidoDocumento.CORRECTION_REQUIRED:
         documento.estado_validacion = EstadoValidacionDocumento.REJECTED
-        documento.motivo_rechazo = (
-            MotivoRechazoDocumento.DATA_MISMATCH
-            if {'DATA_MISMATCH', 'INSTITUTION_MISMATCH'} & set(razones)
-            else MotivoRechazoDocumento.WRONG_DOCUMENT
-        )
-        documento.observacion_revision = (
-            'El contenido aportado requiere correccion antes de continuar.'
+        (
+            documento.motivo_rechazo,
+            documento.observacion_revision,
+        ) = resolver_rechazo_contenido(
+            razones
         )
         documento.revisado_por = None
         documento.revisado_en = timezone.now()

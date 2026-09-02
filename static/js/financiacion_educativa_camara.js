@@ -76,6 +76,19 @@
         stream.getTracks().forEach(function (track) { track.stop(); });
     }
 
+    function isAppleTouchDesktop(navigatorObject) {
+        if (!navigatorObject) return false;
+        const userAgent = String(navigatorObject.userAgent || '').toLowerCase();
+        const platform = String(navigatorObject.platform || '').toLowerCase();
+        const touchPoints = Number(navigatorObject.maxTouchPoints || 0);
+        const appleDesktopSignature = (
+            userAgent.includes('macintosh')
+            || userAgent.includes('mac os x')
+            || platform === 'macintel'
+        );
+        return appleDesktopSignature && touchPoints > 1;
+    }
+
     function zoomRange(track) {
         if (!track || typeof track.getCapabilities !== 'function') return null;
         const capabilities = track.getCapabilities() || {};
@@ -678,6 +691,7 @@
         classifyCameraError: classifyCameraError,
         createBrowserCamera: createBrowserCamera,
         createPreviewManager: createPreviewManager,
+        isAppleTouchDesktop: isAppleTouchDesktop,
         safeSameOriginUrl: safeSameOriginUrl,
         stopStream: stopStream,
         zoomRange: zoomRange,

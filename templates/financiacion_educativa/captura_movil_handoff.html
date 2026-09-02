@@ -1,4 +1,5 @@
 {% extends "financiacion_educativa/_base.html" %}
+{% load static %}
 
 {% block title %}Continuar captura | Aprobado{% endblock %}
 
@@ -16,6 +17,13 @@
             <form id="mobile-capture-handoff" method="post">
                 {% csrf_token %}
                 <input id="mobile-capture-token" type="hidden" name="token">
+                <input id="mobile-context-kind" type="hidden" name="mobile_context_kind">
+                <input
+                    id="mobile-context-bootstrap"
+                    type="hidden"
+                    name="mobile_context_bootstrap"
+                    value="{{ mobile_context_bootstrap }}"
+                >
                 <noscript>
                     <p>Activa JavaScript para continuar con este enlace.</p>
                 </noscript>
@@ -26,12 +34,20 @@
 {% endblock %}
 
 {% block extra_scripts %}
+<script src="{% static 'js/financiacion_educativa_camara.js' %}"></script>
 <script>
 (() => {
     const form = document.getElementById("mobile-capture-handoff");
     const input = document.getElementById("mobile-capture-token");
     const status = document.getElementById("handoff-status");
     const token = window.location.hash.slice(1);
+    const detector = window.EducationalIdentityCamera;
+    if (
+        detector
+        && detector.isAppleTouchDesktop(window.navigator)
+    ) {
+        document.getElementById("mobile-context-kind").value = "apple-touch";
+    }
 
     window.history.replaceState(null, "", window.location.pathname);
     if (!token) {

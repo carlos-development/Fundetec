@@ -8,16 +8,15 @@ from io import BytesIO
 from django.conf import settings
 
 
-TOKENS_CONTENIDO_ACTIVO = (
-    b'/JavaScript',
-    b'/JS',
-    b'/OpenAction',
-    b'/AA',
-    b'/Launch',
-    b'/RichMedia',
-    b'/SubmitForm',
-    b'/EmbeddedFiles',
-    b'/FileAttachment',
+CODIGO_PDF_POR_CARACTERISTICA = (
+    ('EMBEDDED_FILE', 'PDF_EMBEDDED_FILE'),
+    ('JAVASCRIPT', 'PDF_JAVASCRIPT'),
+    ('LAUNCH_ACTION', 'PDF_LAUNCH_ACTION'),
+    ('XFA', 'PDF_XFA_ACTIVE_CONTENT'),
+    ('ADDITIONAL_ACTION', 'PDF_ADDITIONAL_ACTION'),
+    ('OPEN_ACTION', 'PDF_OPEN_ACTION'),
+    ('RICH_MEDIA', 'PDF_RICH_MEDIA'),
+    ('SUBMIT_FORM', 'PDF_SUBMIT_FORM'),
 )
 
 
@@ -78,24 +77,81 @@ def _contar_objetos(reader):
     )
 
 
+def _detectar_caracteristicas_activas(reader, *, iniciado_en):
+    """Inspecciona la estructura PDF sin ejecutar acciones ni leer adjuntos."""
+    from pypdf.generic import ArrayObject, DictionaryObject, IndirectObject
+
+    pendientes = [reader.trailer.get('/Root')]
+    indirectos_visitados = set()
+    directos_visitados = set()
+    caracteristicas = set()
+    inspeccionados = 0
+    maximo = settings.FINANCIACION_EDUCATIVA_PDF_MAX_OBJECTS
+
+    while pendientes:
+        _comprobar_timeout(iniciado_en)
+        valor = pendientes.pop()
+        if isinstance(valor, IndirectObject):
+            identificador = (valor.idnum, valor.generation)
+            if identificador in indirectos_visitados:
+                continue
+            indirectos_visitados.add(identificador)
+            try:
+                valor = valor.get_object()
+            except Exception as error:
+                raise ErrorProcesamientoPDF(
+                    'PDF_CORRUPT',
+                    corregible=True,
+                ) from error
+        if not isinstance(valor, (DictionaryObject, ArrayObject)):
+            continue
+        identificador_directo = id(valor)
+        if identificador_directo in directos_visitados:
+            continue
+        directos_visitados.add(identificador_directo)
+        inspeccionados += 1
+        if inspeccionados > maximo:
+            raise ErrorProcesamientoPDF('PDF_TOO_MANY_OBJECTS', corregible=True)
+
+        if isinstance(valor, ArrayObject):
+            pendientes.extend(valor)
+            continue
+
+        claves = {str(clave) for clave in valor.keys()}
+        subtipo = str(valor.get('/Subtype', ''))
+        tipo = str(valor.get('/Type', ''))
+        accion = str(valor.get('/S', ''))
+        if (
+            '/EmbeddedFiles' in claves
+            or '/EF' in claves
+            or subtipo == '/FileAttachment'
+            or tipo == '/EmbeddedFile'
+        ):
+            caracteristicas.add('EMBEDDED_FILE')
+        if '/JavaScript' in claves or '/JS' in claves or accion == '/JavaScript':
+            caracteristicas.add('JAVASCRIPT')
+        if '/OpenAction' in claves:
+            caracteristicas.add('OPEN_ACTION')
+        if '/AA' in claves:
+            caracteristicas.add('ADDITIONAL_ACTION')
+        if '/XFA' in claves:
+            caracteristicas.add('XFA')
+        if accion == '/Launch':
+            caracteristicas.add('LAUNCH_ACTION')
+        if accion == '/SubmitForm':
+            caracteristicas.add('SUBMIT_FORM')
+        if subtipo == '/RichMedia':
+            caracteristicas.add('RICH_MEDIA')
+        pendientes.extend(valor.values())
+
+    return caracteristicas
+
+
 def _validar_estructura(contenido, *, iniciado_en):
     if not contenido.startswith(b'%PDF-'):
         raise ErrorProcesamientoPDF('PDF_INVALID_SIGNATURE', corregible=True)
     if len(contenido) > settings.FINANCIACION_EDUCATIVA_PDF_MAX_BYTES:
         raise ErrorProcesamientoPDF('PDF_TOO_LARGE', corregible=True)
-    if b'/EmbeddedFiles' in contenido or b'/FileAttachment' in contenido:
-        raise ErrorProcesamientoPDF(
-            'PDF_EMBEDDED_FILE',
-            corregible=True,
-            metadata={'contenido_activo_detectado': True},
-        )
-    contenido_activo = any(token in contenido for token in TOKENS_CONTENIDO_ACTIVO)
-    if contenido_activo:
-        raise ErrorProcesamientoPDF(
-            'PDF_ACTIVE_CONTENT',
-            corregible=True,
-            metadata={'contenido_activo_detectado': True},
-        )
     longitudes = [
         int(valor)
         for valor in re.findall(rb'/Length\s+(\d+)', contenido)
@@ -127,13 +183,20 @@ def _validar_estructura(contenido, *, iniciado_en):
         raise ErrorProcesamientoPDF('PDF_TOO_MANY_PAGES', corregible=True)
     if _contar_objetos(reader) > settings.FINANCIACION_EDUCATIVA_PDF_MAX_OBJECTS:
         raise ErrorProcesamientoPDF('PDF_TOO_MANY_OBJECTS', corregible=True)
-    try:
-        if getattr(reader, 'attachments', None):
-            raise ErrorProcesamientoPDF('PDF_EMBEDDED_FILE', corregible=True)
-    except ErrorProcesamientoPDF:
-        raise
-    except Exception as error:
-        raise ErrorProcesamientoPDF('PDF_CORRUPT', corregible=True) from error
+    caracteristicas = _detectar_caracteristicas_activas(
+        reader,
+        iniciado_en=iniciado_en,
+    )
+    for caracteristica, codigo in CODIGO_PDF_POR_CARACTERISTICA:
+        if caracteristica in caracteristicas:
+            raise ErrorProcesamientoPDF(
+                codigo,
+                corregible=True,
+                metadata={
+                    'contenido_activo_detectado': True,
+                    'caracteristicas_seguridad': sorted(caracteristicas),
+                },
+            )
     return reader, numero_paginas
 
 

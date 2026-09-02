@@ -1,7 +1,9 @@
 import logging
+from datetime import timedelta
 from urllib.parse import urlencode
 
 from django.conf import settings
+from django.core import signing
 from django.contrib import messages
 from django.contrib.auth import login as auth_login
 from django.contrib.auth.decorators import login_required
@@ -129,6 +131,13 @@ SESSION_ENLACE_CAPTURA_MOVIL_ID = (
     'financiacion_educativa_enlace_captura_movil_id'
 )
 SESSION_CAPTURA_MOVIL_GRANT = 'financiacion_educativa_captura_movil_grant'
+SESSION_CONTEXTO_MOVIL_RECUPERADO = (
+    'financiacion_educativa_contexto_movil_recuperado'
+)
+CONTEXTO_MOVIL_BOOTSTRAP_SALT = (
+    'financiacion_educativa.contexto_movil_bootstrap'
+)
+CONTEXTO_MOVIL_BOOTSTRAP_SECONDS = 300
 logger = logging.getLogger(__name__)
 MIME_PREVISUALIZABLES = {
     'application/pdf',
@@ -204,8 +213,8 @@ def _render_cuenta_no_coincide(request, solicitud):
 
 def _es_contexto_movil(request):
     client_hint = request.headers.get('Sec-CH-UA-Mobile', '').strip()
-    if client_hint:
-        return client_hint == '?1'
+    if client_hint == '?1':
+        return True
     user_agent = request.headers.get('User-Agent', '').casefold()
     indicadores = (
         'android',
@@ -215,7 +224,63 @@ def _es_contexto_movil(request):
         'mobile',
         'windows phone',
     )
-    return any(indicador in user_agent for indicador in indicadores)
+    if any(indicador in user_agent for indicador in indicadores):
+        return True
+    expiracion = request.session.get(SESSION_CONTEXTO_MOVIL_RECUPERADO)
+    if (
+        isinstance(expiracion, (int, float))
+        and not isinstance(expiracion, bool)
+        and expiracion > timezone.now().timestamp()
+    ):
+        return True
+    request.session.pop(SESSION_CONTEXTO_MOVIL_RECUPERADO, None)
+    return False
+
+
+def _crear_marcador_bootstrap_movil():
+    expira_en = timezone.now() + timedelta(
+        seconds=CONTEXTO_MOVIL_BOOTSTRAP_SECONDS
+    )
+    return signing.dumps(
+        {
+            'purpose': 'apple-touch-mobile-recovery',
+            'expires_at': int(expira_en.timestamp()),
+        },
+        salt=CONTEXTO_MOVIL_BOOTSTRAP_SALT,
+        compress=True,
+    )
+
+
+def _confirmar_contexto_movil_recuperado(request):
+    if request.POST.get('mobile_context_kind') != 'apple-touch':
+        return False
+    user_agent = request.headers.get('User-Agent', '').casefold()
+    if 'macintosh' not in user_agent and 'mac os x' not in user_agent:
+        return False
+    try:
+        payload = signing.loads(
+            request.POST.get('mobile_context_bootstrap', ''),
+            salt=CONTEXTO_MOVIL_BOOTSTRAP_SALT,
+        )
+    except (signing.BadSignature, TypeError, ValueError):
+        return False
+    expiracion = payload.get('expires_at') if isinstance(payload, dict) else None
+    if (
+        not isinstance(payload, dict)
+        or payload.get('purpose') != 'apple-touch-mobile-recovery'
+        or not isinstance(expiracion, int)
+        or isinstance(expiracion, bool)
+        or expiracion <= int(timezone.now().timestamp())
+    ):
+        return False
+    minutos = max(
+        1,
+        settings.FINANCIACION_EDUCATIVA_MOBILE_CAPTURE_TTL_MINUTES,
+    )
+    request.session[SESSION_CONTEXTO_MOVIL_RECUPERADO] = int(
+        (timezone.now() + timedelta(minutes=minutos)).timestamp()
+    )
+    return True
 
 
 def _render_requiere_dispositivo_movil(request):
@@ -1057,8 +1122,12 @@ def captura_movil_token_view(request):
         return render(
             request,
             'financiacion_educativa/captura_movil_handoff.html',
+            {'mobile_context_bootstrap': _crear_marcador_bootstrap_movil()},
         )
-    if not _es_contexto_movil(request):
+    if (
+        not _es_contexto_movil(request)
+        and not _confirmar_contexto_movil_recuperado(request)
+    ):
         return _render_requiere_dispositivo_movil(request)
     token = request.POST.get('token', '')
     enlace = obtener_enlace_vigente_por_token(token)

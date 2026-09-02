@@ -407,3 +407,21 @@ test('no contiene linterna, biometria, almacenamiento local ni zoom simulado', (
     assert.match(source, /takePhoto/);
     assert.match(source, /querySelectorAll\('\[data-camera-repeat\]'\)/);
 });
+
+test('recupera iPad con apariencia macOS sin clasificar portatil tactil generico', () => {
+    assert.equal(cameraModule.isAppleTouchDesktop({
+        platform: 'MacIntel',
+        userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15)',
+        maxTouchPoints: 5
+    }), true);
+    assert.equal(cameraModule.isAppleTouchDesktop({
+        platform: 'Win32',
+        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+        maxTouchPoints: 10
+    }), false);
+    assert.equal(cameraModule.isAppleTouchDesktop({
+        platform: 'MacIntel',
+        userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15)',
+        maxTouchPoints: 1
+    }), false);
+});

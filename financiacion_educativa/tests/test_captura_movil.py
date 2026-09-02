@@ -51,6 +51,14 @@ MOBILE_UA = (
     'Mozilla/5.0 (Linux; Android 14; Pixel 8) '
     'AppleWebKit/537.36 Chrome/126.0 Mobile Safari/537.36'
 )
+IPHONE_UA = (
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) '
+    'AppleWebKit/605.1.15 Version/18.5 Mobile/15E148 Safari/604.1'
+)
+IPAD_DESKTOP_UA = (
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15) '
+    'AppleWebKit/605.1.15 Version/18.5 Safari/605.1.15'
+)
 
 
 def jpeg(nombre='captura.jpg', marca=b'movil'):
@@ -178,6 +186,88 @@ class CapturaMovilTests(TestCase):
             movil.post(ruta, {'token': token}).status_code,
             410,
         )
+
+    def test_senales_mobiles_explicitas_entran_al_handoff(self):
+        escenarios = (
+            {'HTTP_USER_AGENT': IPHONE_UA},
+            {'HTTP_USER_AGENT': MOBILE_UA},
+            {
+                'HTTP_USER_AGENT': (
+                    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36'
+                ),
+                'HTTP_SEC_CH_UA_MOBILE': '?1',
+            },
+            {
+                'HTTP_USER_AGENT': IPHONE_UA,
+                'HTTP_SEC_CH_UA_MOBILE': '?0',
+            },
+        )
+        for indice, headers in enumerate(escenarios):
+            with self.subTest(indice=indice):
+                self._emitir_desde_web()
+                token, ruta = self._token_y_ruta()
+                cliente = Client(**headers)
+                cliente.get(ruta)
+
+                respuesta = cliente.post(ruta, {'token': token})
+
+                self.assertEqual(respuesta.status_code, 302)
+                self.assertTrue(
+                    respuesta.url.startswith('/accounts/login/')
+                )
+
+    def test_bootstrap_apple_tactil_es_firmado_temporal_y_conserva_grant(self):
+        self._emitir_desde_web()
+        token, ruta = self._token_y_ruta()
+        ipad = Client(HTTP_USER_AGENT=IPAD_DESKTOP_UA)
+        handoff = ipad.get(ruta)
+        marcador = handoff.context['mobile_context_bootstrap']
+
+        self.assertEqual(
+            ipad.post(ruta, {'token': token}).status_code,
+            400,
+        )
+        self.assertEqual(
+            ipad.post(
+                ruta,
+                {
+                    'token': token,
+                    'mobile_context_kind': 'apple-touch',
+                    'mobile_context_bootstrap': f'{marcador}alterado',
+                },
+            ).status_code,
+            400,
+        )
+        with mock.patch(
+            'financiacion_educativa.web.views.timezone.now',
+            return_value=timezone.now() + timedelta(minutes=6),
+        ):
+            expirada = ipad.post(
+                ruta,
+                {
+                    'token': token,
+                    'mobile_context_kind': 'apple-touch',
+                    'mobile_context_bootstrap': marcador,
+                },
+            )
+        self.assertEqual(expirada.status_code, 400)
+
+        entrada = ipad.post(
+            ruta,
+            {
+                'token': token,
+                'mobile_context_kind': 'apple-touch',
+                'mobile_context_bootstrap': marcador,
+            },
+        )
+        self.assertEqual(entrada.status_code, 302)
+        ipad.force_login(self.usuario)
+        continuar = ipad.get(
+            reverse('financiacion_educativa_web:captura-movil-continuar')
+        )
+        self.assertEqual(continuar.status_code, 302)
+        captura = ipad.get(continuar.url)
+        self.assertContains(captura, 'data-identity-camera')
 
     def test_token_alterado_vencido_y_usuario_incorrecto_no_dan_acceso(self):
         self._emitir_desde_web()

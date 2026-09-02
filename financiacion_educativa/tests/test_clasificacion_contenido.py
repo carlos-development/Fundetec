@@ -29,6 +29,7 @@ from financiacion_educativa.services.clasificacion_contenido_documental import (
     esquema_clasificacion_contenido,
     normalizar_clasificacion,
     procesar_contenido_documental,
+    resolver_rechazo_contenido,
 )
 from financiacion_educativa.services.documentos import (
     registrar_documento,
@@ -51,7 +52,10 @@ from financiacion_educativa.tests.content_validation_backends import (
 )
 from financiacion_educativa.tests.factories import crear_solicitud, imagen_jpeg_prueba
 from financiacion_educativa.tests.scan_backends import BackendLimpio
-from financiacion_educativa.tests.test_procesamiento_pdf import pdf_sintetico
+from financiacion_educativa.tests.test_procesamiento_pdf import (
+    pdf_configurado,
+    pdf_sintetico,
+)
 
 
 CONTENT_BACKEND = (
@@ -243,6 +247,52 @@ class ClasificacionContenidoDocumentalTests(TestCase):
         self.assertEqual(resultado.estado, EstadoProcesamientoContenidoDocumento.CORRECTION_REQUIRED)
         self.assertTrue(traza.pdf_cifrado)
         self.assertEqual(traza.codigos_razon, ['PDF_ENCRYPTED'])
+        documento.refresh_from_db()
+        self.assertEqual(documento.motivo_rechazo, 'OTHER')
+        self.assertIn('protegido con contrasena', documento.observacion_revision)
+
+    def test_pdf_con_adjunto_no_se_traduce_como_documento_equivocado(self):
+        contenido = pdf_configurado(
+            lambda writer: writer.add_attachment('dato.txt', b'sintetico')
+        )
+        documento = registrar_documento(
+            solicitud=self.solicitud,
+            participante=self.deudor,
+            tipo=TipoDocumentoFinanciacion.INCOME_CERTIFICATE,
+            origen_captura='USER_UPLOAD',
+            archivo=SimpleUploadedFile(
+                'ingresos-adjunto.pdf',
+                contenido,
+                content_type='application/pdf',
+            ),
+            actor=self.usuario,
+        )
+        procesar_escaneo_documento(
+            documento=documento,
+            origen='AUTOMATIC',
+            backend=BackendLimpio(),
+        )
+        documento.refresh_from_db()
+
+        resultado = procesar_contenido_documental(documento=documento)
+
+        documento.refresh_from_db()
+        traza = documento.procesamientos_contenido.get()
+        self.assertEqual(
+            resultado.estado,
+            EstadoProcesamientoContenidoDocumento.CORRECTION_REQUIRED,
+        )
+        self.assertEqual(traza.codigos_razon, ['PDF_EMBEDDED_FILE'])
+        self.assertEqual(
+            traza.campos_estructurados,
+            {'pdf_security_features': ['EMBEDDED_FILE']},
+        )
+        self.assertEqual(documento.motivo_rechazo, 'OTHER')
+        self.assertNotEqual(documento.motivo_rechazo, 'WRONG_DOCUMENT')
+        self.assertEqual(
+            documento.observacion_revision,
+            'El PDF contiene archivos incrustados. Carga una version sin adjuntos.',
+        )
 
     def test_titular_con_tildes_orden_y_segundo_apellido_no_se_rechaza(self):
         documento = self._documento()
@@ -459,6 +509,44 @@ class ClasificacionContenidoDocumentalTests(TestCase):
                 )
                 self.assertEqual(estado, EstadoProcesamientoContenidoDocumento.ACCEPTED)
 
+    def test_certificado_laboral_sin_titulo_literal_puede_aceptarse(self):
+        documento = registrar_documento(
+            solicitud=self.solicitud,
+            participante=self.deudor,
+            tipo=TipoDocumentoFinanciacion.INCOME_CERTIFICATE,
+            origen_captura='USER_UPLOAD',
+            archivo=self._archivo_pdf(
+                texto='CONSTANCIA LABORAL CON VINCULO Y SALARIO'
+            ),
+            actor=self.usuario,
+        )
+        procesar_escaneo_documento(
+            documento=documento,
+            origen='AUTOMATIC',
+            backend=BackendLimpio(),
+        )
+        documento.refresh_from_db()
+
+        class BackendCertificadoLaboral:
+            enabled = True
+
+            def clasificar(_self, *, tipo_esperado, contexto, **kwargs):
+                return resultado_concluyente(
+                    tipo_esperado=tipo_esperado,
+                    contexto=contexto,
+                    categoria=CategoriaContenidoDocumento.EMPLOYMENT_CERTIFICATE,
+                )
+
+        resultado = procesar_contenido_documental(
+            documento=documento,
+            backend=BackendCertificadoLaboral(),
+        )
+
+        self.assertEqual(
+            resultado.estado,
+            EstadoProcesamientoContenidoDocumento.ACCEPTED,
+        )
+
     def test_categoria_ajena_exige_correccion(self):
         contexto = {
             'holder_name': 'ANA MARIA PEREZ',
@@ -480,6 +568,58 @@ class ClasificacionContenidoDocumentalTests(TestCase):
 
         self.assertEqual(estado, EstadoProcesamientoContenidoDocumento.CORRECTION_REQUIRED)
         self.assertIn('CATEGORY_MISMATCH', razones)
+
+    def test_categoria_ajena_demostrada_es_el_unico_documento_equivocado(self):
+        documento = self._documento()
+
+        class BackendCategoriaAjena:
+            enabled = True
+
+            def clasificar(_self, *, tipo_esperado, contexto, **kwargs):
+                return resultado_concluyente(
+                    tipo_esperado=tipo_esperado,
+                    contexto=contexto,
+                    categoria=CategoriaContenidoDocumento.UNRELATED,
+                )
+
+        resultado = procesar_contenido_documental(
+            documento=documento,
+            backend=BackendCategoriaAjena(),
+        )
+
+        documento.refresh_from_db()
+        self.assertEqual(
+            resultado.estado,
+            EstadoProcesamientoContenidoDocumento.CORRECTION_REQUIRED,
+        )
+        self.assertEqual(documento.motivo_rechazo, 'WRONG_DOCUMENT')
+        self.assertEqual(
+            documento.observacion_revision,
+            'El contenido no corresponde al tipo documental solicitado.',
+        )
+
+    def test_mapeo_de_motivos_es_explicito_y_no_filtra_datos(self):
+        casos = {
+            'CATEGORY_MISMATCH': 'WRONG_DOCUMENT',
+            'DATA_MISMATCH': 'DATA_MISMATCH',
+            'INSTITUTION_MISMATCH': 'DATA_MISMATCH',
+            'DOCUMENT_UNREADABLE': 'UNREADABLE',
+            'PDF_CORRUPT': 'UNREADABLE',
+            'PDF_RENDER_ERROR': 'UNREADABLE',
+            'REQUIRED_CONTENT_MISSING': 'INCOMPLETE',
+            'CONTENT_INSUFFICIENT': 'INCOMPLETE',
+            'PDF_ACTIVE_CONTENT': 'OTHER',
+            'PDF_JAVASCRIPT': 'OTHER',
+            'PDF_OPEN_ACTION': 'OTHER',
+            'PDF_LAUNCH_ACTION': 'OTHER',
+            'PDF_EMBEDDED_FILE': 'OTHER',
+        }
+        for codigo, esperado in casos.items():
+            with self.subTest(codigo=codigo):
+                motivo, observacion = resolver_rechazo_contenido([codigo])
+                self.assertEqual(motivo, esperado)
+                self.assertNotIn('ANA MARIA', observacion)
+                self.assertNotIn('10000001', observacion)
 
     def test_esquema_ia_es_cerrado_y_sin_keywords_incompatibles(self):
         esquema = esquema_clasificacion_contenido()
