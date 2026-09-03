@@ -155,6 +155,7 @@
             this.zoom = null;
             this.busy = false;
             this.disposed = false;
+            this.previewSuspended = false;
             this.errorMessage = '';
             this.view.render(this.snapshot());
         }
@@ -183,6 +184,7 @@
 
         releasePhoto() {
             this.photo = null;
+            this.previewSuspended = false;
             this.view.releasePreview();
         }
 
@@ -275,6 +277,7 @@
                 const photo = await this.camera.capture(this.session);
                 this.stopCamera();
                 this.photo = photo;
+                this.previewSuspended = false;
                 this.view.showPreview(photo.blob, photo);
                 this.transition(STATES.CAPTURED_REVIEW);
                 return true;
@@ -297,6 +300,7 @@
             this.releasePhoto();
             try {
                 this.photo = await this.camera.prepareFile(file);
+                this.previewSuspended = false;
                 this.view.showPreview(this.photo.blob, this.photo);
                 this.transition(STATES.CAPTURED_REVIEW);
                 return true;
@@ -376,12 +380,32 @@
         }
 
         pause() {
-            if (this.state !== STATES.LIVE_CAMERA) return false;
-            this.stopCamera();
-            this.transition(
-                STATES.INTRO,
-                'La camara se pauso al salir de la pagina. Activa la camara para continuar.'
-            );
+            if (this.state === STATES.LIVE_CAMERA) {
+                this.stopCamera();
+                this.transition(
+                    STATES.INTRO,
+                    'La camara se pauso al salir de la pagina. Activa la camara para continuar.'
+                );
+                return true;
+            }
+            if (this.photo && [
+                STATES.CAPTURED_REVIEW,
+                STATES.UPLOAD_ERROR,
+                STATES.UPLOADING
+            ].includes(this.state)) {
+                this.view.releasePreview();
+                this.previewSuspended = true;
+                return true;
+            }
+            return false;
+        }
+
+        resume() {
+            if (!this.previewSuspended || !this.photo || this.state === STATES.UPLOADING) {
+                return false;
+            }
+            this.view.showPreview(this.photo.blob, this.photo);
+            this.previewSuspended = false;
             return true;
         }
 
@@ -678,6 +702,7 @@
         });
         documentObject.addEventListener('visibilitychange', function () {
             if (documentObject.visibilityState === 'hidden') controller.pause();
+            else controller.resume();
         });
         browserWindow.addEventListener('pagehide', function () { controller.dispose(); });
         browserWindow.addEventListener('beforeunload', function () { controller.dispose(); });

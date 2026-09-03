@@ -14,7 +14,7 @@
                     <p>Selecciona un archivo legible. El documento quedar&aacute; privado y pendiente de los controles y la revisi&oacute;n definidos por el proceso.</p>
                 </div>
                 {% if reemplazo %}
-                    <div class="alert-info"><strong>Documento solicitado:</strong> {{ documento.get_tipo_display }}</div>
+                    <div class="alert-info"><strong>Documento solicitado:</strong> {% if documento.tipo == "INCOME_CERTIFICATE" %}Soporte de ingresos o certificaci&oacute;n bancaria{% else %}{{ documento.get_tipo_display }}{% endif %}</div>
                 {% endif %}
                 <form class="edu-form" method="post" enctype="multipart/form-data" novalidate>
                     {% csrf_token %}
@@ -33,6 +33,9 @@
                                 {{ form.participante.errors }}
                             </div>
                         </div>
+                        {% if form.tipo.value == "INCOME_CERTIFICATE" %}
+                            <p class="edu-field-help">Puedes aportar certificado laboral, certificado de ingresos, desprendible de n&oacute;mina, certificado de ingresos y retenciones, extracto bancario o certificaci&oacute;n bancaria de titularidad.</p>
+                        {% endif %}
                     {% endif %}
                     <div class="edu-field">
                         <label class="edu-dropzone" for="{{ form.archivo.id_for_label }}">

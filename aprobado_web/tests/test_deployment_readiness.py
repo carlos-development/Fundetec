@@ -93,6 +93,18 @@ class StagingSettingsTests(SimpleTestCase):
         )
         return environment
 
+    def _development_environment(self):
+        environment = self._staging_environment()
+        environment.update(
+            {
+                'DEPLOYMENT_ENVIRONMENT': 'local',
+                'DEBUG': 'true',
+                'USE_SQLITE': 'true',
+            }
+        )
+        environment.pop('DATABASE_URL', None)
+        return environment
+
     def _load_settings(self, environment):
         code = """
 import json
@@ -105,7 +117,28 @@ print(json.dumps({
     'allowed_hosts': settings.ALLOWED_HOSTS,
     'csrf_origins': settings.CSRF_TRUSTED_ORIGINS,
     'email_backend': settings.EMAIL_BACKEND,
+    'staticfiles_backend': settings.STORAGES['staticfiles']['BACKEND'],
 }))
+"""
+        return subprocess.run(
+            [sys.executable, '-c', code],
+            cwd=BASE_DIR,
+            env=environment,
+            capture_output=True,
+            text=True,
+            timeout=20,
+            check=False,
+        )
+
+    def _load_settings_without_whitenoise(self, environment):
+        code = """
+import importlib.util
+original_find_spec = importlib.util.find_spec
+importlib.util.find_spec = lambda name, *args, **kwargs: (
+    None if name == 'whitenoise' else original_find_spec(name, *args, **kwargs)
+)
+from django.conf import settings
+print(settings.DEBUG)
 """
         return subprocess.run(
             [sys.executable, '-c', code],
@@ -144,6 +177,20 @@ print(json.dumps({
             data['email_backend'],
             'aprobado_web.email_backends.SafeRoutingEmailBackend',
         )
+        self.assertEqual(
+            data['staticfiles_backend'],
+            'whitenoise.storage.CompressedManifestStaticFilesStorage',
+        )
+
+    def test_desarrollo_configura_staticfiles_sin_manifest(self):
+        result = self._load_settings(self._development_environment())
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertEqual(
+            data['staticfiles_backend'],
+            'django.contrib.staticfiles.storage.StaticFilesStorage',
+        )
 
     def test_staging_rechaza_secret_key_ausente(self):
         environment = self._staging_environment()
@@ -154,6 +201,17 @@ print(json.dumps({
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('SECRET_KEY debe definirse externamente', result.stderr)
         self.assertNotIn('test-only-smtp-password', result.stderr)
+
+    def test_staging_rechaza_whitenoise_ausente(self):
+        result = self._load_settings_without_whitenoise(
+            self._staging_environment()
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            'whitenoise es obligatorio para servir archivos estaticos versionados',
+            result.stderr,
+        )
 
     def test_staging_rechaza_database_url_ausente_y_sqlite(self):
         environment = self._staging_environment()

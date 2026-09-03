@@ -42,6 +42,7 @@ CATEGORIAS_INGRESOS = frozenset({
     CategoriaContenidoDocumento.INCOME_CERTIFICATE,
     CategoriaContenidoDocumento.INCOME_AND_WITHHOLDING_CERTIFICATE,
     CategoriaContenidoDocumento.BANK_STATEMENT,
+    CategoriaContenidoDocumento.BANK_ACCOUNT_CERTIFICATE,
     CategoriaContenidoDocumento.PAYSLIP,
 })
 PUNTAJES_PERMITIDOS = [indice / 100 for indice in range(101)]
@@ -348,8 +349,13 @@ class OpenAIContentDocumentClassificationBackend:
                                 'Clasifica evidencia documental educativa sin evaluar '
                                 'solvencia, riesgo o autenticidad oficial. Para evidencia '
                                 'de ingresos admite certificados laborales, comprobantes '
-                                'de nomina, extractos y certificados de ingresos o de '
-                                'ingresos y retenciones; no exijas un titulo literal. No infieras '
+                                'de nomina, extractos, certificaciones bancarias de '
+                                'titularidad y certificados de ingresos o de ingresos y '
+                                'retenciones; no exijas un titulo literal. Distingue '
+                                'BANK_STATEMENT, que contiene periodo y movimientos o valores, '
+                                'de BANK_ACCOUNT_CERTIFICATE, que acredita titularidad, entidad '
+                                'emisora y fecha o vigencia sin requerir saldos ni movimientos. '
+                                'No infieras '
                                 'datos ausentes. Los numeros de cuenta no deben '
                                 'devolverse. Una duda legitima produce MANUAL_EXCEPTION; '
                                 'un documento distinto o contradictorio produce '
@@ -396,7 +402,13 @@ def esquema_clasificacion_contenido():
         ],
         'properties': {
             'document_category': {
-                'type': 'string', 'enum': sorted(CATEGORIAS_PERMITIDAS),
+                'type': 'string',
+                'enum': sorted(CATEGORIAS_PERMITIDAS),
+                'description': (
+                    'Categoria observada. BANK_STATEMENT exige periodo y '
+                    'evidencia financiera; BANK_ACCOUNT_CERTIFICATE acredita '
+                    'titularidad de cuenta, entidad emisora y fecha o vigencia.'
+                ),
             },
             'category_confidence': {'type': 'number', 'enum': PUNTAJES_PERMITIDOS},
             'legibility': {'type': 'number', 'enum': PUNTAJES_PERMITIDOS},
@@ -659,27 +671,28 @@ def _aplicar_consistencia_determinista(resultado, *, contexto, tipo):
 
 
 def decidir_politica_contenido(resultado, *, tipo):
-    razones = list(resultado.codigos_razon)
+    # Los codigos del proveedor son propuestas no autoritativas. La politica
+    # deriva el resultado final solo de campos normalizados y reglas locales.
+    razones = []
     categoria_valida = (
         resultado.categoria in CATEGORIAS_INGRESOS
         if tipo == TipoDocumentoFinanciacion.INCOME_CERTIFICATE
         else resultado.categoria == CategoriaContenidoDocumento.ENROLLMENT_EVIDENCE
     )
     if resultado.categoria == CategoriaContenidoDocumento.UNRELATED or not categoria_valida:
-        razones.append('CATEGORY_MISMATCH')
-        return EstadoProcesamientoContenidoDocumento.CORRECTION_REQUIRED, razones
+        return (
+            EstadoProcesamientoContenidoDocumento.CORRECTION_REQUIRED,
+            ['CATEGORY_MISMATCH'],
+        )
     if resultado.coincidencia_titular == 'MISMATCH':
         razones.append('DATA_MISMATCH')
-        return EstadoProcesamientoContenidoDocumento.CORRECTION_REQUIRED, razones
     if (
         tipo == TipoDocumentoFinanciacion.ENROLLMENT_EVIDENCE
         and resultado.coincidencia_emisor == 'MISMATCH'
     ):
         razones.append('INSTITUTION_MISMATCH')
-        return EstadoProcesamientoContenidoDocumento.CORRECTION_REQUIRED, razones
     if resultado.legibilidad < Decimal(settings.FINANCIACION_EDUCATIVA_CONTENT_MIN_LEGIBILITY):
         razones.append('DOCUMENT_UNREADABLE')
-        return EstadoProcesamientoContenidoDocumento.CORRECTION_REQUIRED, razones
     campos = resultado.campos_extraidos
     campos_comunes_ingresos = bool(
         campos.get('holder_name')
@@ -688,6 +701,11 @@ def decidir_politica_contenido(resultado, *, tipo):
     )
     if resultado.categoria == CategoriaContenidoDocumento.EMPLOYMENT_CERTIFICATE:
         campos_minimos = campos_comunes_ingresos and bool(campos.get('evidence_kind'))
+    elif (
+        resultado.categoria
+        == CategoriaContenidoDocumento.BANK_ACCOUNT_CERTIFICATE
+    ):
+        campos_minimos = campos_comunes_ingresos
     elif resultado.categoria in CATEGORIAS_INGRESOS:
         campos_minimos = campos_comunes_ingresos and (
             campos.get('financial_values_present') is True
@@ -704,6 +722,7 @@ def decidir_politica_contenido(resultado, *, tipo):
         campos_minimos = False
     if not resultado.contenido_requerido_presente or not campos_minimos:
         razones.append('REQUIRED_CONTENT_MISSING')
+    if razones:
         return EstadoProcesamientoContenidoDocumento.CORRECTION_REQUIRED, razones
     if not resultado.fecha_periodo_presente:
         razones.append('DATE_OR_PERIOD_MISSING')

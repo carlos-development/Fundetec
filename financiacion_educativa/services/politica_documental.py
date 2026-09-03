@@ -160,7 +160,8 @@ def construir_politica_documental(solicitud):
             RequisitoDocumentoPolitica(
                 codigo='INCOME_CERTIFICATE',
                 descripcion=(
-                    'Certificado de ingresos del responsable contractual aportado'
+                    'Soporte de ingresos o certificacion bancaria del '
+                    'responsable contractual aportado'
                 ),
                 tipo=TipoDocumentoFinanciacion.INCOME_CERTIFICATE,
                 participante=deudor,

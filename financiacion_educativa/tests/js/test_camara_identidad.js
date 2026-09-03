@@ -1,9 +1,12 @@
 'use strict';
 
 const assert = require('node:assert/strict');
+const childProcess = require('node:child_process');
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
+const { pathToFileURL } = require('node:url');
 
 const modulePath = path.resolve(
     __dirname,
@@ -305,6 +308,25 @@ test('dispose detiene pistas y libera la vista previa', async () => {
     assert.ok(instance.view.releases >= 2);
 });
 
+test('ocultar libera stream o preview y volver restaura una revision pendiente', async () => {
+    const live = controllerHarness();
+    await live.controller.start();
+    assert.equal(live.controller.pause(), true);
+    assert.equal(live.controller.state, STATES.INTRO);
+    assert.ok(live.camera.calls.stops >= 1);
+
+    const review = controllerHarness();
+    await review.controller.start();
+    await review.controller.capture();
+    const previewsBefore = review.view.previews.length;
+    assert.equal(review.controller.pause(), true);
+    assert.equal(review.controller.state, STATES.CAPTURED_REVIEW);
+    assert.equal(review.controller.previewSuspended, true);
+    assert.equal(review.controller.resume(), true);
+    assert.equal(review.view.previews.length, previewsBefore + 1);
+    assert.equal(review.controller.previewSuspended, false);
+});
+
 test('prefiere ImageCapture y usa canvas como fallback', async () => {
     let takePhotoCalls = 0;
     let drawCalls = 0;
@@ -406,6 +428,77 @@ test('no contiene linterna, biometria, almacenamiento local ni zoom simulado', (
     assert.match(source, /applyConstraints/);
     assert.match(source, /takePhoto/);
     assert.match(source, /querySelectorAll\('\[data-camera-repeat\]'\)/);
+});
+
+test('estilos mantienen controles dentro del viewport movil pequeno', () => {
+    const cssPath = path.resolve(
+        __dirname,
+        '../../../static/css/financiacion_educativa.css'
+    );
+    const source = fs.readFileSync(cssPath, 'utf8');
+    assert.match(source, /height:\s*100dvh/);
+    assert.match(source, /env\(safe-area-inset-top\)/);
+    assert.match(source, /env\(safe-area-inset-bottom\)/);
+    assert.match(source, /orientation:\s*portrait[^}]*max-height:\s*700px/s);
+    assert.match(source, /\.edu-camera-shutter-bar\s*\{[^}]*min-height:/s);
+    assert.match(source, /\.edu-camera-live,[\s\S]*?overflow:\s*hidden/);
+});
+
+test('layout real mantiene obturador y controles dentro de viewports moviles bajos', (t) => {
+    const candidatos = process.platform === 'win32'
+        ? [
+            'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+            'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+            'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe'
+        ]
+        : ['/usr/bin/google-chrome', '/usr/bin/chromium', '/usr/bin/chromium-browser'];
+    const navegador = candidatos.find((candidato) => fs.existsSync(candidato));
+    if (!navegador) {
+        t.skip('Chrome/Chromium no esta disponible para validar layout real.');
+        return;
+    }
+    const css = fs.readFileSync(
+        path.resolve(__dirname, '../../../static/css/financiacion_educativa.css'),
+        'utf8'
+    );
+    const temporal = fs.mkdtempSync(path.join(os.tmpdir(), 'fundetec-camera-layout-'));
+    try {
+        const html = path.join(temporal, 'camera.html');
+        fs.writeFileSync(html, `<!doctype html><html><head><meta charset="utf-8"><style>${css}</style></head>
+<body class="edu-camera-page"><section class="edu-camera-app"><div class="edu-camera-panel edu-camera-live">
+<header class="edu-camera-overlay-header"><button class="edu-camera-icon-action is-dark">X</button><div><strong>Frente</strong><span>Encuadra el documento</span></div><button class="edu-camera-icon-action is-dark">C</button></header>
+<div class="edu-camera-viewport"><div class="edu-camera-id-frame"></div></div>
+<div class="edu-camera-zoom"><label>Zoom</label><input type="range"></div>
+<div class="edu-camera-shutter-bar"><button class="edu-camera-shutter"><span></span></button></div>
+</div></section><script>
+const viewport = { width: innerWidth, height: innerHeight };
+const names = ['.edu-camera-app', '.edu-camera-overlay-header', '.edu-camera-shutter-bar', '.edu-camera-shutter'];
+const boxes = Object.fromEntries(names.map((name) => { const r = document.querySelector(name).getBoundingClientRect(); return [name, {top:r.top,right:r.right,bottom:r.bottom,left:r.left,width:r.width,height:r.height}]; }));
+document.documentElement.dataset.layoutResult = encodeURIComponent(JSON.stringify({viewport, boxes, scrollWidth:document.documentElement.scrollWidth, scrollHeight:document.documentElement.scrollHeight}));
+</script></body></html>`, 'utf8');
+        for (const [width, height] of [[360, 640], [640, 360]]) {
+            const perfil = path.join(temporal, `profile-${width}-${height}`);
+            const result = childProcess.spawnSync(navegador, [
+                '--headless=new', '--disable-gpu', '--no-sandbox',
+                `--user-data-dir=${perfil}`, `--window-size=${width},${height}`,
+                '--dump-dom', pathToFileURL(html).href
+            ], { encoding: 'utf8', maxBuffer: 4 * 1024 * 1024 });
+            assert.equal(result.status, 0, result.stderr);
+            const match = result.stdout.match(/data-layout-result="([^"]+)"/);
+            assert.ok(match, 'Chrome debe devolver las mediciones del layout.');
+            const layout = JSON.parse(decodeURIComponent(match[1]));
+            for (const [selector, box] of Object.entries(layout.boxes)) {
+                assert.ok(box.top >= -0.5, `${selector} inicia fuera del viewport ${width}x${height}`);
+                assert.ok(box.left >= -0.5, `${selector} inicia fuera del viewport ${width}x${height}`);
+                assert.ok(box.right <= layout.viewport.width + 0.5, `${selector} desborda horizontalmente ${width}x${height}`);
+                assert.ok(box.bottom <= layout.viewport.height + 0.5, `${selector} desborda verticalmente ${width}x${height}`);
+            }
+            assert.ok(layout.scrollWidth <= layout.viewport.width);
+            assert.ok(layout.scrollHeight <= layout.viewport.height);
+        }
+    } finally {
+        fs.rmSync(temporal, { recursive: true, force: true });
+    }
 });
 
 test('recupera iPad con apariencia macOS sin clasificar portatil tactil generico', () => {

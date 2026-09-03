@@ -122,6 +122,10 @@ class CategoriaContenidoDocumento(models.TextChoices):
         'Certificado de ingresos y retenciones',
     )
     BANK_STATEMENT = 'BANK_STATEMENT', 'Extracto bancario'
+    BANK_ACCOUNT_CERTIFICATE = (
+        'BANK_ACCOUNT_CERTIFICATE',
+        'Certificacion bancaria de titularidad',
+    )
     PAYSLIP = 'PAYSLIP', 'Desprendible de nomina'
     ENROLLMENT_EVIDENCE = 'ENROLLMENT_EVIDENCE', 'Soporte de matricula'
     UNRELATED = 'UNRELATED', 'Documento ajeno'

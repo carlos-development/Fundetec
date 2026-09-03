@@ -132,7 +132,7 @@ Revisar:
 
 - identificación del estudiante, frente;
 - identificación del estudiante, reverso;
-- certificado de ingresos del responsable contractual.
+- soporte de ingresos o certificación bancaria del responsable contractual.
 
 Comparar, como mínimo:
 
@@ -149,7 +149,7 @@ Además de la identificación del estudiante, revisar:
 - existencia del tutor adulto;
 - identificación del tutor, frente y reverso;
 - relación declarada entre tutor y estudiante;
-- certificado de ingresos del tutor o responsable contractual;
+- soporte de ingresos o certificación bancaria del tutor o responsable contractual;
 - consistencia de nombres y documentos.
 
 El tutor adulto es el responsable contractual y el único firmante del pagaré en
@@ -364,7 +364,7 @@ Antes de aprobar:
 - [ ] Todos los archivos tienen escaneo seguro.
 - [ ] Identificación frontal y reverso legibles.
 - [ ] Datos de identidad coinciden.
-- [ ] Certificado de ingresos del responsable contractual aceptado.
+- [ ] Soporte de ingresos o certificación bancaria del responsable contractual aceptado.
 - [ ] Tutor verificado cuando el estudiante es menor.
 - [ ] Matrícula revisada si se adjuntó soporte.
 - [ ] No quedan documentos pendientes, bloqueados o rechazados.

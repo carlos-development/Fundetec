@@ -40,6 +40,10 @@ MOBILE_UA = (
     'Mozilla/5.0 (Linux; Android 14; Pixel 8) '
     'AppleWebKit/537.36 Chrome/126.0 Mobile Safari/537.36'
 )
+IPHONE_UA = (
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) '
+    'AppleWebKit/605.1.15 Version/18.5 Mobile/15E148 Safari/604.1'
+)
 
 
 def jpeg(nombre='captura.jpg', marca=b'captura'):
@@ -161,6 +165,9 @@ class CapturaIdentidadEIngresosTests(TestCase):
         self.assertEqual(respuesta.status_code, 200)
         self.assertContains(respuesta, 'data-identity-camera')
         self.assertContains(respuesta, 'data-camera-video')
+        self.assertContains(respuesta, 'data-camera-switch')
+        self.assertContains(respuesta, 'data-camera-zoom-control')
+        self.assertContains(respuesta, 'data-camera-shoot')
         self.assertContains(respuesta, 'type="file"')
         self.assertContains(respuesta, 'accept="image/jpeg,image/png"')
         self.assertContains(respuesta, 'capture="environment"')
@@ -207,6 +214,63 @@ class CapturaIdentidadEIngresosTests(TestCase):
         self.assertNotIn('localStorage', javascript)
         self.assertNotIn('sessionStorage', javascript)
         self.assertNotIn('torch', javascript.casefold())
+
+    def test_iphone_y_android_autenticados_entran_directamente_sin_enlace(self):
+        for user_agent in (IPHONE_UA, MOBILE_UA):
+            with self.subTest(user_agent=user_agent):
+                cliente = Client(HTTP_USER_AGENT=user_agent)
+                cliente.force_login(self.usuario)
+
+                respuesta = cliente.get(self.url_camara)
+
+                self.assertEqual(respuesta.status_code, 200)
+                self.assertContains(respuesta, 'data-identity-camera')
+                self.assertNotContains(respuesta, 'Enviar enlace a mi correo')
+        self.assertFalse(EnlaceCapturaMovil.objects.exists())
+
+    def test_client_hint_movil_prevalece_y_cero_no_anula_iphone(self):
+        escenarios = (
+            {
+                'HTTP_USER_AGENT': 'Mozilla/5.0 (X11; Linux x86_64)',
+                'HTTP_SEC_CH_UA_MOBILE': '?1',
+            },
+            {
+                'HTTP_USER_AGENT': IPHONE_UA,
+                'HTTP_SEC_CH_UA_MOBILE': '?0',
+            },
+        )
+        for headers in escenarios:
+            with self.subTest(headers=headers):
+                cliente = Client(**headers)
+                cliente.force_login(self.usuario)
+                self.assertContains(
+                    cliente.get(self.url_camara),
+                    'data-identity-camera',
+                )
+
+    def test_android_autenticado_publica_captura_directa_con_csrf(self):
+        cliente = Client(HTTP_USER_AGENT=MOBILE_UA)
+        cliente.force_login(self.usuario)
+
+        respuesta = cliente.post(
+            self.url_camara,
+            {
+                'lado': 'frente',
+                'captura': jpeg(marca=b'directa-android'),
+                'metodo_captura': 'webrtc',
+            },
+        )
+
+        self.assertEqual(respuesta.status_code, 200)
+        documento = self.solicitud.documentos.get(
+            tipo=TipoDocumentoFinanciacion.STUDENT_ID_FRONT,
+            activo=True,
+        )
+        self.assertEqual(
+            documento.origen_captura,
+            OrigenCapturaDocumento.WEBRTC_CAMERA,
+        )
+        self.assertFalse(EnlaceCapturaMovil.objects.exists())
 
     def test_escritorio_solo_muestra_handoff_y_no_renderiza_camara(self):
         self.client.force_login(self.usuario)
@@ -435,6 +499,37 @@ class CapturaIdentidadEIngresosTests(TestCase):
         self.assertTrue(documento.activo)
         self.assertTrue(requisitos['INCOME_CERTIFICATE'].cumplido)
         self.assertEqual(documento.estado_validacion, 'PENDING')
+
+    def test_interfaz_presenta_todas_las_evidencias_financieras_admitidas(self):
+        self.client.force_login(self.usuario)
+
+        expediente = self.client.get(
+            reverse(
+                'financiacion_educativa_web:documentacion',
+                kwargs={'solicitud_id': self.solicitud.pk},
+            )
+        )
+        formulario = self.client.get(
+            reverse(
+                'financiacion_educativa_web:documento-cargar',
+                kwargs={'solicitud_id': self.solicitud.pk},
+            ),
+            {
+                'tipo': TipoDocumentoFinanciacion.INCOME_CERTIFICATE,
+                'participante': self.estudiante.pk,
+            },
+        )
+
+        self.assertContains(
+            expediente,
+            'Soporte de ingresos o certificacion bancaria',
+        )
+        self.assertContains(formulario, 'certificaci&oacute;n bancaria de titularidad')
+        self.assertContains(formulario, 'extracto bancario')
+        self.assertContains(
+            formulario,
+            'Soporte de ingresos o certificacion bancaria',
+        )
 
     def test_certificado_permite_reemplazo_trazable_y_vuelve_a_pendiente(self):
         anterior = registrar_documento(

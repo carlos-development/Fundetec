@@ -482,7 +482,7 @@ class ClasificacionContenidoDocumentalTests(TestCase):
         self.assertEqual(estado, EstadoProcesamientoContenidoDocumento.MANUAL_EXCEPTION)
         self.assertIn('TAMPERING_SIGNALS', razones)
 
-    def test_matriz_admite_cinco_categorias_de_ingresos_sin_evaluar_monto(self):
+    def test_matriz_admite_seis_categorias_de_ingresos_sin_evaluar_monto(self):
         contexto = {
             'holder_name': 'ANA MARIA PEREZ',
             'holder_document_number': '10000001',
@@ -495,6 +495,7 @@ class ClasificacionContenidoDocumentalTests(TestCase):
             CategoriaContenidoDocumento.INCOME_CERTIFICATE,
             CategoriaContenidoDocumento.INCOME_AND_WITHHOLDING_CERTIFICATE,
             CategoriaContenidoDocumento.BANK_STATEMENT,
+            CategoriaContenidoDocumento.BANK_ACCOUNT_CERTIFICATE,
             CategoriaContenidoDocumento.PAYSLIP,
         ):
             with self.subTest(categoria=categoria):
@@ -508,6 +509,214 @@ class ClasificacionContenidoDocumentalTests(TestCase):
                     tipo=TipoDocumentoFinanciacion.INCOME_CERTIFICATE,
                 )
                 self.assertEqual(estado, EstadoProcesamientoContenidoDocumento.ACCEPTED)
+
+    def test_extracto_valido_descarta_desajuste_contradictorio_del_proveedor(self):
+        contexto = {
+            'holder_name': 'ANA MARIA PEREZ LOPEZ',
+            'holder_document_number': '10000001',
+            'institution_name': 'INSTITUCION',
+            'program_name': 'CURSO',
+            'academic_period': '2026',
+        }
+        resultado = resultado_concluyente(
+            tipo_esperado=TipoDocumentoFinanciacion.INCOME_CERTIFICATE,
+            contexto=contexto,
+            categoria=CategoriaContenidoDocumento.BANK_STATEMENT,
+            codigos_razon=(
+                'CATEGORY_MISMATCH',
+                'REQUIRED_CONTENT_MISSING',
+            ),
+            resultado_general=(
+                EstadoProcesamientoContenidoDocumento.CORRECTION_REQUIRED
+            ),
+        )
+
+        estado, razones = decidir_politica_contenido(
+            resultado,
+            tipo=TipoDocumentoFinanciacion.INCOME_CERTIFICATE,
+        )
+
+        self.assertEqual(estado, EstadoProcesamientoContenidoDocumento.ACCEPTED)
+        self.assertEqual(razones, ['ACCEPTED'])
+
+    def test_extracto_valido_persiste_solo_decision_determinista(self):
+        documento = self._documento()
+
+        class BackendExtractoContradictorio:
+            enabled = True
+
+            def clasificar(_self, *, tipo_esperado, contexto, **kwargs):
+                return resultado_concluyente(
+                    tipo_esperado=tipo_esperado,
+                    contexto=contexto,
+                    categoria=CategoriaContenidoDocumento.BANK_STATEMENT,
+                    codigos_razon=(
+                        'CATEGORY_MISMATCH',
+                        'REQUIRED_CONTENT_MISSING',
+                    ),
+                    resultado_general=(
+                        EstadoProcesamientoContenidoDocumento
+                        .CORRECTION_REQUIRED
+                    ),
+                )
+
+        resultado = procesar_contenido_documental(
+            documento=documento,
+            backend=BackendExtractoContradictorio(),
+        )
+
+        documento.refresh_from_db()
+        traza = documento.procesamientos_contenido.get()
+        self.assertEqual(
+            resultado.estado,
+            EstadoProcesamientoContenidoDocumento.ACCEPTED,
+        )
+        self.assertEqual(traza.codigos_razon, ['ACCEPTED'])
+        self.assertEqual(traza.version_esquema, 'CONTENT_V2')
+        self.assertEqual(traza.version_politica, 'EDU_CONTENT_V2')
+        self.assertEqual(
+            documento.estado_validacion,
+            EstadoValidacionDocumento.APPROVED,
+        )
+
+    def test_certificacion_bancaria_valida_no_exige_valores_financieros(self):
+        contexto = {
+            'holder_name': 'ANA MARIA PEREZ LOPEZ',
+            'holder_document_number': '10000001',
+            'institution_name': 'INSTITUCION',
+            'program_name': 'CURSO',
+            'academic_period': '2026',
+        }
+        base = resultado_concluyente(
+            tipo_esperado=TipoDocumentoFinanciacion.INCOME_CERTIFICATE,
+            contexto=contexto,
+            categoria=CategoriaContenidoDocumento.BANK_ACCOUNT_CERTIFICATE,
+        )
+        campos = {
+            **base.campos_extraidos,
+            'issuer_name': 'BANCO DE PRUEBA',
+            'date_or_period': '2026-08-20',
+            'evidence_kind': 'CERTIFICACION DE TITULARIDAD',
+            'financial_values_present': False,
+        }
+
+        estado, razones = decidir_politica_contenido(
+            replace(base, campos_extraidos=campos),
+            tipo=TipoDocumentoFinanciacion.INCOME_CERTIFICATE,
+        )
+
+        self.assertEqual(estado, EstadoProcesamientoContenidoDocumento.ACCEPTED)
+        self.assertEqual(razones, ['ACCEPTED'])
+
+    def test_certificacion_bancaria_valida_se_aprueba_en_el_servicio(self):
+        documento = self._documento()
+
+        class BackendCertificacionBancaria:
+            enabled = True
+
+            def clasificar(_self, *, tipo_esperado, contexto, **kwargs):
+                base = resultado_concluyente(
+                    tipo_esperado=tipo_esperado,
+                    contexto=contexto,
+                    categoria=(
+                        CategoriaContenidoDocumento
+                        .BANK_ACCOUNT_CERTIFICATE
+                    ),
+                )
+                return replace(
+                    base,
+                    campos_extraidos={
+                        **base.campos_extraidos,
+                        'issuer_name': 'BANCO DE PRUEBA',
+                        'date_or_period': '2026-08-20',
+                        'evidence_kind': 'CERTIFICACION DE TITULARIDAD',
+                        'financial_values_present': False,
+                    },
+                )
+
+        resultado = procesar_contenido_documental(
+            documento=documento,
+            backend=BackendCertificacionBancaria(),
+        )
+
+        documento.refresh_from_db()
+        traza = documento.procesamientos_contenido.get()
+        self.assertEqual(
+            resultado.estado,
+            EstadoProcesamientoContenidoDocumento.ACCEPTED,
+        )
+        self.assertEqual(
+            traza.clasificacion,
+            CategoriaContenidoDocumento.BANK_ACCOUNT_CERTIFICATE,
+        )
+        self.assertEqual(traza.codigos_razon, ['ACCEPTED'])
+        self.assertEqual(
+            documento.estado_validacion,
+            EstadoValidacionDocumento.APPROVED,
+        )
+
+    def test_certificacion_bancaria_sin_titular_exige_contenido_faltante(self):
+        contexto = {
+            'holder_name': 'ANA MARIA PEREZ LOPEZ',
+            'holder_document_number': '10000001',
+            'institution_name': 'INSTITUCION',
+            'program_name': 'CURSO',
+            'academic_period': '2026',
+        }
+        base = resultado_concluyente(
+            tipo_esperado=TipoDocumentoFinanciacion.INCOME_CERTIFICATE,
+            contexto=contexto,
+            categoria=CategoriaContenidoDocumento.BANK_ACCOUNT_CERTIFICATE,
+        )
+        campos = {
+            **base.campos_extraidos,
+            'holder_name': '',
+            'financial_values_present': False,
+        }
+
+        estado, razones = decidir_politica_contenido(
+            replace(
+                base,
+                campos_extraidos=campos,
+                coincidencia_titular='INCONCLUSIVE',
+            ),
+            tipo=TipoDocumentoFinanciacion.INCOME_CERTIFICATE,
+        )
+
+        self.assertEqual(
+            estado,
+            EstadoProcesamientoContenidoDocumento.CORRECTION_REQUIRED,
+        )
+        self.assertEqual(razones, ['REQUIRED_CONTENT_MISSING'])
+        motivo, observacion = resolver_rechazo_contenido(razones)
+        self.assertEqual(motivo, 'INCOMPLETE')
+        self.assertNotIn('tipo documental', observacion.casefold())
+
+    def test_certificacion_bancaria_de_otro_titular_no_se_acepta(self):
+        contexto = {
+            'holder_name': 'ANA MARIA PEREZ LOPEZ',
+            'holder_document_number': '10000001',
+            'institution_name': 'INSTITUCION',
+            'program_name': 'CURSO',
+            'academic_period': '2026',
+        }
+        resultado = resultado_concluyente(
+            tipo_esperado=TipoDocumentoFinanciacion.INCOME_CERTIFICATE,
+            contexto=contexto,
+            categoria=CategoriaContenidoDocumento.BANK_ACCOUNT_CERTIFICATE,
+            coincidencia_titular='MISMATCH',
+        )
+
+        estado, razones = decidir_politica_contenido(
+            resultado,
+            tipo=TipoDocumentoFinanciacion.INCOME_CERTIFICATE,
+        )
+
+        self.assertEqual(
+            estado,
+            EstadoProcesamientoContenidoDocumento.CORRECTION_REQUIRED,
+        )
+        self.assertEqual(razones, ['DATA_MISMATCH'])
 
     def test_certificado_laboral_sin_titulo_literal_puede_aceptarse(self):
         documento = registrar_documento(
@@ -632,6 +841,7 @@ class ClasificacionContenidoDocumentalTests(TestCase):
         self.assertNotIn('uniqueItems', serializado)
         self.assertNotIn("'minimum'", serializado)
         self.assertNotIn("'maximum'", serializado)
+        self.assertIn('BANK_ACCOUNT_CERTIFICATE', serializado)
 
     def test_respuesta_ia_con_propiedad_extra_se_rechaza_localmente(self):
         payload = {

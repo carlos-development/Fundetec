@@ -294,18 +294,22 @@ tipos. En produccion depende de HTTPS, permiso del navegador y una camara
 disponible.
 
 La aplicacion web no puede probar criptograficamente que un cliente manipulado
-obtuvo los bytes desde el sensor y el User-Agent puede falsificarse. El grant
-temporal del servidor es la proteccion principal y la deteccion movil bloquea
-el uso normal desde escritorio. La autenticidad del documento sigue sujeta a
+obtuvo los bytes desde el sensor y el User-Agent puede falsificarse. Para el
+acceso directo, la proteccion principal es la sesion autenticada, la propiedad
+de la solicitud, su estado editable y el rol participante; la deteccion movil
+solo decide la experiencia. El grant temporal conserva esas mismas reglas para
+el handoff desde computador. La autenticidad del documento sigue sujeta a
 controles tecnicos adicionales y revision humana.
 
-El certificado de ingresos es una carga privada obligatoria en PDF, JPEG o
-PNG. Corresponde al estudiante deudor cuando es adulto y al tutor deudor cuando
-el estudiante es menor. Siempre requiere escaneo tecnico. JPEG, PNG y PDF se
-clasifican por contenido cuando el procesador esta habilitado. Se admiten
-certificado laboral, certificado de ingresos, ingresos y retenciones, extracto
-bancario y desprendible de nomina; no se exige ingreso minimo, no se calcula
-score y no se persisten movimientos ni numeros de cuenta completos.
+El soporte de ingresos o certificacion bancaria es una carga privada obligatoria
+en PDF, JPEG o PNG. Corresponde al estudiante deudor cuando es adulto y al tutor
+deudor cuando el estudiante es menor. Siempre requiere escaneo tecnico. JPEG,
+PNG y PDF se clasifican por contenido cuando el procesador esta habilitado. Se
+admiten certificado laboral, certificado de ingresos, ingresos y retenciones,
+extracto bancario, certificacion bancaria de titularidad y desprendible de
+nomina. La certificacion de titularidad no requiere movimientos ni valores
+financieros; no se exige ingreso minimo, no se calcula score y no se persisten
+movimientos ni numeros de cuenta completos.
 
 El procesamiento PDF usa `pypdf` para estructura y texto, y `pypdfium2` para
 renderizado en memoria. Rechaza cifrado, corrupcion, contenido activo, adjuntos

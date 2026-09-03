@@ -194,15 +194,30 @@ TIPOS_DOCUMENTALES_USUARIO = (
     TipoDocumentoFinanciacion.DEBTOR_IDENTIFICATION,
     TipoDocumentoFinanciacion.OTHER_EDUCATIONAL,
 )
+ETIQUETAS_TIPOS_DOCUMENTALES_USUARIO = {
+    TipoDocumentoFinanciacion.INCOME_CERTIFICATE: (
+        'Soporte de ingresos o certificacion bancaria'
+    ),
+}
+
+
+def _opciones_tipos_documentales_usuario(tipos=TIPOS_DOCUMENTALES_USUARIO):
+    return [
+        (
+            valor,
+            ETIQUETAS_TIPOS_DOCUMENTALES_USUARIO.get(
+                valor,
+                TipoDocumentoFinanciacion(valor).label,
+            ),
+        )
+        for valor in tipos
+    ]
 
 
 class DocumentoFinanciacionForm(forms.Form):
     tipo = forms.ChoiceField(
         label='Tipo de documento',
-        choices=[
-            (valor, TipoDocumentoFinanciacion(valor).label)
-            for valor in TIPOS_DOCUMENTALES_USUARIO
-        ],
+        choices=_opciones_tipos_documentales_usuario(),
     )
     participante = forms.ModelChoiceField(
         label='Titular del documento',
@@ -228,10 +243,9 @@ class DocumentoFinanciacionForm(forms.Form):
         super().__init__(*args, **kwargs)
         self.fields['participante'].queryset = solicitud.participantes.all()
         tipos = list(TIPOS_DOCUMENTALES_USUARIO)
-        self.fields['tipo'].choices = [
-            (valor, TipoDocumentoFinanciacion(valor).label)
-            for valor in tipos
-        ]
+        self.fields['tipo'].choices = _opciones_tipos_documentales_usuario(
+            tipos
+        )
         if tipo_inicial in tipos:
             self.fields['tipo'].initial = tipo_inicial
         if participante_inicial:

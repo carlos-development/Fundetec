@@ -265,7 +265,7 @@ class ExpedienteVerificableIteracionTests(TestCase):
         )
         self.assertContains(respuesta, 'No fue posible enviar el expediente')
         self.assertContains(respuesta, 'Abrir c&aacute;mara')
-        self.assertContains(respuesta, 'Cargar certificado')
+        self.assertContains(respuesta, 'Cargar soporte')
         self.assertNotContains(respuesta, 'Completar evidencia')
         self.assertContains(
             respuesta,

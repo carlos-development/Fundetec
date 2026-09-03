@@ -1,4 +1,5 @@
 import logging
+import secrets
 from datetime import timedelta
 from urllib.parse import urlencode
 
@@ -134,6 +135,9 @@ SESSION_CAPTURA_MOVIL_GRANT = 'financiacion_educativa_captura_movil_grant'
 SESSION_CONTEXTO_MOVIL_RECUPERADO = (
     'financiacion_educativa_contexto_movil_recuperado'
 )
+SESSION_CONTEXTO_MOVIL_BOOTSTRAP_NONCE = (
+    'financiacion_educativa_contexto_movil_bootstrap_nonce'
+)
 CONTEXTO_MOVIL_BOOTSTRAP_SALT = (
     'financiacion_educativa.contexto_movil_bootstrap'
 )
@@ -237,14 +241,17 @@ def _es_contexto_movil(request):
     return False
 
 
-def _crear_marcador_bootstrap_movil():
+def _crear_marcador_bootstrap_movil(request):
     expira_en = timezone.now() + timedelta(
         seconds=CONTEXTO_MOVIL_BOOTSTRAP_SECONDS
     )
+    nonce = secrets.token_urlsafe(32)
+    request.session[SESSION_CONTEXTO_MOVIL_BOOTSTRAP_NONCE] = nonce
     return signing.dumps(
         {
             'purpose': 'apple-touch-mobile-recovery',
             'expires_at': int(expira_en.timestamp()),
+            'nonce': nonce,
         },
         salt=CONTEXTO_MOVIL_BOOTSTRAP_SALT,
         compress=True,
@@ -265,14 +272,22 @@ def _confirmar_contexto_movil_recuperado(request):
     except (signing.BadSignature, TypeError, ValueError):
         return False
     expiracion = payload.get('expires_at') if isinstance(payload, dict) else None
+    nonce = payload.get('nonce') if isinstance(payload, dict) else None
+    nonce_esperado = request.session.get(
+        SESSION_CONTEXTO_MOVIL_BOOTSTRAP_NONCE
+    )
     if (
         not isinstance(payload, dict)
         or payload.get('purpose') != 'apple-touch-mobile-recovery'
         or not isinstance(expiracion, int)
         or isinstance(expiracion, bool)
         or expiracion <= int(timezone.now().timestamp())
+        or not isinstance(nonce, str)
+        or not isinstance(nonce_esperado, str)
+        or not secrets.compare_digest(nonce, nonce_esperado)
     ):
         return False
+    request.session.pop(SESSION_CONTEXTO_MOVIL_BOOTSTRAP_NONCE, None)
     minutos = max(
         1,
         settings.FINANCIACION_EDUCATIVA_MOBILE_CAPTURE_TTL_MINUTES,
@@ -514,7 +529,14 @@ def _destino_documental(solicitud, reanudada):
 
 def _captura_movil_autorizada(request, solicitud, persona):
     grant = request.session.get(SESSION_CAPTURA_MOVIL_GRANT)
-    if not isinstance(grant, dict) or not _es_contexto_movil(request):
+    if not _es_contexto_movil(request):
+        return False
+    if grant is None:
+        return bool(
+            request.user.is_authenticated
+            and solicitud.usuario_id == request.user.pk
+        )
+    if not isinstance(grant, dict):
         return False
     if (
         grant.get('solicitud_id') != str(solicitud.pk)
@@ -964,6 +986,22 @@ def capturar_identidad_view(request, solicitud_id, persona):
     )
 
     if request.method == 'POST':
+        if request.POST.get('accion') == 'confirmar-contexto-movil':
+            if _confirmar_contexto_movil_recuperado(request):
+                return redirect(
+                    'financiacion_educativa_web:capturar-identidad',
+                    solicitud_id=solicitud.pk,
+                    persona=persona,
+                )
+            _registrar_evento_seguro(
+                request,
+                tipo=(
+                    TipoEventoSeguridadFinanciacion
+                    .MOBILE_CAPTURE_CONTEXT_MISMATCH
+                ),
+                solicitud=solicitud,
+            )
+            raise Http404
         if not captura_movil_autorizada:
             _registrar_evento_seguro(
                 request,
@@ -1081,6 +1119,11 @@ def capturar_identidad_view(request, solicitud_id, persona):
             'captura_min_alto': (
                 settings.FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_HEIGHT
             ),
+            'mobile_context_bootstrap': (
+                ''
+                if captura_movil_autorizada
+                else _crear_marcador_bootstrap_movil(request)
+            ),
         },
     )
 
@@ -1122,7 +1165,11 @@ def captura_movil_token_view(request):
         return render(
             request,
             'financiacion_educativa/captura_movil_handoff.html',
-            {'mobile_context_bootstrap': _crear_marcador_bootstrap_movil()},
+            {
+                'mobile_context_bootstrap': (
+                    _crear_marcador_bootstrap_movil(request)
+                )
+            },
         )
     if (
         not _es_contexto_movil(request)

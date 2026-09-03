@@ -54,7 +54,7 @@
                                         {% elif requisito.codigo == "GUARDIAN_ID_FRONT" or requisito.codigo == "GUARDIAN_ID_BACK" %}
                                             <a href="{% url 'financiacion_educativa_web:capturar-identidad' solicitud.id 'tutor' %}">Abrir c&aacute;mara</a>
                                         {% elif requisito.codigo == "INCOME_CERTIFICATE" and deudor %}
-                                            <a href="{% url 'financiacion_educativa_web:documento-cargar' solicitud.id %}?tipo=INCOME_CERTIFICATE&amp;participante={{ deudor.id }}">Cargar certificado</a>
+                                            <a href="{% url 'financiacion_educativa_web:documento-cargar' solicitud.id %}?tipo=INCOME_CERTIFICATE&amp;participante={{ deudor.id }}">Cargar soporte</a>
                                         {% elif requisito.codigo == "DEBTOR_IDENTIFICATION" %}
                                             <a href="{% url 'financiacion_educativa_web:documento-cargar' solicitud.id %}">Cargar o corregir</a>
                                         {% elif requisito.codigo == "ENROLLMENT_EVIDENCE" %}

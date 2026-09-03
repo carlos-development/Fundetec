@@ -10,7 +10,7 @@ flujo normal. No certifica autenticidad, identidad ni liveness.
   `store=False`.
 - Modelo: `FINANCIACION_EDUCATIVA_DOCUMENT_AI_MODEL`.
 - Identificacion: esquema estricto v3.
-- Contenido de ingresos y matricula: esquema `CONTENT_V1`.
+- Contenido de ingresos y matricula: esquema `CONTENT_V2`.
 - Timeout: 30 segundos por defecto.
 - Intentos: 3 para identidad y 3 para contenido.
 - Umbrales de identidad: confianza 0.90, calidad 0.80 y legibilidad 0.80.

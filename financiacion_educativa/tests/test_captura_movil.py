@@ -269,6 +269,78 @@ class CapturaMovilTests(TestCase):
         captura = ipad.get(continuar.url)
         self.assertContains(captura, 'data-identity-camera')
 
+    def test_ipad_autenticado_recupera_contexto_directo_con_marcador_firmado(self):
+        ipad = Client(HTTP_USER_AGENT=IPAD_DESKTOP_UA)
+        ipad.force_login(self.usuario)
+        ruta = reverse(
+            'financiacion_educativa_web:capturar-identidad',
+            kwargs={
+                'solicitud_id': self.solicitud.pk,
+                'persona': 'estudiante',
+            },
+        )
+        handoff = ipad.get(ruta)
+        marcador = handoff.context['mobile_context_bootstrap']
+
+        self.assertContains(handoff, 'data-mobile-context-recovery')
+        self.assertNotContains(handoff, 'data-identity-camera')
+        self.assertEqual(
+            ipad.post(
+                ruta,
+                {
+                    'accion': 'confirmar-contexto-movil',
+                    'mobile_context_kind': 'apple-touch',
+                    'mobile_context_bootstrap': f'{marcador}alterado',
+                },
+            ).status_code,
+            404,
+        )
+        with mock.patch(
+            'financiacion_educativa.web.views.timezone.now',
+            return_value=timezone.now() + timedelta(minutes=6),
+        ):
+            self.assertEqual(
+                ipad.post(
+                    ruta,
+                    {
+                        'accion': 'confirmar-contexto-movil',
+                        'mobile_context_kind': 'apple-touch',
+                        'mobile_context_bootstrap': marcador,
+                    },
+                ).status_code,
+                404,
+            )
+
+        handoff = ipad.get(ruta)
+        respuesta = ipad.post(
+            ruta,
+            {
+                'accion': 'confirmar-contexto-movil',
+                'mobile_context_kind': 'apple-touch',
+                'mobile_context_bootstrap': handoff.context[
+                    'mobile_context_bootstrap'
+                ],
+            },
+        )
+
+        self.assertEqual(respuesta.status_code, 302)
+        self.assertEqual(respuesta.url, ruta)
+        self.assertContains(ipad.get(ruta), 'data-identity-camera')
+        self.assertEqual(
+            ipad.post(
+                ruta,
+                {
+                    'accion': 'confirmar-contexto-movil',
+                    'mobile_context_kind': 'apple-touch',
+                    'mobile_context_bootstrap': handoff.context[
+                        'mobile_context_bootstrap'
+                    ],
+                },
+            ).status_code,
+            404,
+        )
+        self.assertFalse(EnlaceCapturaMovil.objects.exists())
+
     def test_token_alterado_vencido_y_usuario_incorrecto_no_dan_acceso(self):
         self._emitir_desde_web()
         token, ruta = self._token_y_ruta()
@@ -354,6 +426,63 @@ class CapturaMovilTests(TestCase):
 
         self.assertEqual(respuesta.status_code, 404)
         self.assertFalse(otra.documentos.exists())
+
+    def test_grant_de_estudiante_no_autoriza_captura_del_tutor(self):
+        self.estudiante.roles.filter(
+            rol=RolParticipante.PRINCIPAL_DEBTOR,
+        ).delete()
+        self.estudiante.fecha_nacimiento = date(2012, 1, 1)
+        self.estudiante.save(update_fields=['fecha_nacimiento'])
+        registrar_o_actualizar_participante(
+            solicitud=self.solicitud,
+            actor=self.usuario,
+            datos=DatosParticipante(
+                nombres='Persona',
+                apellidos='Tutora',
+                tipo_documento=TipoDocumentoIdentidad.CC,
+                numero_documento='1000200088',
+                fecha_nacimiento=date(1980, 1, 1),
+                relacion_estudiante=RelacionEstudiante.MOTHER,
+            ),
+            roles={
+                RolParticipante.GUARDIAN,
+                RolParticipante.PRINCIPAL_DEBTOR,
+            },
+        )
+        self._emitir_desde_web()
+        token, ruta = self._token_y_ruta()
+        movil = Client(HTTP_USER_AGENT=MOBILE_UA)
+        self.assertEqual(movil.post(ruta, {'token': token}).status_code, 302)
+        movil.force_login(self.usuario)
+        self.assertEqual(
+            movil.get(
+                reverse('financiacion_educativa_web:captura-movil-continuar')
+            ).status_code,
+            302,
+        )
+        url_tutor = reverse(
+            'financiacion_educativa_web:capturar-identidad',
+            kwargs={
+                'solicitud_id': self.solicitud.pk,
+                'persona': 'tutor',
+            },
+        )
+
+        respuesta = movil.post(
+            url_tutor,
+            {
+                'lado': 'frente',
+                'captura': jpeg(marca=b'tutor-no-autorizado'),
+                'metodo_captura': 'webrtc',
+            },
+        )
+
+        self.assertEqual(respuesta.status_code, 404)
+        self.assertFalse(
+            self.solicitud.documentos.filter(
+                tipo=TipoDocumentoFinanciacion.GUARDIAN_ID_FRONT,
+            ).exists()
+        )
 
     def test_reemision_revoca_enlace_anterior_y_deja_solo_uno_activo(self):
         with self.captureOnCommitCallbacks(execute=True):

@@ -68,6 +68,11 @@ ALLAUTH_SOCIALACCOUNT_AVAILABLE = _module_available('allauth.socialaccount')
 ALLAUTH_GOOGLE_AVAILABLE = _module_available('allauth.socialaccount.providers.google')
 DJANGO_CELERY_BEAT_AVAILABLE = _module_available('django_celery_beat')
 WHITENOISE_AVAILABLE = _module_available('whitenoise')
+if not DEBUG and not WHITENOISE_AVAILABLE:
+    raise ImproperlyConfigured(
+        'whitenoise es obligatorio para servir archivos estaticos versionados '
+        'cuando DEBUG=False.'
+    )
 
 def env_bool(name, default=False):
     value = os.environ.get(name, str(default))
@@ -515,10 +520,10 @@ FINANCIACION_EDUCATIVA_CONTENT_PROCESSOR_VERSION = os.environ.get(
     'FINANCIACION_EDUCATIVA_CONTENT_PROCESSOR_VERSION', 'PDF_CONTENT_V1'
 ).strip()
 FINANCIACION_EDUCATIVA_CONTENT_SCHEMA_VERSION = os.environ.get(
-    'FINANCIACION_EDUCATIVA_CONTENT_SCHEMA_VERSION', 'CONTENT_V1'
+    'FINANCIACION_EDUCATIVA_CONTENT_SCHEMA_VERSION', 'CONTENT_V2'
 ).strip()
 FINANCIACION_EDUCATIVA_CONTENT_POLICY_VERSION = os.environ.get(
-    'FINANCIACION_EDUCATIVA_CONTENT_POLICY_VERSION', 'EDU_CONTENT_V1'
+    'FINANCIACION_EDUCATIVA_CONTENT_POLICY_VERSION', 'EDU_CONTENT_V2'
 ).strip()
 FINANCIACION_EDUCATIVA_CALIBRATION_OPENAI_ENABLED = env_bool(
     'FINANCIACION_EDUCATIVA_CALIBRATION_OPENAI_ENABLED',
@@ -888,8 +893,18 @@ _static_root_value = os.environ.get(
     str(BASE_DIR / 'staticfiles'),
 )
 STATIC_ROOT = Path(_static_root_value).expanduser()
-if WHITENOISE_AVAILABLE:
-    STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+STORAGES = {
+    'default': {
+        'BACKEND': 'django.core.files.storage.FileSystemStorage',
+    },
+    'staticfiles': {
+        'BACKEND': (
+            'whitenoise.storage.CompressedManifestStaticFilesStorage'
+            if WHITENOISE_AVAILABLE and not DEBUG
+            else 'django.contrib.staticfiles.storage.StaticFilesStorage'
+        ),
+    },
+}
 
 MEDIA_URL = '/media/'
 _media_root_value = os.environ.get('MEDIA_ROOT', str(BASE_DIR / 'media'))

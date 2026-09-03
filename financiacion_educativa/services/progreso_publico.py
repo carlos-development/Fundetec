@@ -84,7 +84,7 @@ MENSAJES_CORRECCION = {
         'Necesitamos una nueva fotografía del reverso de la identificación del tutor.'
     ),
     RequisitoCorreccionEducativa.INCOME_CERTIFICATE: (
-        'El certificado de ingresos debe cargarse nuevamente.'
+        'El soporte de ingresos o la certificacion bancaria debe cargarse nuevamente.'
     ),
     RequisitoCorreccionEducativa.ENROLLMENT_EVIDENCE: (
         'El soporte de matrícula debe cargarse nuevamente.'
@@ -135,7 +135,7 @@ def _accion_requisito(solicitud, codigo):
         destino = _url('documento-cargar', solicitud)
         if asignacion:
             destino = f'{destino}?{urlencode({"tipo": "INCOME_CERTIFICATE", "participante": asignacion.participante_id})}'
-        return AccionPublica('Cargar certificado de ingresos', destino)
+        return AccionPublica('Cargar soporte financiero', destino)
     if codigo in {
         RequisitoCorreccionEducativa.STUDENT,
         RequisitoCorreccionEducativa.GUARDIAN,

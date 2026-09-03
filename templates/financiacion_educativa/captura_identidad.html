@@ -141,6 +141,12 @@
             </div>
             <ol class="edu-handoff-steps"><li>Solicita el enlace para el correo registrado.</li><li>&Aacute;brelo en Safari para iPhone o Chrome para Android.</li><li>Inicia sesi&oacute;n y completa frente y reverso.</li></ol>
             <form method="post" action="{% url 'financiacion_educativa_web:captura-movil-enviar' solicitud.id persona %}">{% csrf_token %}<button class="edu-button" type="submit"><i class="bi bi-envelope" aria-hidden="true"></i> Enviar enlace a mi correo</button></form>
+            <form method="post" data-mobile-context-recovery hidden>
+                {% csrf_token %}
+                <input type="hidden" name="accion" value="confirmar-contexto-movil">
+                <input type="hidden" name="mobile_context_kind" value="apple-touch">
+                <input type="hidden" name="mobile_context_bootstrap" value="{{ mobile_context_bootstrap }}">
+            </form>
             <a class="edu-button-quiet" href="{% url 'financiacion_educativa_web:documentacion' solicitud.id %}">Volver al expediente</a>
         </article>
     </div>
@@ -148,4 +154,17 @@
 {% endif %}
 {% endblock %}
 
-{% block extra_scripts %}{% if captura_movil_autorizada %}<script src="{% static 'js/financiacion_educativa_camara.js' %}"></script>{% endif %}{% endblock %}
+{% block extra_scripts %}
+<script src="{% static 'js/financiacion_educativa_camara.js' %}"></script>
+{% if not captura_movil_autorizada %}
+<script>
+(() => {
+    const detector = window.EducationalIdentityCamera;
+    const form = document.querySelector("[data-mobile-context-recovery]");
+    if (form && detector && detector.isAppleTouchDesktop(window.navigator)) {
+        form.submit();
+    }
+})();
+</script>
+{% endif %}
+{% endblock %}
