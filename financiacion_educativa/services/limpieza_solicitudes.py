@@ -373,7 +373,11 @@ def _eliminar_dependencia(especificacion, solicitud_ids):
     )
     cantidad = queryset.count()
     if cantidad:
-        queryset.delete()
+        if especificacion.modelo == 'OutboxCorreoEducativo':
+            queryset.filter(correo_origen__isnull=False).delete()
+            queryset.filter(correo_origen__isnull=True).delete()
+        else:
+            queryset.delete()
     return cantidad
 
 

@@ -378,6 +378,11 @@ class TipoEventoCorreoEducativo(models.TextChoices):
         'AUTOMATIC_CONTINUATION',
         'Continuacion automatica',
     )
+    AUDIT_COPY = 'AUDIT_COPY', 'Copia de auditoria'
+    INSTITUTIONAL_INITIAL_NOTIFICATION = (
+        'INSTITUTIONAL_INITIAL_NOTIFICATION',
+        'Notificacion institucional de invitacion inicial',
+    )
 
 
 class CodigoMensajeCorreoEducativo(models.TextChoices):
@@ -393,6 +398,11 @@ class CodigoMensajeCorreoEducativo(models.TextChoices):
     AUTOMATIC_CONTINUATION = (
         'AUTOMATIC_CONTINUATION',
         'Continuacion automatica',
+    )
+    AUDIT_COPY = 'AUDIT_COPY', 'Copia de auditoria'
+    INSTITUTIONAL_INITIAL_NOTIFICATION = (
+        'INSTITUTIONAL_INITIAL_NOTIFICATION',
+        'Notificacion institucional de invitacion inicial',
     )
 
 

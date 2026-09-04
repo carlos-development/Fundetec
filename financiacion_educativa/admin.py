@@ -16,6 +16,7 @@ from .models import (
     CuotaAmortizacionEducativa,
     DocumentoFinanciacion,
     DecisionRevisionEducativa,
+    DestinatarioNotificacionInstitucionalEducativa,
     EntregaCorreoEstadoSolicitud,
     EnlaceCapturaMovil,
     EntregaInvitacionContinuacion,
@@ -72,6 +73,29 @@ from .services.orquestacion import (
     revocar_invitacion_orquestada,
 )
 from .services.revision import decidir_solicitud
+
+
+@admin.register(DestinatarioNotificacionInstitucionalEducativa)
+class DestinatarioNotificacionInstitucionalEducativaAdmin(admin.ModelAdmin):
+    list_display = (
+        'institucion',
+        'correo',
+        'activo',
+        'creado_en',
+        'actualizado_en',
+    )
+    list_filter = ('activo', 'institucion')
+    search_fields = (
+        'institucion__nombre_comercial',
+        'institucion__razon_social',
+        'correo',
+    )
+    list_select_related = ('institucion',)
+    readonly_fields = ('id', 'creado_en', 'actualizado_en')
+    actions = None
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 class DecisionRevisionAdminForm(forms.Form):

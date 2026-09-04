@@ -23,11 +23,13 @@ from financiacion_educativa.choices import (
     EstadoInvitacionContinuacion,
     EstadoOutboxCorreoEducativo,
     EstadoSolicitudFinanciacion,
+    OrigenEntregaInvitacion,
     TipoEventoCorreoEducativo,
     TipoEventoEnlaceCapturaMovil,
     TipoEventoInvitacion,
 )
 from financiacion_educativa.models import (
+    DestinatarioNotificacionInstitucionalEducativa,
     EnlaceCapturaMovil,
     EntregaCorreoEstadoSolicitud,
     EntregaInvitacionContinuacion,
@@ -35,9 +37,12 @@ from financiacion_educativa.models import (
     SolicitudFinanciacionEducativa,
 )
 from financiacion_educativa.services.correos import (
+    ASUNTO_CAPTURA_MOVIL,
+    ASUNTO_EXPEDIENTE_RECIBIDO,
     ConfiguracionSMTPInvalida,
     SMTP_BACKENDS,
     construir_correo_correccion_automatica,
+    construir_correo_copia_educativa,
     construir_correo_continuacion_automatica,
     construir_correo_decision_educativa,
     construir_correo_expediente_recibido,
@@ -48,6 +53,23 @@ from financiacion_educativa.services.correos import (
 
 
 logger = logging.getLogger(__name__)
+EVENTOS_AUDITABLES_ESTUDIANTE = frozenset({
+    TipoEventoCorreoEducativo.INITIAL_INVITATION,
+    TipoEventoCorreoEducativo.INVITATION_REISSUE,
+    TipoEventoCorreoEducativo.CONTINUATION_REMINDER_1H,
+    TipoEventoCorreoEducativo.CONTINUATION_REMINDER_6H,
+    TipoEventoCorreoEducativo.CONTINUATION_REMINDER_24H,
+    TipoEventoCorreoEducativo.CONTINUATION_REMINDER_48H,
+    TipoEventoCorreoEducativo.MOBILE_CAPTURE_LINK,
+    TipoEventoCorreoEducativo.DOSSIER_RECEIVED,
+    TipoEventoCorreoEducativo.REVIEW_DECISION,
+    TipoEventoCorreoEducativo.AUTOMATIC_CORRECTION,
+    TipoEventoCorreoEducativo.AUTOMATIC_CONTINUATION,
+})
+CODIGOS_COPIA = frozenset({
+    CodigoMensajeCorreoEducativo.AUDIT_COPY,
+    CodigoMensajeCorreoEducativo.INSTITUTIONAL_INITIAL_NOTIFICATION,
+})
 ESTADOS_RECLAMABLES = {
     EstadoOutboxCorreoEducativo.PENDING,
     EstadoOutboxCorreoEducativo.RETRYING,
@@ -121,6 +143,7 @@ def crear_intencion_correo(
     entrega_invitacion=None,
     enlace_captura=None,
     decision=None,
+    correo_origen=None,
 ):
     if not transaction.get_connection().in_atomic_block:
         raise RuntimeError('La intencion de correo debe crearse atomicamente.')
@@ -137,6 +160,20 @@ def crear_intencion_correo(
     clave = str(clave_idempotencia).strip()
     if not clave or len(clave) > 180:
         raise ValidationError('La clave idempotente del correo no es valida.')
+    es_copia = codigo_mensaje in CODIGOS_COPIA
+    if es_copia:
+        if correo_origen is None:
+            raise ValidationError('La copia requiere un correo original.')
+        if correo_origen.correo_origen_id:
+            raise ValidationError('Una copia educativa no puede generar otra copia.')
+        if correo_origen.estado != EstadoOutboxCorreoEducativo.SENT:
+            raise ValidationError('El correo original aun no esta confirmado como SENT.')
+        if correo_origen.solicitud_id != solicitud.pk:
+            raise ValidationError('La copia y el correo original deben pertenecer a la misma solicitud.')
+        if copias or contexto:
+            raise ValidationError('La copia educativa no admite CC ni contexto persistido.')
+    elif correo_origen is not None:
+        raise ValidationError('Solo las copias educativas admiten correo original.')
     defaults = {
         'solicitud': solicitud,
         'tipo_evento': tipo_evento,
@@ -150,6 +187,7 @@ def crear_intencion_correo(
         'entrega_invitacion': entrega_invitacion,
         'enlace_captura': enlace_captura,
         'decision': decision,
+        'correo_origen': correo_origen,
     }
     try:
         outbox, creado = OutboxCorreoEducativo.objects.get_or_create(
@@ -159,9 +197,129 @@ def crear_intencion_correo(
     except IntegrityError:
         outbox = OutboxCorreoEducativo.objects.get(clave_idempotencia=clave)
         creado = False
-    if outbox.solicitud_id != solicitud.pk or outbox.codigo_mensaje != codigo_mensaje:
+    if (
+        outbox.solicitud_id != solicitud.pk
+        or outbox.codigo_mensaje != codigo_mensaje
+        or outbox.correo_origen_id != getattr(correo_origen, 'pk', None)
+    ):
         raise ValidationError('La clave idempotente pertenece a otro correo.')
     return outbox, creado
+
+
+def _asunto_original(outbox):
+    if outbox.codigo_mensaje == CodigoMensajeCorreoEducativo.INVITATION:
+        from financiacion_educativa.services.entrega_invitaciones import (
+            contenido_correo_invitacion,
+        )
+        return contenido_correo_invitacion(outbox.tipo_evento)['subject']
+    asuntos = {
+        CodigoMensajeCorreoEducativo.MOBILE_CAPTURE: ASUNTO_CAPTURA_MOVIL,
+        CodigoMensajeCorreoEducativo.DOSSIER_RECEIVED: ASUNTO_EXPEDIENTE_RECIBIDO,
+        CodigoMensajeCorreoEducativo.AUTOMATIC_CORRECTION: (
+            'Necesitamos una correccion en tu solicitud educativa'
+        ),
+        CodigoMensajeCorreoEducativo.AUTOMATIC_CONTINUATION: (
+            'Tu expediente educativo esta listo para continuar a firma'
+        ),
+    }
+    if outbox.codigo_mensaje == CodigoMensajeCorreoEducativo.REVIEW_DECISION:
+        return {
+            'APPROVED': 'Tu expediente fue aprobado para continuar a firma',
+            'REJECTED': 'Resultado de tu solicitud educativa',
+            'CORRECTION_REQUESTED': (
+                'Necesitamos una correccion en tu solicitud educativa'
+            ),
+        }.get(outbox.decision.tipo, 'Resultado de tu solicitud educativa')
+    return asuntos.get(outbox.codigo_mensaje, 'Comunicacion educativa')
+
+
+def _crear_copia_post_envio(*, original, codigo_mensaje, destinatarios):
+    tipo_evento = {
+        CodigoMensajeCorreoEducativo.AUDIT_COPY: (
+            TipoEventoCorreoEducativo.AUDIT_COPY
+        ),
+        CodigoMensajeCorreoEducativo.INSTITUTIONAL_INITIAL_NOTIFICATION: (
+            TipoEventoCorreoEducativo.INSTITUTIONAL_INITIAL_NOTIFICATION
+        ),
+    }[codigo_mensaje]
+    clave = f'{codigo_mensaje.lower()}:{original.pk}'
+    return crear_intencion_correo(
+        solicitud=original.solicitud,
+        tipo_evento=tipo_evento,
+        clave_idempotencia=clave,
+        codigo_mensaje=codigo_mensaje,
+        destinatarios=destinatarios,
+        contexto={},
+        correo_origen=original,
+    )
+
+
+def _programar_copias_post_envio(original):
+    if original.correo_origen_id or original.tipo_evento not in EVENTOS_AUDITABLES_ESTUDIANTE:
+        return
+
+    destinatarios_auditoria = getattr(
+        settings,
+        'EDUCATIONAL_AUDIT_NOTIFICATION_EMAILS',
+        (),
+    )
+    if destinatarios_auditoria:
+        try:
+            with transaction.atomic():
+                _crear_copia_post_envio(
+                    original=original,
+                    codigo_mensaje=CodigoMensajeCorreoEducativo.AUDIT_COPY,
+                    destinatarios=destinatarios_auditoria,
+                )
+        except Exception as error:
+            logger.error(
+                'Copia educativa omitida: outbox_id=%s codigo=AUDIT_COPY_CREATE_FAILED clase=%s',
+                original.pk,
+                error.__class__.__name__,
+            )
+    else:
+        logger.info(
+            'Copia educativa omitida: outbox_id=%s codigo=NO_AUDIT_RECIPIENTS',
+            original.pk,
+        )
+
+    if original.tipo_evento != TipoEventoCorreoEducativo.INITIAL_INVITATION:
+        return
+    try:
+        with transaction.atomic():
+            if (
+                not original.entrega_invitacion_id
+                or original.entrega_invitacion.origen
+                != OrigenEntregaInvitacion.INITIAL
+            ):
+                return
+            destinatarios_institucion = list(
+                DestinatarioNotificacionInstitucionalEducativa.objects.filter(
+                    institucion_id=original.solicitud.institucion_id,
+                    activo=True,
+                ).values_list('correo', flat=True)
+            )
+            if not destinatarios_institucion:
+                logger.info(
+                    'Copia educativa omitida: outbox_id=%s '
+                    'codigo=NO_INSTITUTION_RECIPIENTS',
+                    original.pk,
+                )
+                return
+            _crear_copia_post_envio(
+                original=original,
+                codigo_mensaje=(
+                    CodigoMensajeCorreoEducativo.INSTITUTIONAL_INITIAL_NOTIFICATION
+                ),
+                destinatarios=destinatarios_institucion,
+            )
+    except Exception as error:
+        logger.error(
+            'Copia educativa omitida: outbox_id=%s '
+            'codigo=INSTITUTION_COPY_CREATE_FAILED clase=%s',
+            original.pk,
+            error.__class__.__name__,
+        )
 
 
 def crear_correo_expediente_recibido(*, solicitud):
@@ -442,7 +600,26 @@ def _preparar_enlace_personal(*, outbox_id, lease_id):
 
 
 def _construir_mensaje(outbox, connection_mail):
-    if outbox.codigo_mensaje == CodigoMensajeCorreoEducativo.DOSSIER_RECEIVED:
+    if outbox.codigo_mensaje in CODIGOS_COPIA:
+        original = outbox.correo_origen
+        mensaje = construir_correo_copia_educativa(
+            recipients=outbox.destinatarios,
+            clase=(
+                'AUDIT'
+                if outbox.codigo_mensaje == CodigoMensajeCorreoEducativo.AUDIT_COPY
+                else 'INSTITUTIONAL'
+            ),
+            comunicacion=original.get_tipo_evento_display(),
+            asunto_original=_asunto_original(original),
+            referencia_externa=outbox.solicitud.referencia_externa,
+            institucion=outbox.solicitud.institucion.razon_social,
+            programa=outbox.solicitud.institucion.nombre_comercial,
+            curso=outbox.solicitud.nombre_curso,
+            destinatario_original=original.destinatarios[0],
+            enviada_en=original.enviada_en,
+            connection=connection_mail,
+        )
+    elif outbox.codigo_mensaje == CodigoMensajeCorreoEducativo.DOSSIER_RECEIVED:
         mensaje = construir_correo_expediente_recibido(
             recipient=outbox.destinatarios[0],
             referencia_externa=outbox.solicitud.referencia_externa,
@@ -581,6 +758,8 @@ def _finalizar(*, outbox_id, lease_id, estado, codigo=''):
         outbox.proxima_ejecucion_en = ahora + timedelta(seconds=_backoff(outbox.intentos))
     outbox.save()
     _sincronizar_legado(outbox)
+    if estado == EstadoOutboxCorreoEducativo.SENT:
+        _programar_copias_post_envio(outbox)
     return outbox
 
 
@@ -753,6 +932,8 @@ def resolver_ambiguos(*, resolucion, dry_run=False, solicitud_id=None, outbox_id
             outbox.proxima_ejecucion_en = timezone.now()
         outbox.save()
         _sincronizar_legado(outbox)
+        if resolucion == 'SENT':
+            _programar_copias_post_envio(outbox)
     return len(registros)
 
 

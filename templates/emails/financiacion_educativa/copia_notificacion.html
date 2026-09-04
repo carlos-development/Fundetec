@@ -1,0 +1,21 @@
+{% extends "emails/financiacion_educativa/_base.html" %}
+{% block email_title %}{{ copy_label }}{% endblock %}
+{% block preheader %}Registro informativo de una comunicacion educativa enviada.{% endblock %}
+{% block content %}
+  {% include "emails/financiacion_educativa/_status_badge.html" with badge_text="SENT" badge_background="#EAF7EE" badge_color="#237A43" %}
+  <h1 class="email-title" style="margin:0 0 14px;font-size:26px;line-height:32px;font-weight:800;color:#0B2E59;">{{ copy_label }}</h1>
+  <p style="margin:0 0 24px;font-size:15px;line-height:23px;color:#5B6B82;">Registro informativo de una comunicaci&oacute;n educativa confirmada como enviada.</p>
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;margin:0 0 24px;background-color:#F5F8FC;border:1px solid #E6EBF2;border-radius:8px;overflow:hidden;border-collapse:separate;">
+    {% include "emails/financiacion_educativa/_information_field.html" with label="Tipo de comunicacion" value=communication_type %}
+    {% include "emails/financiacion_educativa/_information_field.html" with label="Asunto original" value=original_subject %}
+    {% include "emails/financiacion_educativa/_information_field.html" with label="Referencia" value=reference %}
+    {% include "emails/financiacion_educativa/_information_field.html" with label="Institucion" value=institution_name %}
+    {% include "emails/financiacion_educativa/_information_field.html" with label="Programa" value=program_name %}
+    {% if course_name %}{% include "emails/financiacion_educativa/_information_field.html" with label="Curso" value=course_name %}{% endif %}
+    {% include "emails/financiacion_educativa/_information_field.html" with label="Destinatario original" value=masked_recipient %}
+    {% include "emails/financiacion_educativa/_information_field.html" with label="Fecha de envio original" value=sent_at %}
+    {% include "emails/financiacion_educativa/_information_field.html" with label="Estado" value="SENT" is_last=True %}
+  </table>
+  <p style="margin:0 0 12px;padding:14px 16px;background-color:#FFF8E5;border:1px solid #F1D27A;border-radius:8px;font-size:14px;line-height:21px;color:#6E5600;"><strong>Enlace personal omitido en esta copia por seguridad.</strong></p>
+  <p style="margin:0;font-size:14px;line-height:21px;color:#5B6B82;">Esta copia es informativa y no permite continuar el proceso en nombre del estudiante.</p>
+{% endblock %}

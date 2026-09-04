@@ -5,7 +5,8 @@ import socket
 import sys
 from urllib.parse import urlparse
 
-from django.core.exceptions import ImproperlyConfigured
+from django.core.exceptions import ImproperlyConfigured, ValidationError
+from django.core.validators import validate_email
 
 try:
     import dj_database_url
@@ -81,6 +82,21 @@ def env_bool(name, default=False):
 def _split_env_list(name, default=''):
     value = os.environ.get(name, default)
     return [item.strip() for item in value.split(',') if item.strip()]
+
+
+def _validated_email_env_list(name, default=''):
+    resultado = []
+    for correo in _split_env_list(name, default):
+        normalizado = correo.casefold()
+        try:
+            validate_email(normalizado)
+        except ValidationError as error:
+            raise ImproperlyConfigured(
+                f'{name} contiene un correo invalido.'
+            ) from error
+        if normalizado not in resultado:
+            resultado.append(normalizado)
+    return resultado
 
 
 def _require_nonempty_setting(name, value):
@@ -291,6 +307,10 @@ FINANCIACION_EDUCATIVA_CONTINUATION_REMINDER_BATCH_SIZE = int(
 )
 EDUCATIONAL_OPERATIONS_NOTIFICATION_EMAILS = _split_env_list(
     'EDUCATIONAL_OPERATIONS_NOTIFICATION_EMAILS',
+    '',
+)
+EDUCATIONAL_AUDIT_NOTIFICATION_EMAILS = _validated_email_env_list(
+    'EDUCATIONAL_AUDIT_NOTIFICATION_EMAILS',
     '',
 )
 FINANCIACION_EDUCATIVA_INVITATION_RECIPIENT_HMAC_KEY = os.environ.get(

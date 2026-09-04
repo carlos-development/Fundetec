@@ -1,0 +1,17 @@
+{{ copy_label }}
+
+Tipo de comunicacion: {{ communication_type }}
+Asunto original: {{ original_subject }}
+Referencia: {{ reference }}
+Institucion: {{ institution_name }}
+Programa: {{ program_name }}
+{% if course_name %}Curso: {{ course_name }}
+{% endif %}Destinatario original: {{ masked_recipient }}
+Fecha de envio original: {{ sent_at|date:"Y-m-d H:i:s T" }}
+Estado: SENT
+
+Enlace personal omitido en esta copia por seguridad.
+
+Esta copia es informativa y no permite continuar el proceso en nombre del estudiante.
+
+{{ brand_name }}

@@ -426,6 +426,24 @@ No active esta funcion si ClamAV, el worker educativo, el backend IA o la clave
 HMAC no estan listos. La activacion no procesa solicitudes historicas al iniciar
 Django; solo actua sobre trabajos educativos encolados posteriormente.
 
+## Copias de correo educativo
+
+La migracion `0026` incorpora copias independientes posteriores a `SENT`.
+Durante el despliegue inicial mantener:
+
+```dotenv
+EDUCATIONAL_AUDIT_NOTIFICATION_EMAILS=
+```
+
+Con el outbox detenido, aplicar la migracion y registrar una sola vez en Django
+Admin los destinatarios institucionales activos de la fila `Institucion`
+FUNDETEC. PREICFES, INGLES y los demas programas deben originar solicitudes
+asociadas a esa misma institucion; no se configuran destinatarios por programa.
+Solo despues de validar SMTP se configura la lista de auditoria, se reinician
+aplicacion y outbox, y se prueba con direcciones autorizadas. La matriz, codigos
+de log, privacidad y rollback estan documentados en
+`OUTBOX_CORREOS_EDUCATIVOS.md`.
+
 ## Unidades systemd educativas
 
 Nombres exactos:

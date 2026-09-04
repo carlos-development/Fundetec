@@ -252,11 +252,14 @@ class ConcurrenciaOutboxPostgreSQLTests(TransactionTestCase):
             try:
                 registro = reclamar_correo_pendiente()
                 return str(registro.pk) if registro else None
+            except Exception as error:
+                return error
             finally:
-                close_old_connections()
+                connection.close()
 
         with ThreadPoolExecutor(max_workers=2) as ejecutor:
             resultados = list(ejecutor.map(lambda _: reclamar(), range(2)))
 
+        errores = [resultado for resultado in resultados if isinstance(resultado, Exception)]
+        self.assertEqual(errores, [])
         self.assertEqual(sum(resultado is not None for resultado in resultados), 1)
-

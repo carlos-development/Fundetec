@@ -430,6 +430,82 @@ def construir_correo_nueva_solicitud_interna(
     return mensaje
 
 
+def enmascarar_destinatario_correo(correo):
+    normalizado = normalizar_destinatario(correo)
+    local, dominio = normalizado.rsplit('@', 1)
+    visible = local[:1] if local else '*'
+    return f'{visible}***@{dominio}'
+
+
+def construir_correo_copia_educativa(
+    *,
+    recipients,
+    clase,
+    comunicacion,
+    asunto_original,
+    referencia_externa,
+    institucion,
+    programa,
+    curso,
+    destinatario_original,
+    enviada_en,
+    connection=None,
+):
+    destinatarios = []
+    for correo in recipients or []:
+        normalizado = normalizar_destinatario(correo)
+        if normalizado not in destinatarios:
+            destinatarios.append(normalizado)
+    if not destinatarios:
+        raise ConfiguracionSMTPInvalida(
+            'La copia educativa requiere destinatarios validos.'
+        )
+    prefijos = {
+        'AUDIT': '[COPIA AUDITORÍA]',
+        'INSTITUTIONAL': '[COPIA INSTITUCIONAL]',
+    }
+    prefijo = prefijos.get(clase)
+    if not prefijo:
+        raise ValidationError('La clase de copia educativa no es valida.')
+    asunto_original = str(asunto_original or '').strip()[:180]
+    contexto = {
+        'brand_name': 'Aprobado',
+        'copy_label': (
+            'Copia de auditoria'
+            if clase == 'AUDIT'
+            else 'Notificacion institucional'
+        ),
+        'communication_type': str(comunicacion or '').strip()[:120],
+        'original_subject': asunto_original,
+        'reference': str(referencia_externa or '').strip()[:120],
+        'institution_name': str(institucion or '').strip()[:200],
+        'program_name': str(programa or '').strip()[:160],
+        'course_name': str(curso or '').strip()[:200],
+        'masked_recipient': enmascarar_destinatario_correo(
+            destinatario_original
+        ),
+        'sent_at': enviada_en,
+        'email_logo_url': obtener_email_logo_url(),
+    }
+    texto = render_to_string(
+        'emails/financiacion_educativa/copia_notificacion.txt',
+        contexto,
+    )
+    html = render_to_string(
+        'emails/financiacion_educativa/copia_notificacion.html',
+        contexto,
+    )
+    mensaje = EmailMultiAlternatives(
+        subject=f'{prefijo} {asunto_original}',
+        body=texto,
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        to=destinatarios,
+        connection=connection,
+    )
+    mensaje.attach_alternative(html, 'text/html')
+    return mensaje
+
+
 @dataclass(frozen=True)
 class MuestraCorreoEducativo:
     codigo: str

@@ -12,6 +12,7 @@ from django.core.validators import (
     RegexValidator,
 )
 from django.db import models
+from django.db.models.functions import Lower
 from django.utils import timezone
 
 from instituciones.models import Institucion
@@ -2895,6 +2896,58 @@ class EntregaCorreoEstadoSolicitud(models.Model):
         return f'{self.solicitud_id} - {self.get_estado_display()}'
 
 
+class DestinatarioNotificacionInstitucionalEducativa(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    institucion = models.ForeignKey(
+        Institucion,
+        on_delete=models.PROTECT,
+        related_name='destinatarios_notificacion_educativa',
+    )
+    correo = models.EmailField()
+    activo = models.BooleanField(default=True)
+    creado_en = models.DateTimeField(auto_now_add=True)
+    actualizado_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['institucion__nombre_comercial', 'correo']
+        verbose_name = 'Destinatario institucional educativo'
+        verbose_name_plural = 'Destinatarios institucionales educativos'
+        constraints = [
+            models.UniqueConstraint(
+                Lower('correo'),
+                'institucion',
+                name='uniq_edu_inst_notice_email',
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=['institucion', 'activo'],
+                name='edu_inst_notice_active_idx',
+            ),
+        ]
+
+    def clean(self):
+        self.correo = str(self.correo or '').strip().casefold()
+        super().clean()
+
+    def save(self, *args, **kwargs):
+        self.correo = str(self.correo or '').strip().casefold()
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def __str__(self):
+        estado = 'activo' if self.activo else 'inactivo'
+        if '@' in self.correo:
+            local, dominio = self.correo.rsplit('@', 1)
+            correo_enmascarado = f'{local[:1]}***@{dominio}'
+        else:
+            correo_enmascarado = '***'
+        return (
+            f'{self.institucion.nombre_comercial} - '
+            f'{correo_enmascarado} ({estado})'
+        )
+
+
 class OutboxCorreoEducativo(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     solicitud = models.ForeignKey(
@@ -2954,6 +3007,14 @@ class OutboxCorreoEducativo(models.Model):
         blank=True,
         related_name='correo_outbox',
     )
+    correo_origen = models.ForeignKey(
+        'self',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='copias_secundarias',
+        editable=False,
+    )
     creada_en = models.DateTimeField(auto_now_add=True)
     actualizada_en = models.DateTimeField(auto_now=True)
 
@@ -2973,6 +3034,10 @@ class OutboxCorreoEducativo(models.Model):
             models.Index(
                 fields=['solicitud', 'tipo_evento'],
                 name='out_email_sol_evento',
+            ),
+            models.Index(
+                fields=['correo_origen', 'codigo_mensaje'],
+                name='out_email_origin_code',
             ),
         ]
         constraints = [
@@ -3003,6 +3068,66 @@ class OutboxCorreoEducativo(models.Model):
                     )
                 ),
                 name='out_email_lease_consist',
+            ),
+            models.UniqueConstraint(
+                fields=['correo_origen', 'codigo_mensaje'],
+                condition=models.Q(correo_origen__isnull=False),
+                name='uniq_out_email_origin_code',
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(
+                        correo_origen__isnull=False,
+                        codigo_mensaje__in=[
+                            CodigoMensajeCorreoEducativo.AUDIT_COPY,
+                            CodigoMensajeCorreoEducativo.INSTITUTIONAL_INITIAL_NOTIFICATION,
+                        ],
+                    )
+                    | models.Q(
+                        correo_origen__isnull=True,
+                    )
+                    & ~models.Q(
+                        codigo_mensaje__in=[
+                            CodigoMensajeCorreoEducativo.AUDIT_COPY,
+                            CodigoMensajeCorreoEducativo.INSTITUTIONAL_INITIAL_NOTIFICATION,
+                        ],
+                    )
+                ),
+                name='out_email_origin_consist',
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(
+                        codigo_mensaje=CodigoMensajeCorreoEducativo.AUDIT_COPY,
+                        tipo_evento=TipoEventoCorreoEducativo.AUDIT_COPY,
+                    )
+                    | models.Q(
+                        codigo_mensaje=(
+                            CodigoMensajeCorreoEducativo.INSTITUTIONAL_INITIAL_NOTIFICATION
+                        ),
+                        tipo_evento=(
+                            TipoEventoCorreoEducativo.INSTITUTIONAL_INITIAL_NOTIFICATION
+                        ),
+                    )
+                    | models.Q(
+                        ~models.Q(codigo_mensaje__in=[
+                            CodigoMensajeCorreoEducativo.AUDIT_COPY,
+                            CodigoMensajeCorreoEducativo.INSTITUTIONAL_INITIAL_NOTIFICATION,
+                        ]),
+                        ~models.Q(tipo_evento__in=[
+                            TipoEventoCorreoEducativo.AUDIT_COPY,
+                            TipoEventoCorreoEducativo.INSTITUTIONAL_INITIAL_NOTIFICATION,
+                        ]),
+                    )
+                ),
+                name='out_email_copy_type_match',
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(correo_origen__isnull=True)
+                    | models.Q(contexto={}, destinatarios_copia=[])
+                ),
+                name='out_email_copy_min_data',
             ),
         ]
 

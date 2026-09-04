@@ -512,7 +512,7 @@ class ConcurrenciaRecordatoriosPostgreSQLTests(TransactionTestCase):
             errores.append(error)
             return None
         finally:
-            close_old_connections()
+            connection.close()
 
     @skipUnless(
         connection.vendor == 'postgresql',
