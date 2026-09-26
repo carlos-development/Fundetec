@@ -122,6 +122,17 @@ class ProgresoProcesamientoWebTests(TestCase):
         self.client.force_login(self.otro)
         self.assertEqual(self.client.get(self.estado_url).status_code, 404)
 
+    def test_revision_manual_es_neutral_y_no_ofrece_repetir_documentos(self):
+        self._proceso(estado='MANUAL_EXCEPTION', etapa='DOCUMENT_VALIDATION')
+        self.client.force_login(self.usuario)
+        datos = self.client.get(self.estado_url).json()
+        self.assertFalse(datos['requires_correction'])
+        self.assertEqual(datos['correction_requirements'], [])
+        self.assertIn('No necesitas volver a cargar', datos['message'])
+        self.assertFalse(any(paso['state'] == 'action' for paso in datos['steps']))
+        pagina = self.client.get(self.pagina_url)
+        self.assertNotContains(pagina, 'bi-exclamation-lg')
+
     def test_correcciones_son_consolidadas_y_no_exponen_codigos(self):
         proceso = self._proceso(
             estado=EstadoProcesoAutomatizacionEducativa.CORRECTION_REQUIRED,

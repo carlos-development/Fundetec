@@ -6,7 +6,8 @@ from io import BytesIO, StringIO
 import json
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
-from unittest.mock import patch
+import uuid
+from unittest.mock import Mock, patch
 
 from PIL import Image
 
@@ -46,6 +47,9 @@ from financiacion_educativa.services.validacion_documental_ia import (
     IDENTITY_POLICY_VERSION_V3,
     OpenAIDocumentAIValidationBackend,
     _es_concluyente,
+    _evaluar_reverso,
+    _reglas_tipo_identidad,
+    puede_revalidar_vinculo_frente,
     _resultado_estructurado,
     normalizar_resultado_validacion,
     procesar_validacion_documental_ia,
@@ -157,7 +161,7 @@ class ValidacionDocumentalIATests(TestCase):
             tipo=tipo,
             origen_captura=(
                 OrigenCapturaDocumento.CAMERA
-                if tipo == TipoDocumentoFinanciacion.STUDENT_ID_FRONT
+                if tipo in {TipoDocumentoFinanciacion.STUDENT_ID_FRONT, TipoDocumentoFinanciacion.STUDENT_ID_BACK}
                 else OrigenCapturaDocumento.USER_UPLOAD
             ),
             archivo=imagen_jpeg(marca=marca),
@@ -194,6 +198,132 @@ class ValidacionDocumentalIATests(TestCase):
 
         self.assertEqual(resultado.estado, 'SECURITY_SCAN_REQUIRED')
         self.assertFalse(ValidacionIADocumento.objects.exists())
+
+    def _frente_aprobado(self):
+        frente = self.documento_seguro(b'frente-sintetico', TipoDocumentoFinanciacion.STUDENT_ID_FRONT)
+        procesar_validacion_documental_ia(
+            documento=frente, actor=self.operador, backend=BackendIAConcluyente(),
+        )
+        frente.refresh_from_db()
+        self.assertEqual(frente.estado_validacion, EstadoValidacionDocumento.APPROVED)
+        return frente
+
+    def _reverso_incierto(self, **cambios):
+        return replace(BackendIAConcluyente().validar(), **{
+            'decision': 'MANUAL_REVIEW', 'confianza_datos': Decimal('0.35'),
+            'datos_consistentes': None, 'numero_documento_visible': '',
+            'ajustes_politica': ('DOCUMENT_NUMBER_NOT_VISIBLE',),
+            'hallazgos': ('DATA_CONSISTENCY_INCONCLUSIVE',), **cambios,
+        })
+
+    def test_reverso_vincula_frente_y_conserva_puntajes_observados(self):
+        frente = self._frente_aprobado()
+        reverso = self.documento_seguro(b'reverso-sintetico', TipoDocumentoFinanciacion.STUDENT_ID_BACK)
+        backend = Mock(enabled=True)
+        backend.validar.return_value = self._reverso_incierto()
+        procesar_validacion_documental_ia(documento=reverso, actor=self.operador, backend=backend)
+        intento = reverso.validaciones_ia.get()
+        self.assertEqual(intento.estado, EstadoValidacionIADocumento.AUTO_APPROVED)
+        self.assertEqual(intento.resultado_estructurado['data_match_confidence'], '0.35')
+        self.assertEqual(intento.resultado_estructurado['back_policy_version'], 'EDU_IDENTITY_BACK_V1')
+        self.assertEqual(intento.resultado_estructurado['identity_front_id'], str(frente.pk))
+        self.assertEqual(intento.resultado_estructurado['decision'], 'MANUAL_REVIEW')
+
+    def test_formatos_sinteticos_reverso_sin_datos_redundantes(self):
+        self._frente_aprobado()
+        reverso = self.documento_seguro(b'formatos', TipoDocumentoFinanciacion.STUDENT_ID_BACK)
+        # Evaluaciones sinteticas, sin fotografia ni datos de documentos reales.
+        for formato, tipo in (('amarilla-hologramas', 'CC'), ('policarbonato', 'CC'), ('tarjeta-identidad', 'TI')):
+            with self.subTest(formato=formato):
+                reverso.participante.tipo_documento = tipo
+                payload = deepcopy(AdaptadorOpenAIValidacionDocumentalTests.payload)
+                payload.update(
+                    visible_document_type=tipo, visible_document_number='', visible_names=[],
+                    data_match_confidence=0.35, data_consistent=None,
+                    decision='MANUAL_REVIEW', finding_codes=[], reason_codes=[],
+                )
+                resultado = normalizar_resultado_validacion(
+                    payload, tipo_esperado=TipoDocumentoFinanciacion.STUDENT_ID_BACK,
+                    contexto={'tipo_documento': tipo, 'numero_documento': '1000123456'},
+                )
+                self.assertTrue(_evaluar_reverso(reverso, resultado)[0])
+
+    def test_reverso_sin_frente_activo_del_mismo_participante_no_aprueba(self):
+        reverso = self.documento_seguro(b'sin-frente', TipoDocumentoFinanciacion.STUDENT_ID_BACK)
+        self.assertEqual(_evaluar_reverso(reverso, self._reverso_incierto())[1], ['FRONT_APPROVAL_REQUIRED'])
+        frente = self._frente_aprobado()
+        reverso.participante_id = uuid.uuid4()
+        self.assertFalse(_evaluar_reverso(reverso, self._reverso_incierto())[0])
+        reverso.refresh_from_db()
+        reverso.solicitud_id = uuid.uuid4()
+        self.assertFalse(_evaluar_reverso(reverso, self._reverso_incierto())[0])
+        reverso.refresh_from_db()
+        frente.activo = False
+        frente.save(update_fields=['activo'])
+        self.assertFalse(_evaluar_reverso(reverso, self._reverso_incierto())[0])
+
+    def test_dependencia_resuelta_crea_intento_nuevo_sin_reinterpretar_historia(self):
+        reverso = self.documento_seguro(b'dependencia', TipoDocumentoFinanciacion.STUDENT_ID_BACK)
+        backend = Mock(enabled=True)
+        backend.validar.return_value = self._reverso_incierto()
+        procesar_validacion_documental_ia(documento=reverso, actor=self.operador, backend=backend)
+        anterior = reverso.validaciones_ia.get()
+        traza = deepcopy(anterior.resultado_estructurado)
+        self.assertFalse(puede_revalidar_vinculo_frente(reverso, anterior))
+        self._frente_aprobado()
+        self.assertTrue(puede_revalidar_vinculo_frente(reverso, anterior))
+        historico = SimpleNamespace(estado=anterior.estado, resultado_estructurado={
+            'policy_version': 'EDU_IDENTITY_V4', 'reason_codes': ['INCONCLUSIVE'],
+        })
+        self.assertFalse(puede_revalidar_vinculo_frente(reverso, historico))
+        procesar_validacion_documental_ia(documento=reverso, actor=self.operador, backend=backend)
+        anterior.refresh_from_db()
+        self.assertEqual(anterior.resultado_estructurado, traza)
+        self.assertEqual(anterior.estado, EstadoValidacionIADocumento.MANUAL_REVIEW)
+        self.assertEqual(reverso.validaciones_ia.count(), 2)
+        self.assertEqual(reverso.validaciones_ia.order_by('-numero').first().estado,
+                         EstadoValidacionIADocumento.AUTO_APPROVED)
+
+    def test_reverso_contradiccion_fiable_y_defectos_no_aprueban(self):
+        self._frente_aprobado()
+        reverso = self.documento_seguro(b'contradiccion', TipoDocumentoFinanciacion.STUDENT_ID_BACK)
+        contradiccion = self._reverso_incierto(
+            numero_documento_visible='9999999999', confianza_datos=Decimal('0.99'),
+        )
+        self.assertEqual(_evaluar_reverso(reverso, contradiccion)[1], ['BACK_NUMBER_CONTRADICTION'])
+        for numero, ajuste in (
+            ('1000123456', 'BACK_NUMBER_MATCH_APPLIED'),
+            ('9999999999', 'DOCUMENT_NUMBER_MISMATCH'),
+        ):
+            with self.subTest(extraccion_incierta=ajuste):
+                resultado = self._reverso_incierto(
+                    numero_documento_visible=numero,
+                    ajustes_politica=(ajuste,), hallazgos=('DATA_MISMATCH',),
+                    datos_consistentes=False,
+                )
+                self.assertTrue(_evaluar_reverso(reverso, resultado)[0])
+        for cambio in (
+            {'calidad': Decimal('0.10')}, {'recortada': True}, {'borrosa': True},
+            {'reflejos': True}, {'oscura': True}, {'obstruida': True},
+            {'senales_manipulacion_visible': True}, {'lado_correcto': False},
+            {'es_documento_identidad': False}, {'es_documento_colombiano': False},
+            {'captura_documento_fisico': False}, {'confianza_manipulacion': Decimal('0')},
+            {'hallazgos': ('VISIBLE_TAMPERING_SIGNALS',)},
+        ):
+            with self.subTest(cambio=cambio):
+                self.assertFalse(_evaluar_reverso(reverso, self._reverso_incierto(**cambio))[0])
+
+    def test_revision_sin_razones_deriva_dimension_controlada(self):
+        documento = self.documento_seguro()
+        backend = Mock(enabled=True)
+        backend.validar.return_value = replace(
+            BackendIAConcluyente().validar(), decision='MANUAL_REVIEW',
+            confianza_datos=Decimal('0.35'), razones=(), hallazgos=(),
+        )
+        procesar_validacion_documental_ia(documento=documento, actor=self.operador, backend=backend)
+        intento = documento.validaciones_ia.get()
+        self.assertEqual(intento.estado, EstadoValidacionIADocumento.MANUAL_REVIEW)
+        self.assertEqual(intento.resultado_estructurado['reason_codes'], ['DATA_MATCH_LOW_CONFIDENCE'])
 
     def test_resultado_concluyente_acepta_documento_y_conserva_escaneo(self):
         documento = self.documento_seguro()
@@ -888,6 +1018,26 @@ class AdaptadorOpenAIValidacionDocumentalTests(TestCase):
 
         self.assertEqual(resultado.decision, 'MANUAL_REVIEW')
         self.assertFalse(self._es_identidad_autoaprobable(resultado))
+
+    def test_razones_vacias_derivan_dimension_y_rechazan_valores_no_controlados(self):
+        resultado = self._resultado_v4(
+            decision='MANUAL_REVIEW', data_match_confidence=0.35,
+            reason_codes=[], finding_codes=[],
+        )
+        self.assertEqual(resultado.razones, ('DATA_MATCH_LOW_CONFIDENCE',))
+        for codigo in ({'dato': 'no permitido'}, 'correo@example.test', 'CODIGO_DESCONOCIDO'):
+            with self.subTest(codigo=type(codigo).__name__):
+                with self.assertRaises(ErrorValidacionDocumentalIA) as error:
+                    self._resultado_v4(reason_codes=[codigo])
+                self.assertEqual(error.exception.codigo, 'INVALID_RESPONSE')
+
+    def test_instrucciones_reverso_no_exigen_datos_redundantes(self):
+        reglas = _reglas_tipo_identidad(TipoDocumentoFinanciacion.STUDENT_ID_BACK)
+        self.assertIn('No exigir numero ni nombres', reglas['regla_datos'])
+        self.assertIn('frente aprobado del mismo participante', reglas['regla_datos'])
+        self.assertIn('MANUAL_REVIEW', reglas['contradiccion_visible'])
+        frente = _reglas_tipo_identidad(TipoDocumentoFinanciacion.STUDENT_ID_FRONT)
+        self.assertEqual(frente['regla_datos'], 'Comparar numero y nombres visibles declarados.')
 
     def test_ajuste_correctivo_v4_conserva_revision_manual(self):
         resultado = replace(

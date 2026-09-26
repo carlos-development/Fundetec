@@ -48,6 +48,7 @@ from financiacion_educativa.services.reglas_financieras import (
 )
 from financiacion_educativa.services.validacion_documental_ia import (
     procesar_validacion_documental_ia,
+    puede_revalidar_vinculo_frente,
 )
 from financiacion_educativa.services.clasificacion_contenido_documental import (
     procesar_contenido_documental,
@@ -193,7 +194,10 @@ def _procesar_seguridad_e_ia(solicitud):
             _marcar_pdf_pendiente_de_procesamiento(documento)
             continue
         ultima = _ultima_validacion_ia(documento)
-        if ultima and ultima.estado == EstadoValidacionIADocumento.MANUAL_REVIEW:
+        if (
+            ultima and ultima.estado == EstadoValidacionIADocumento.MANUAL_REVIEW
+            and not puede_revalidar_vinculo_frente(documento, ultima)
+        ):
             continue
         if documento.content_type not in TIPOS_IMAGEN:
             _registrar_revision_manual_por_formato(documento)
@@ -561,7 +565,7 @@ def _etapa_validacion(solicitud):
             EstadoValidacionIADocumento.AUTO_APPROVED,
             EstadoValidacionIADocumento.AUTO_REJECTED,
             EstadoValidacionIADocumento.MANUAL_REVIEW,
-        }:
+        } and not puede_revalidar_vinculo_frente(documento, ultima):
             continue
         resultado = procesar_validacion_documental_ia(
             documento=documento,

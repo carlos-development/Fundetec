@@ -2,7 +2,7 @@ import base64
 import json
 import re
 import unicodedata
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from io import BytesIO
 
@@ -32,6 +32,10 @@ from financiacion_educativa.services.metricas_openai import extraer_metricas_uso
 
 
 HALLAZGOS_PERMITIDOS = frozenset({
+    'DATA_MATCH_LOW_CONFIDENCE',
+    'FRONT_APPROVAL_REQUIRED',
+    'BACK_NUMBER_CONTRADICTION',
+    'LOW_CONFIDENCE',
     'NOT_IDENTITY_DOCUMENT',
     'NOT_COLOMBIAN_ID',
     'SIDE_MISMATCH',
@@ -79,6 +83,11 @@ IDENTITY_POLICY_VERSION_V3 = 'EDU_IDENTITY_V3'
 LEGACY_IDENTITY_POLICY_VERSION = IDENTITY_POLICY_VERSION_V1
 PREVIOUS_IDENTITY_POLICY_VERSION = IDENTITY_POLICY_VERSION_V3
 IDENTITY_POLICY_VERSION = 'EDU_IDENTITY_V4'
+BACK_IDENTITY_POLICY_VERSION = 'EDU_IDENTITY_BACK_V1'
+TIPOS_REVERSO = {
+    TipoDocumentoFinanciacion.STUDENT_ID_BACK: TipoDocumentoFinanciacion.STUDENT_ID_FRONT,
+    TipoDocumentoFinanciacion.GUARDIAN_ID_BACK: TipoDocumentoFinanciacion.GUARDIAN_ID_FRONT,
+}
 
 
 class ErrorValidacionDocumentalIA(Exception):
@@ -200,7 +209,18 @@ class OpenAIDocumentAIValidationBackend:
                                     'document_type_match evalua categoria y lado, no la '
                                     'igualdad literal con el codigo interno. En el frente, '
                                     'compara numero y nombres visibles. En el reverso, el '
-                                    'numero coincidente basta: no exijas nombres. Si un '
+                                    'numero no es obligatorio ni exige nombres: el frente '
+                                    'aprobado del mismo participante vincula la identidad. '
+                                    'Admite las generaciones fisicas de CC colombiana, '
+                                    'incluida la amarilla con hologramas y el formato actual, '
+                                    'y los formatos TI admitidos. En el reverso amarillo '
+                                    'el codigo bidimensional y la impresion dactilar son '
+                                    'solo elementos visuales esperados. No hagas biometria, '
+                                    'no compares huellas ni decodifiques codigos de barras. '
+                                    'No extraigas estatura, grupo sanguineo, sexo, huella '
+                                    'ni lugar de nacimiento. La ausencia de un numero '
+                                    'redundante no es inconsistencia; informa su confianza '
+                                    'real sin inventar certeza. Si un '
                                     'dato necesario no es visible devuelve null y '
                                     'MANUAL_REVIEW, no false, salvo contradiccion visible. '
                                     'Expresa quality_score, legibility_score y confidence '
@@ -420,10 +440,15 @@ def _reglas_tipo_identidad(tipo_esperado):
         'regla_datos': (
             'Comparar numero y nombres visibles declarados.'
             if lado == 'front'
-            else 'El numero coincidente basta; no exigir nombres en el reverso.'
+            else 'No exigir numero ni nombres en el reverso. El servidor exige '
+                 'frente aprobado del mismo participante para vincular identidad. '
+                 'Una extraccion ausente o incierta no es contradiccion.'
         ),
         'dato_no_visible': 'null y MANUAL_REVIEW',
-        'contradiccion_visible': 'false; REJECTED solo si es concluyente',
+        'contradiccion_visible': (
+            'false; REJECTED solo si es concluyente' if lado == 'front'
+            else 'Numero diferente con confianza concluyente: MANUAL_REVIEW.'
+        ),
     }
 
 
@@ -712,6 +737,11 @@ def normalizar_resultado_validacion(
         or payload['decision'] not in DECISIONES_MODELO
     ):
         raise ErrorValidacionDocumentalIA('INVALID_RESPONSE')
+    if any(
+        not isinstance(code, str) or code not in HALLAZGOS_PERMITIDOS
+        for code in [*payload['finding_codes'], *payload['reason_codes']]
+    ):
+        raise ErrorValidacionDocumentalIA('INVALID_RESPONSE')
     payload, ajustes_politica = _aplicar_coherencia_identidad(
         payload,
         tipo_esperado=tipo_esperado,
@@ -749,7 +779,7 @@ def normalizar_resultado_validacion(
             else None
         )
     )
-    return ResultadoValidacionDocumentalIA(
+    resultado = ResultadoValidacionDocumentalIA(
         calidad=_puntaje(payload['quality_score'], 'quality_score'),
         legibilidad=_puntaje(payload['legibility_score'], 'legibility_score'),
         confianza=confianza,
@@ -853,6 +883,13 @@ def normalizar_resultado_validacion(
         ),
         ajustes_politica=ajustes_politica,
     )
+    if resultado.decision == 'MANUAL_REVIEW' and not resultado.razones:
+        razones = tuple(dict.fromkeys([
+            *resultado.hallazgos,
+            *_razones_inconclusas(resultado, requiere_identidad=tipo_esperado in TIPOS_IDENTIDAD),
+        ])) or ('INCONCLUSIVE',)
+        resultado = replace(resultado, razones=razones)
+    return resultado
 
 
 def obtener_backend_validacion_ia():
@@ -993,7 +1030,8 @@ def _decision_modelo(resultado):
 
 
 def _confianza_dimension(resultado, atributo):
-    return getattr(resultado, atributo, None) or resultado.confianza
+    valor = getattr(resultado, atributo, None)
+    return resultado.confianza if valor is None else valor
 
 
 def _captura_fisica(resultado):
@@ -1034,6 +1072,26 @@ def _integridad_visual(resultado):
 
 def _razones_inconclusas(resultado, *, requiere_identidad):
     razones = []
+    for valor, minimo, codigo in (
+        (resultado.confianza, settings.FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_CONFIDENCE, 'LOW_CONFIDENCE'),
+        (resultado.calidad, settings.FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_QUALITY, 'LOW_QUALITY'),
+        (resultado.legibilidad, settings.FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_LEGIBILITY, 'LOW_LEGIBILITY'),
+    ):
+        if valor < Decimal(minimo):
+            razones.append(codigo)
+    for atributo, codigo in (
+        ('confianza_datos', 'DATA_MATCH_LOW_CONFIDENCE'),
+        ('confianza_tipo_documental', 'DOCUMENT_TYPE_INCONCLUSIVE'),
+        ('confianza_legibilidad', 'LOW_LEGIBILITY'),
+        ('confianza_integridad_visual', 'VISUAL_INTEGRITY_INCONCLUSIVE'),
+        ('confianza_manipulacion', 'TAMPERING_ASSESSMENT_INCONCLUSIVE'),
+        *((('confianza_lado', 'SIDE_INCONCLUSIVE'),
+           ('confianza_captura_fisica', 'PHYSICAL_CAPTURE_INCONCLUSIVE')) if requiere_identidad else ()),
+    ):
+        if _confianza_dimension(resultado, atributo) < Decimal(
+            settings.FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_DIMENSION_CONFIDENCE
+        ):
+            razones.append(codigo)
     if resultado.corresponde_tipo is None:
         razones.append('DOCUMENT_TYPE_INCONCLUSIVE')
     if resultado.datos_consistentes is None:
@@ -1047,7 +1105,24 @@ def _razones_inconclusas(resultado, *, requiere_identidad):
             razones.append('SIDE_INCONCLUSIVE')
         if _captura_fisica(resultado) is None:
             razones.append('PHYSICAL_CAPTURE_INCONCLUSIVE')
-    return razones
+    for condicion, codigo in (
+        (resultado.corresponde_tipo is False, 'TYPE_MISMATCH'),
+        (resultado.datos_consistentes is False, 'DATA_MISMATCH'),
+        (_senales_manipulacion(resultado) is True, 'VISIBLE_TAMPERING_SIGNALS'),
+        (_integridad_visual(resultado) is False, 'VISUAL_INTEGRITY_INCONCLUSIVE'),
+        (resultado.borrosa is True, 'BLURRED'),
+        (resultado.recortada is True, 'CROPPED'),
+        (resultado.oscura is True, 'TOO_DARK'),
+        (resultado.reflejos is True, 'GLARE'),
+        (resultado.obstruida is True, 'OBSTRUCTED'),
+        (requiere_identidad and resultado.lado_correcto is False, 'SIDE_MISMATCH'),
+        (requiere_identidad and _captura_fisica(resultado) is False, 'PHYSICAL_CAPTURE_INCONCLUSIVE'),
+        (requiere_identidad and resultado.es_documento_identidad is False, 'NOT_IDENTITY_DOCUMENT'),
+        (requiere_identidad and resultado.campos_visibles is False, 'MISSING_VISIBLE_FIELDS'),
+    ):
+        if condicion:
+            razones.append(codigo)
+    return list(dict.fromkeys(razones))
 
 
 def _es_concluyente(
@@ -1055,6 +1130,7 @@ def _es_concluyente(
     *,
     requiere_identidad=False,
     requiere_documento_colombiano=False,
+    identidad_vinculada=False,
 ):
     confianza_minima = Decimal(
         settings.FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_CONFIDENCE
@@ -1063,7 +1139,7 @@ def _es_concluyente(
         settings.FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_DIMENSION_CONFIDENCE
     )
     concluyente = bool(
-        _decision_modelo(resultado) == 'ACCEPTED'
+        (_decision_modelo(resultado) == 'ACCEPTED' or identidad_vinculada)
         and resultado.confianza >= confianza_minima
         and resultado.calidad
         >= Decimal(settings.FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_QUALITY)
@@ -1075,16 +1151,16 @@ def _es_concluyente(
         >= confianza_dimension_minima
         and _confianza_dimension(resultado, 'confianza_integridad_visual')
         >= confianza_dimension_minima
-        and _confianza_dimension(resultado, 'confianza_datos')
-        >= confianza_dimension_minima
+        and (identidad_vinculada or _confianza_dimension(resultado, 'confianza_datos')
+             >= confianza_dimension_minima)
         and _confianza_dimension(resultado, 'confianza_manipulacion')
         >= confianza_dimension_minima
         and resultado.corresponde_tipo is True
-        and resultado.datos_consistentes is True
+        and (identidad_vinculada or resultado.datos_consistentes is True)
         and _integridad_visual(resultado) is True
         and _senales_manipulacion(resultado) is False
-        and not resultado.hallazgos
-        and not resultado.ajustes_politica
+        and (identidad_vinculada or not resultado.hallazgos)
+        and (identidad_vinculada or not resultado.ajustes_politica)
     )
     if not concluyente or not requiere_identidad:
         return concluyente
@@ -1107,6 +1183,85 @@ def _es_concluyente(
         and resultado.recortada is False
         and resultado.obstruida is False
     )
+
+
+def _frentes_aprobados(documento):
+    return DocumentoFinanciacion.objects.filter(
+        solicitud_id=documento.solicitud_id,
+        participante_id=documento.participante_id,
+        tipo=TIPOS_REVERSO[documento.tipo], activo=True,
+        estado_escaneo=EstadoEscaneoDocumento.SAFE,
+        estado_validacion=EstadoValidacionDocumento.APPROVED,
+    )
+
+
+def puede_revalidar_vinculo_frente(documento, ultima):
+    """Solo reabre el intento nuevo pendiente de una dependencia ya resuelta."""
+    if (
+        documento.tipo not in TIPOS_REVERSO or not documento.participante_id
+        or not documento.activo or not ultima
+        or ultima.estado != EstadoValidacionIADocumento.MANUAL_REVIEW
+    ):
+        return False
+    traza = ultima.resultado_estructurado or {}
+    return (
+        traza.get('back_policy_version') == BACK_IDENTITY_POLICY_VERSION
+        and traza.get('effective_reason_codes') == ['FRONT_APPROVAL_REQUIRED']
+        and _frentes_aprobados(documento).exists()
+    )
+
+
+def _evaluar_reverso(documento, resultado):
+    """Vincula solo identidad; nunca sustituye las dimensiones visuales."""
+    frente = (
+        _frentes_aprobados(documento).select_for_update().first()
+        if documento.participante_id else None
+    )
+    if frente is None:
+        return False, ['FRONT_APPROVAL_REQUIRED'], None
+    minimo = Decimal(settings.FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_DIMENSION_CONFIDENCE)
+    numero = _normalizar_comparacion(resultado.numero_documento_visible)
+    declarado = _normalizar_comparacion(documento.participante.numero_documento)
+    confianza_datos = _confianza_dimension(resultado, 'confianza_datos')
+    if numero and numero != declarado and confianza_datos >= minimo:
+        return False, ['BACK_NUMBER_CONTRADICTION'], frente
+    redundantes = {
+        'DATA_MATCH_LOW_CONFIDENCE', 'DATA_CONSISTENCY_INCONCLUSIVE',
+    }
+    ajustes_redundantes = {
+        'BACK_NUMBER_MATCH_APPLIED', 'DOCUMENT_NUMBER_NOT_VISIBLE',
+    }
+    if confianza_datos < minimo:
+        redundantes.add('DATA_MISMATCH')
+        ajustes_redundantes.add('DOCUMENT_NUMBER_MISMATCH')
+    incertidumbre_datos = (
+        not numero or confianza_datos < minimo or bool(
+            set(resultado.ajustes_politica) & ajustes_redundantes
+        )
+    )
+    if incertidumbre_datos:
+        redundantes.add('INCONCLUSIVE')
+    codigos = set(resultado.hallazgos) | set(resultado.razones)
+    puede_vincular = (
+        codigos.issubset(redundantes)
+        and set(resultado.ajustes_politica).issubset(ajustes_redundantes)
+        and (_decision_modelo(resultado) == 'ACCEPTED' or incertidumbre_datos)
+        and not (resultado.datos_consistentes is False and confianza_datos >= minimo)
+        and documento.participante.tipo_documento in {
+            TipoDocumentoIdentidad.CC, TipoDocumentoIdentidad.TI,
+        }
+    )
+    aceptado = puede_vincular and _es_concluyente(
+        resultado, requiere_identidad=True,
+        requiere_documento_colombiano=True, identidad_vinculada=True,
+    )
+    razones = [
+        codigo for codigo in dict.fromkeys([
+            *resultado.hallazgos, *resultado.razones,
+            *_razones_inconclusas(resultado, requiere_identidad=True),
+        ]) if codigo not in redundantes
+    ]
+    return aceptado, [] if aceptado else (razones or ['INCONCLUSIVE']), frente
 
 
 def _es_rechazo_concluyente(resultado, *, documento):
@@ -1240,6 +1395,13 @@ def _finalizar_validacion(*, validacion_id, resultado=None, codigo_error=''):
             resultado,
             documento=documento,
         )
+        razones_reverso = None
+        frente = None
+        if documento.tipo in TIPOS_REVERSO:
+            concluyente, razones_reverso, frente = _evaluar_reverso(documento, resultado)
+            # Una contradiccion de identidad nunca es un rechazo automatico.
+            if {'BACK_NUMBER_CONTRADICTION', 'FRONT_APPROVAL_REQUIRED'}.intersection(razones_reverso):
+                rechazo_concluyente = False
         if concluyente:
             estado = EstadoValidacionIADocumento.AUTO_APPROVED
         elif rechazo_concluyente:
@@ -1255,6 +1417,16 @@ def _finalizar_validacion(*, validacion_id, resultado=None, codigo_error=''):
                 hallazgos.append(razon)
         if not concluyente and not hallazgos:
             hallazgos = ['INCONCLUSIVE']
+        if razones_reverso is not None:
+            hallazgos = razones_reverso
+        estructurado = _resultado_estructurado(resultado)
+        if estado == EstadoValidacionIADocumento.MANUAL_REVIEW:
+            estructurado['reason_codes'] = list(dict.fromkeys(hallazgos))
+        if razones_reverso is not None:
+            estructurado['back_policy_version'] = BACK_IDENTITY_POLICY_VERSION
+            estructurado['identity_front_id'] = str(frente.pk) if frente else None
+            estructurado['effective_decision'] = estado
+            estructurado['effective_reason_codes'] = hallazgos
         valores.update(
             estado=estado,
             codigo_error='',
@@ -1268,7 +1440,7 @@ def _finalizar_validacion(*, validacion_id, resultado=None, codigo_error=''):
             indicios_imagen_real=resultado.indicios_imagen_real,
             datos_consistentes=resultado.datos_consistentes,
             hallazgos=hallazgos,
-            resultado_estructurado=_resultado_estructurado(resultado),
+            resultado_estructurado=estructurado,
         )
         resumen['ai_validation'] = {
             'attempt': str(validacion.pk),
@@ -1285,7 +1457,7 @@ def _finalizar_validacion(*, validacion_id, resultado=None, codigo_error=''):
             ),
             'data_consistent': resultado.datos_consistentes,
             'finding_codes': hallazgos,
-            'structured_result': _resultado_estructurado(resultado),
+            'structured_result': estructurado,
         }
         documento.nivel_confianza = resultado.confianza
         if (

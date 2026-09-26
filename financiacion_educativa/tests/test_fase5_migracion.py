@@ -12,6 +12,7 @@ class PreservacionFotografiasLegadasMigrationTests(TransactionTestCase):
     def setUp(self):
         super().setUp()
         executor = MigrationExecutor(connection)
+        self.addCleanup(self._restaurar_esquema, executor.loader.graph.leaf_nodes())
         executor.migrate([self.migrate_from])
         apps = executor.loader.project_state([self.migrate_from]).apps
         Institucion = apps.get_model('instituciones', 'Institucion')
@@ -63,11 +64,8 @@ class PreservacionFotografiasLegadasMigrationTests(TransactionTestCase):
         executor.migrate([self.migrate_to])
         self.apps = executor.loader.project_state([self.migrate_to]).apps
 
-    def tearDown(self):
-        MigrationExecutor(connection).migrate(
-            [('financiacion_educativa', '0005_cuotaamortizacioneducativa_and_more')]
-        )
-        super().tearDown()
+    def _restaurar_esquema(self, destinos):
+        MigrationExecutor(connection).migrate(destinos)
 
     def test_preserva_importes_y_marca_registro_como_legado_inactivo(self):
         Condiciones = self.apps.get_model(

@@ -322,6 +322,33 @@ def _programar_copias_post_envio(original):
         )
 
 
+def conciliar_copias(*, solicitud_id=None, outbox_id=None, limite=100, dry_run=True):
+    """Recuperacion explicita y acotada; no entrega ni reenvia correos."""
+    if not (solicitud_id or outbox_id) or not 1 <= limite <= 100:
+        raise ValidationError('Indique solicitud u outbox y un limite entre 1 y 100.')
+    originales = OutboxCorreoEducativo.objects.filter(
+        estado=EstadoOutboxCorreoEducativo.SENT,
+        correo_origen__isnull=True,
+        tipo_evento__in=EVENTOS_AUDITABLES_ESTUDIANTE,
+    )
+    if solicitud_id:
+        originales = originales.filter(solicitud_id=solicitud_id)
+    if outbox_id:
+        originales = originales.filter(pk=outbox_id)
+    ids = list(originales.order_by('creada_en', 'pk').values_list('pk', flat=True)[:limite])
+    creadas = 0
+    if not dry_run:
+        for pk in ids:
+            with transaction.atomic():
+                original = originales.select_for_update().filter(pk=pk).first()
+                if original is None:
+                    continue
+                antes = original.copias_secundarias.count()
+                _programar_copias_post_envio(original)
+                creadas += original.copias_secundarias.count() - antes
+    return {'originales': len(ids), 'copias_creadas': creadas}
+
+
 def crear_correo_expediente_recibido(*, solicitud):
     return crear_intencion_correo(
         solicitud=solicitud,
@@ -329,9 +356,6 @@ def crear_correo_expediente_recibido(*, solicitud):
         clave_idempotencia=f'dossier-received:{solicitud.pk}',
         codigo_mensaje=CodigoMensajeCorreoEducativo.DOSSIER_RECEIVED,
         destinatarios=[solicitud.correo],
-        destinatarios_copia=(
-            settings.FINANCIACION_EDUCATIVA_REVIEW_NOTIFICATION_EMAILS
-        ),
         contexto={},
     )
 
@@ -625,7 +649,6 @@ def _construir_mensaje(outbox, connection_mail):
             referencia_externa=outbox.solicitud.referencia_externa,
             program_name=outbox.solicitud.institucion.nombre_comercial,
             course_name=outbox.solicitud.nombre_curso,
-            cc=outbox.destinatarios_copia,
             connection=connection_mail,
         )
     elif outbox.codigo_mensaje == CodigoMensajeCorreoEducativo.REVIEW_DECISION:

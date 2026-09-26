@@ -116,8 +116,11 @@ solo en memoria durante el envio. Un reintento recuperado rota el token; los
 anteriores quedan revocados. Entregas reemplazadas o consumidas fallan de forma
 cerrada y nunca se reactivan.
 
-Invitaciones y captura solo se envian al solicitante, sin CC. La confirmacion
-de expediente conserva el CC operativo configurado.
+Invitaciones, captura y confirmacion de expediente se envian al solicitante
+sin CC/BCC. Las copias de auditoria son mensajes independientes, tambien para
+expedientes pendientes con un snapshot legacy de CC. La variable
+`FINANCIACION_EDUCATIVA_REVIEW_NOTIFICATION_EMAILS` ya no controla estos envios
+ni es obligatoria en staging.
 
 ## Comandos
 
@@ -229,20 +232,59 @@ muestra conteos agregados de `PENDING`, `RETRYING`, `FAILED`, `AMBIGUOUS` y los
 demas estados sin imprimir destinatarios ni datos de solicitudes. Cualquier
 `AMBIGUOUS` debe conciliarse; nunca se reenvia automaticamente.
 
-### Propuesta de ejecucion horaria
+### Programador horario versionado
 
-El worker de outbox permanece continuo. El programador de recordatorios debe
-ejecutarse una vez por hora mediante un `systemd timer` o cron administrado,
-con el usuario de servicio y el mismo `EnvironmentFile` de staging:
+El outbox permanece continuo. El timer ejecuta un oneshot cada hora, con
+`Persistent=true`: tras una parada recupera una ejecucion, no cada hora perdida.
+El servicio solo programa intenciones idempotentes (hasta 100 por ejecucion),
+no contacta SMTP. Mantener `FINANCIACION_EDUCATIVA_CONTINUATION_MAX_MESSAGES=4`:
+inicial, 1h, 6h y final 24h; 48h sigue excluido. El envio depende del worker
+outbox. Los umbrales se atienden en la siguiente ejecucion horaria, no a tiempo exacto.
+
+Comandos de servidor para una futura instalacion autorizada (root):
 
 ```bash
-/var/www/fundetec-staging/shared/venv/bin/python \
-  /var/www/fundetec-staging/current/manage.py \
-  programar_recordatorios_solicitudes_educativas --batch-size 100
+cd /var/www/fundetec-staging/current
+install -m 0644 deploy/systemd/fundetec-staging-educational-reminders.service /etc/systemd/system/
+install -m 0644 deploy/systemd/fundetec-staging-educational-reminders.timer /etc/systemd/system/
+systemd-analyze verify /etc/systemd/system/fundetec-staging-educational-reminders.service /etc/systemd/system/fundetec-staging-educational-reminders.timer
+systemctl daemon-reload
+systemctl disable --now fundetec-staging-educational-reminders.timer
+systemctl stop fundetec-staging-educational-reminders.service
+# Solo despues de revisar destinatarios, flags y diagnostico de outbox:
+systemctl enable --now fundetec-staging-educational-reminders.timer
+systemctl list-timers fundetec-staging-educational-reminders.timer --all
+systemctl status fundetec-staging-educational-reminders.timer --no-pager
+journalctl -u fundetec-staging-educational-reminders.service --since '1 hour ago' --no-pager
+# Rollback operativo: detener programacion, sin borrar intenciones existentes.
+systemctl disable --now fundetec-staging-educational-reminders.timer
+systemctl stop fundetec-staging-educational-reminders.service
 ```
 
-El comando solo crea intenciones persistentes; no contacta SMTP. Esta propuesta
-no autoriza crear ni activar unidades en servidores.
+Esta documentacion no autoriza ejecutar estos pasos ahora. El oneshot no se
+habilita al arranque: se habilita exclusivamente el timer.
+
+### Conciliacion de copias faltantes
+
+`recuperar_outbox_educativo --reconcile-copies` examina solo originales `SENT`
+de eventos estudiantiles y crea copias faltantes con la configuracion actual.
+Exige UUID de solicitud u outbox, limite de 1 a 100 y `--confirmar` para escribir.
+No cambia el original ni lo reenvia; no concilia entregas ambiguas ni reintenta
+copias ya existentes. Las restricciones de unicidad y el lock del original
+serializan conciliadores concurrentes. No existe backfill automatico global.
+
+```bash
+staging_manage recuperar_outbox_educativo --reconcile-copies --solicitud-id UUID_AUTORIZADO --limit 100 --dry-run
+staging_manage recuperar_outbox_educativo --reconcile-copies --solicitud-id UUID_AUTORIZADO --limit 100 --confirmar
+staging_manage diagnosticar_outbox_educativo --help
+```
+
+El dry-run cuenta originales candidatos, no predice entregas. La ejecucion
+informa copias creadas; los fallos de creacion se registran con codigo controlado
+y se pueden volver a conciliar con el mismo alcance. Antes de ejecutar, revisar
+los destinatarios y el worker: un worker activo podra enviar las nuevas copias.
+Si hay mas de 100 originales, usar `--outbox-id` para lotes posteriores; no
+ampliar el limite ni repetir un barrido historico sin revisar su alcance.
 
 ## Recuperacion controlada de una invitacion existente
 

@@ -405,10 +405,11 @@ class RequisitosDocumentalesFase4Tests(TestCase):
         DEBUG=True,
         EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
         FINANCIACION_EDUCATIVA_REVIEW_NOTIFICATION_EMAILS=[
-            'soporte@aprobado.com.co',
+            'support@example.test',
         ],
+        EDUCATIONAL_AUDIT_NOTIFICATION_EMAILS=['support@example.test'],
     )
-    def test_envio_inicial_programa_una_confirmacion_con_copia_operativa(self):
+    def test_envio_inicial_programa_confirmacion_y_auditoria_independiente(self):
         estudiante = self._participante()
         self._documentos_adulto(estudiante, aceptar=True)
         self._matricula_aceptada()
@@ -428,7 +429,12 @@ class RequisitosDocumentalesFase4Tests(TestCase):
         procesar_siguiente_correo()
         self.assertEqual(len(mail.outbox), 1)
         self.assertEqual(mail.outbox[0].to, [self.solicitud.correo])
-        self.assertEqual(mail.outbox[0].cc, ['soporte@aprobado.com.co'])
+        self.assertEqual(mail.outbox[0].cc, [])
+        self.assertEqual(mail.outbox[0].bcc, [])
+        self.assertEqual(outbox.copias_secundarias.count(), 1)
+        procesar_siguiente_correo()
+        self.assertEqual(len(mail.outbox), 2)
+        self.assertEqual(mail.outbox[1].to, ['support@example.test'])
 
     def test_fallo_al_crear_outbox_revierte_envio_documental(self):
         estudiante = self._participante()

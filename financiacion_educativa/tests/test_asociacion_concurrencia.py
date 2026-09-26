@@ -2,7 +2,7 @@ from concurrent.futures import ThreadPoolExecutor
 import threading
 
 from django.contrib.auth import get_user_model
-from django.db import close_old_connections
+from django.db import close_old_connections, connection
 from django.test import TransactionTestCase, override_settings, skipUnlessDBFeature
 
 from financiacion_educativa.models import SolicitudFinanciacionEducativa
@@ -55,7 +55,7 @@ class AsociacionConcurrenteTests(TransactionTestCase):
                 errores.append(error)
                 return ('error', usuario_id)
             finally:
-                close_old_connections()
+                connection.close()
 
         with ThreadPoolExecutor(max_workers=2) as ejecutor:
             resultados = list(ejecutor.map(asociar, [usuario.pk for usuario in usuarios]))

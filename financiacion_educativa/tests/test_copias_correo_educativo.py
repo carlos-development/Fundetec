@@ -1,13 +1,21 @@
+import json
 import os
+import subprocess
+import sys
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
+from io import StringIO
+from threading import Barrier, Event
+from time import monotonic
 from urllib.parse import urlsplit
 from unittest import mock
 
 from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.core import mail
+from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.core.exceptions import ImproperlyConfigured, ValidationError
 from django.db import close_old_connections, connection, transaction
 from django.test import TestCase, TransactionTestCase, override_settings
@@ -36,6 +44,7 @@ from financiacion_educativa.models import (
 from financiacion_educativa.services.outbox_correos import (
     EVENTOS_AUDITABLES_ESTUDIANTE,
     _finalizar,
+    conciliar_copias,
     crear_correo_expediente_recibido,
     crear_intencion_correo,
     procesar_siguiente_correo,
@@ -71,6 +80,54 @@ from financiacion_educativa.tests.factories import (
     FINANCIACION_EDUCATIVA_EMAIL_OUTBOX_BACKOFF_MAX_SECONDS=2,
 )
 class CopiasCorreoEducativoTests(TestCase):
+    @override_settings(FINANCIACION_EDUCATIVA_REVIEW_NOTIFICATION_EMAILS=['audit@example.test'])
+    def test_expediente_sin_cc_ni_bcc_incluso_con_snapshot_legacy(self):
+        original, _ = crear_correo_expediente_recibido(solicitud=self.solicitud)
+        self.assertEqual(original.destinatarios_copia, [])
+        OutboxCorreoEducativo.objects.filter(pk=original.pk).update(
+            destinatarios_copia=['audit@example.test'],
+        )
+        procesar_siguiente_correo()
+        procesar_siguiente_correo()
+        self.assertEqual(len(mail.outbox), 2)
+        self.assertEqual(mail.outbox[0].to, [self.solicitud.correo])
+        self.assertEqual(mail.outbox[1].to, ['audit@example.test'])
+        for mensaje in mail.outbox:
+            self.assertEqual(mensaje.cc, [])
+            self.assertEqual(mensaje.bcc, [])
+        self.assertEqual(original.copias_secundarias.count(), 1)
+
+    def test_conciliacion_recupera_fallo_sin_reenviar_ni_duplicar_original(self):
+        DestinatarioNotificacionInstitucionalEducativa.objects.create(
+            institucion=self.institucion, correo='institution@example.test',
+        )
+        with mock.patch(
+            'financiacion_educativa.services.outbox_correos._crear_copia_post_envio',
+            side_effect=RuntimeError('fallo sintetico'),
+        ), self.assertLogs('financiacion_educativa.services.outbox_correos', level='ERROR'):
+            original = self._confirmar_invitacion_inicial()
+        self.assertEqual(original.copias_secundarias.count(), 0)
+        self.assertEqual(conciliar_copias(outbox_id=original.pk)['copias_creadas'], 0)
+        self.assertEqual(original.copias_secundarias.count(), 0)
+        anterior = (original.estado, original.intentos, original.enviada_en)
+        self.assertEqual(conciliar_copias(outbox_id=original.pk, dry_run=False)['copias_creadas'], 2)
+        self.assertEqual(conciliar_copias(outbox_id=original.pk, dry_run=False)['copias_creadas'], 0)
+        original.refresh_from_db()
+        self.assertEqual((original.estado, original.intentos, original.enviada_en), anterior)
+        self.assertEqual(original.copias_secundarias.count(), 2)
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_conciliacion_exige_ambito_limite_y_confirmacion(self):
+        for opciones in ({}, {'solicitud_id': self.solicitud.pk, 'limite': 101}):
+            with self.assertRaises(ValidationError):
+                conciliar_copias(**opciones)
+        with self.assertRaises(CommandError):
+            call_command('recuperar_outbox_educativo', '--reconcile-copies', '--confirmar', stdout=StringIO())
+        with self.assertRaises(CommandError):
+            call_command('recuperar_outbox_educativo', '--reconcile-copies', '--solicitud-id', str(self.solicitud.pk), stdout=StringIO())
+        original, _ = crear_correo_expediente_recibido(solicitud=self.solicitud)
+        self.assertEqual(conciliar_copias(outbox_id=original.pk, dry_run=False)['originales'], 0)
+
     def setUp(self):
         self.institucion = crear_institucion('801')
         self.solicitud = crear_solicitud(
@@ -816,6 +873,117 @@ class ConfiguracionDestinatariosInstitucionalesTests(TestCase):
 )
 class ConcurrenciaCopiasCorreoPostgreSQLTests(TransactionTestCase):
     reset_sequences = True
+
+    def test_dos_procesos_concilian_inicial_sin_reenvio_ni_salir_del_ambito(self):
+        if connection.vendor != 'postgresql':
+            self.skipTest('Requiere PostgreSQL real y conexiones entre procesos.')
+        solicitud = crear_solicitud(referencia='RECONCILE-PROCESSES', correo='student@example.test')
+        DestinatarioNotificacionInstitucionalEducativa.objects.create(
+            institucion=solicitud.institucion, correo='institution@example.test',
+        )
+        entrega = programar_invitacion_inicial(solicitud=solicitud).entrega
+        original = entrega.correo_outbox
+        with transaction.atomic():
+            ajeno, _ = crear_correo_expediente_recibido(
+                solicitud=crear_solicitud(institucion=solicitud.institucion,
+                                         referencia='OUT-OF-SCOPE', correo='other@example.test'),
+            )
+        enviada = timezone.now()
+        OutboxCorreoEducativo.objects.filter(pk__in=[original.pk, ajeno.pk]).update(
+            estado=EstadoOutboxCorreoEducativo.SENT, enviada_en=enviada, intentos=1,
+        )
+        # Bootstrap independent Django processes against this runner's test database.
+        script = '''
+import json, os, sys
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'aprobado_web.settings')
+from django.conf import settings
+settings.DATABASES = {'default': json.loads(os.environ['AUDIT_TEST_DB'])}
+import django
+django.setup()
+from django.db import connection, connections
+from django.test import override_settings
+from unittest.mock import patch
+from financiacion_educativa.services.outbox_correos import conciliar_copias
+try:
+    with override_settings(EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
+            EDUCATIONAL_AUDIT_NOTIFICATION_EMAILS=['audit@example.test']):
+        with patch('financiacion_educativa.services.outbox_correos._entregar',
+                   side_effect=AssertionError('No se permite reenviar')):
+            with connection.cursor() as cursor:
+                cursor.execute('SELECT pg_advisory_lock_shared(928173)')
+            print(json.dumps(conciliar_copias(outbox_id=sys.argv[1], dry_run=False)))
+finally:
+    connections.close_all()
+'''
+        env = dict(os.environ, AUDIT_TEST_DB=json.dumps(connection.settings_dict, default=str))
+        procesos = []
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute('SELECT pg_advisory_lock(928173)')
+            for _ in range(2):
+                procesos.append(subprocess.Popen(
+                    [sys.executable, '-c', script, str(original.pk)], env=env,
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                ))
+            limite = monotonic() + 60
+            while True:
+                with connection.cursor() as cursor:
+                    cursor.execute("SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' AND objid = 928173 AND NOT granted")
+                    esperando = cursor.fetchone()[0]
+                if esperando == 2:
+                    break
+                self.assertTrue(all(p.poll() is None for p in procesos), 'Un proceso termino antes de la barrera')
+                self.assertLess(monotonic(), limite, 'Los procesos no llegaron a la barrera PostgreSQL')
+                Event().wait(0.01)
+            with connection.cursor() as cursor:
+                cursor.execute('SELECT pg_advisory_unlock(928173)')
+            resultados = []
+            for proceso in procesos:
+                salida, error = proceso.communicate(timeout=60)
+                self.assertEqual(proceso.returncode, 0, error)
+                resultados.append(json.loads(salida))
+            self.assertEqual(sum(r['copias_creadas'] for r in resultados), 2)
+        finally:
+            with connection.cursor() as cursor:
+                cursor.execute('SELECT pg_advisory_unlock(928173)')
+            for proceso in procesos:
+                if proceso.poll() is None:
+                    proceso.kill()
+                proceso.communicate()
+        self.assertCountEqual(list(original.copias_secundarias.values_list('codigo_mensaje', flat=True)), [
+            CodigoMensajeCorreoEducativo.AUDIT_COPY,
+            CodigoMensajeCorreoEducativo.INSTITUTIONAL_INITIAL_NOTIFICATION,
+        ])
+        self.assertEqual(conciliar_copias(outbox_id=original.pk, dry_run=False)['copias_creadas'], 0)
+        self.assertFalse(ajeno.copias_secundarias.exists())
+        original.refresh_from_db()
+        self.assertEqual((original.estado, original.enviada_en, original.intentos),
+                         (EstadoOutboxCorreoEducativo.SENT, enviada, 1))
+
+    def test_dos_conciliadores_crean_una_sola_copia(self):
+        if connection.vendor != 'postgresql':
+            self.skipTest('SKIPPED: requiere PostgreSQL real para bloqueos por fila.')
+        solicitud = crear_solicitud(referencia='RECONCILE-PG', correo='reconcile@example.test')
+        with transaction.atomic():
+            original, _ = crear_correo_expediente_recibido(solicitud=solicitud)
+        OutboxCorreoEducativo.objects.filter(pk=original.pk).update(estado=EstadoOutboxCorreoEducativo.SENT)
+        barrera = Barrier(2, timeout=10)
+
+        def conciliar():
+            close_old_connections()
+            try:
+                barrera.wait()
+                return conciliar_copias(outbox_id=original.pk, dry_run=False)
+            finally:
+                connection.close()
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            futuros = [executor.submit(conciliar) for _ in range(2)]
+            resultados = [futuro.result(timeout=20) for futuro in futuros]
+        self.assertEqual(sum(r['copias_creadas'] for r in resultados), 1)
+        self.assertEqual(original.copias_secundarias.count(), 1)
+        original.refresh_from_db()
+        self.assertEqual(original.estado, EstadoOutboxCorreoEducativo.SENT)
 
     def test_dos_workers_crean_una_sola_copia(self):
         if connection.vendor != 'postgresql':

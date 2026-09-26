@@ -5,8 +5,9 @@ from urllib.parse import urlparse
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import override_settings
-from django.urls import reverse
+from django.db import connection
+from django.test import RequestFactory, override_settings
+from django.urls import resolve, reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -96,6 +97,25 @@ def jpeg(nombre):
     EDUCATIONAL_OPERATIONS_NOTIFICATION_EMAILS=[],
 )
 class FlujoIntegralFinanciacionEducativaTests(APITestCase):
+    def _previsualizar(self, solicitud, documento):
+        url = reverse('financiacion_educativa_web:documento-previsualizar', kwargs={
+            'solicitud_id': solicitud.pk, 'documento_id': documento.pk,
+        })
+        request = RequestFactory().get(url)
+        request.user = solicitud.usuario
+        vista = resolve(url)
+        respuesta = vista.func(request, *vista.args, **vista.kwargs)
+        conexion_original = connection.connection
+        try:
+            self.assertTrue(b''.join(respuesta.streaming_content))
+        finally:
+            # Close only the file; response.close() emits request_finished.
+            respuesta.file_to_stream.close()
+        self.assertIs(connection.connection, conexion_original)
+        self.assertTrue(connection.is_usable())
+        self.assertTrue(SolicitudFinanciacionEducativa.objects.filter(pk=solicitud.pk).exists())
+        return respuesta
+
     def setUp(self):
         self.private_root = TemporaryDirectory()
         self.override = override_settings(
@@ -206,15 +226,7 @@ class FlujoIntegralFinanciacionEducativaTests(APITestCase):
             archivo=pdf('ingresos-integral'),
             actor=solicitud.usuario,
         )
-        previsualizacion = self.client.get(
-            reverse(
-                'financiacion_educativa_web:documento-previsualizar',
-                kwargs={
-                    'solicitud_id': solicitud.pk,
-                    'documento_id': identidad.pk,
-                },
-            )
-        )
+        previsualizacion = self._previsualizar(solicitud, identidad)
         registrar_resultado_escaneo(
             documento=identidad,
             actor=self.revisor,
@@ -286,7 +298,6 @@ class FlujoIntegralFinanciacionEducativaTests(APITestCase):
         self.assertContains(finanzas, 'Condiciones definitivas pendientes')
         self.assertEqual(previsualizacion.status_code, status.HTTP_200_OK)
         self.assertEqual(previsualizacion['X-Frame-Options'], 'SAMEORIGIN')
-        previsualizacion.close()
         self.assertFalse(
             CondicionesFinancieras.objects.filter(solicitud=solicitud).exists()
         )
@@ -472,15 +483,7 @@ class FlujoIntegralFinanciacionEducativaTests(APITestCase):
             aceptar=True,
         )
 
-        previsualizacion = self.client.get(
-            reverse(
-                'financiacion_educativa_web:documento-previsualizar',
-                kwargs={
-                    'solicitud_id': solicitud.pk,
-                    'documento_id': identidad_estudiante.pk,
-                },
-            )
-        )
+        previsualizacion = self._previsualizar(solicitud, identidad_estudiante)
         finanzas = self.client.get(
             reverse(
                 'financiacion_educativa_web:finanzas',
@@ -505,7 +508,6 @@ class FlujoIntegralFinanciacionEducativaTests(APITestCase):
         solicitud.refresh_from_db()
         self.assertEqual(creacion.status_code, status.HTTP_202_ACCEPTED)
         self.assertEqual(previsualizacion.status_code, status.HTTP_200_OK)
-        previsualizacion.close()
         self.assertContains(finanzas, 'Condiciones definitivas pendientes')
         self.assertEqual(
             CondicionesFinancieras.objects.filter(

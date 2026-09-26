@@ -1042,14 +1042,6 @@ if DEPLOYMENT_ENVIRONMENT == 'staging':
             'Staging requiere EMAIL_QA_MODE=True o la habilitacion explicita '
             'EMAIL_LIVE_DELIVERY_ENABLED=True.'
         )
-    if (
-        EMAIL_LIVE_DELIVERY_ENABLED
-        and not FINANCIACION_EDUCATIVA_REVIEW_NOTIFICATION_EMAILS
-    ):
-        raise ImproperlyConfigured(
-            'FINANCIACION_EDUCATIVA_REVIEW_NOTIFICATION_EMAILS es obligatorio '
-            'para la entrega real en staging.'
-        )
     for _email_setting_name, _email_setting_value in {
         'EMAIL_HOST': EMAIL_HOST,
         'EMAIL_HOST_USER': EMAIL_HOST_USER,

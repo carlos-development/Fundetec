@@ -206,7 +206,7 @@ def _pasos(etapa_actual, estado):
         elif posicion == indice:
             estado_paso = (
                 'action'
-                if estado in {'CORRECTION_REQUIRED', 'MANUAL_EXCEPTION', 'FAILED'}
+                if estado in {'CORRECTION_REQUIRED', 'FAILED'}
                 else 'current'
             )
         else:
@@ -368,8 +368,9 @@ def obtener_progreso_publico(solicitud):
             mensaje = 'Estamos intentando nuevamente. No necesitas reenviar los documentos.'
         elif estado == EstadoProcesoAutomatizacionEducativa.MANUAL_EXCEPTION:
             mensaje = (
-                'Tu expediente requiere una verificación adicional. '
-                'No vuelvas a enviar documentos salvo que te lo solicitemos.'
+                'Tu expediente fue recibido y está en revisión. No necesitas volver '
+                'a cargar los documentos por ahora. Te notificaremos si necesitamos '
+                'alguna corrección.'
             )
         elif estado == EstadoProcesoAutomatizacionEducativa.FAILED:
             mensaje = (
@@ -410,8 +411,9 @@ def obtener_progreso_publico(solicitud):
         estado='MANUAL_EXCEPTION',
         etapa='REVISION_ADICIONAL',
         mensaje=(
-            'Tu expediente requiere una verificación adicional. '
-            'No vuelvas a enviar documentos salvo que te lo solicitemos.'
+            'Tu expediente fue recibido y está en revisión. No necesitas volver '
+            'a cargar los documentos por ahora. Te notificaremos si necesitamos '
+            'alguna corrección.'
         ),
         accion=AccionPublica(
             'Consultar estado',

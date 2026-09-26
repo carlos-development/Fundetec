@@ -1,0 +1,11 @@
+[Unit]
+Description=Recordatorios educativos cada hora (staging)
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+AccuracySec=1min
+Unit=fundetec-staging-educational-reminders.service
+
+[Install]
+WantedBy=timers.target

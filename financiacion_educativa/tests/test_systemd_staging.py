@@ -13,6 +13,26 @@ SYSTEMD_ROOT = Path(settings.BASE_DIR) / 'deploy' / 'systemd'
 
 
 class SystemdStagingUnitTests(SimpleTestCase):
+    def test_recordatorios_son_oneshot_horario_sin_alterar_cadencia(self):
+        servicio = (SYSTEMD_ROOT / 'fundetec-staging-educational-reminders.service').read_text()
+        timer = (SYSTEMD_ROOT / 'fundetec-staging-educational-reminders.timer').read_text()
+        for linea in (
+            'Type=oneshot', 'User=fundetec-staging', 'Group=fundetec-staging',
+            'WorkingDirectory=/var/www/fundetec-staging/current',
+            'EnvironmentFile=/var/www/fundetec-staging/shared/staging.env',
+            'NoNewPrivileges=true', 'PrivateTmp=true',
+            'ProtectSystem=strict', 'ProtectHome=true',
+            'ExecStart=/var/www/fundetec-staging/shared/venv/bin/python manage.py '
+            'programar_recordatorios_solicitudes_educativas --batch-size 100',
+        ):
+            self.assertIn(linea, servicio.splitlines())
+        self.assertNotIn('Environment=', servicio)
+        self.assertNotIn('ReadWritePaths=', servicio)
+        for linea in ('OnCalendar=hourly', 'Persistent=true', 'AccuracySec=1min',
+                      'Unit=fundetec-staging-educational-reminders.service',
+                      'WantedBy=timers.target'):
+            self.assertIn(linea, timer.splitlines())
+
     units = {
         'fundetec-staging-educational-worker.service': (
             'manage.py procesar_cola_educativa'

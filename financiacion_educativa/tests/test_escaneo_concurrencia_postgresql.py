@@ -120,7 +120,7 @@ class ConcurrenciaEscaneoPostgreSQLTests(TransactionTestCase):
             except Exception as error:  # pragma: no cover - diagnostico de hilo
                 errores.append(error)
             finally:
-                close_old_connections()
+                connection.close()
 
         primero = threading.Thread(target=ejecutar)
         primero.start()

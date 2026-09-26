@@ -1,7 +1,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
 
-from django.db import close_old_connections
+from django.db import close_old_connections, connection
 from django.test import TransactionTestCase, skipUnlessDBFeature
 
 from financiacion_educativa.models import SolicitudFinanciacionEducativa
@@ -36,14 +36,16 @@ class IdempotenciaConcurrenteTests(TransactionTestCase):
 
         def crear():
             close_old_connections()
-            institucion_local = Institucion.objects.get(pk=institucion.pk)
-            resultado = crear_solicitud_idempotente(
-                institucion=institucion_local,
-                clave_idempotencia='concurrent-key',
-                datos=datos,
-            )
-            close_old_connections()
-            return resultado.solicitud.pk
+            try:
+                institucion_local = Institucion.objects.get(pk=institucion.pk)
+                resultado = crear_solicitud_idempotente(
+                    institucion=institucion_local,
+                    clave_idempotencia='concurrent-key',
+                    datos=datos,
+                )
+                return resultado.solicitud.pk
+            finally:
+                connection.close()
 
         with ThreadPoolExecutor(max_workers=2) as ejecutor:
             ids = list(ejecutor.map(lambda _: crear(), range(2)))

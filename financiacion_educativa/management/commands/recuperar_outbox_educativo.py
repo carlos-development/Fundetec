@@ -1,6 +1,8 @@
 from django.core.management.base import BaseCommand, CommandError
+from django.core.exceptions import ValidationError
 
 from financiacion_educativa.services.outbox_correos import (
+    conciliar_copias,
     recuperar_leases_outbox,
     reintentar_fallidos,
     resolver_ambiguos,
@@ -14,6 +16,7 @@ class Command(BaseCommand):
         acciones = parser.add_mutually_exclusive_group(required=True)
         acciones.add_argument('--recover-leases', action='store_true')
         acciones.add_argument('--retry-failed', action='store_true')
+        acciones.add_argument('--reconcile-copies', action='store_true')
         acciones.add_argument(
             '--resolve-ambiguous',
             choices=['SENT', 'FAILED', 'RETRYING'],
@@ -22,6 +25,7 @@ class Command(BaseCommand):
         parser.add_argument('--outbox-id')
         parser.add_argument('--dry-run', action='store_true')
         parser.add_argument('--confirmar', action='store_true')
+        parser.add_argument('--limit', type=int, default=100)
 
     def handle(self, *args, **options):
         dry_run = options['dry_run']
@@ -34,7 +38,13 @@ class Command(BaseCommand):
             'solicitud_id': options['solicitud_id'],
             'outbox_id': options['outbox_id'],
         }
-        if options['recover_leases']:
+        if options['reconcile_copies']:
+            try:
+                total = conciliar_copias(limite=options['limit'], **filtros)
+            except ValidationError as error:
+                raise CommandError('Conciliacion invalida: indique UUID y limite valido.') from error
+            accion = 'copias'
+        elif options['recover_leases']:
             total = recuperar_leases_outbox(**filtros)
             accion = 'leases vencidos'
         elif options['retry_failed']:

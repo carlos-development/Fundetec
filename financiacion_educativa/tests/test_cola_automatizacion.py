@@ -433,7 +433,7 @@ class ConcurrenciaColaPostgreSQLTests(TransactionTestCase):
             except Exception as error:  # pragma: no cover - diagnostico de hilo
                 errores.append(error)
             finally:
-                close_old_connections()
+                connection.close()
 
         hilos = [threading.Thread(target=reclamar) for _ in range(2)]
         for hilo in hilos:

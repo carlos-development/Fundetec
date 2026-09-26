@@ -1,0 +1,15 @@
+[Unit]
+Description=Programacion de recordatorios educativos Fundetec (staging)
+After=network.target postgresql.service
+
+[Service]
+Type=oneshot
+User=fundetec-staging
+Group=fundetec-staging
+WorkingDirectory=/var/www/fundetec-staging/current
+EnvironmentFile=/var/www/fundetec-staging/shared/staging.env
+ExecStart=/var/www/fundetec-staging/shared/venv/bin/python manage.py programar_recordatorios_solicitudes_educativas --batch-size 100
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true

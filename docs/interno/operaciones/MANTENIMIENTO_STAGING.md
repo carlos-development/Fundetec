@@ -144,9 +144,11 @@ El backend seguro exige exactamente un modo operativo:
 
 En modo real, los mensajes se entregan a sus destinatarios originales. Cuando
 el solicitante envia por primera vez su expediente, recibe una confirmacion
-con copia a `FINANCIACION_EDUCATIVA_REVIEW_NOTIFICATION_EMAILS`. Ese mensaje no
-incluye invitaciones, enlaces de captura ni tokens. Los correos que si contienen
-enlaces de un solo uso nunca se copian a la bandeja operativa.
+sin CC/BCC. La copia operativa es una `AUDIT_COPY` independiente destinada a
+`EDUCATIONAL_AUDIT_NOTIFICATION_EMAILS`; nunca incluye enlaces privados ni tokens.
+`FINANCIACION_EDUCATIVA_REVIEW_NOTIFICATION_EMAILS` queda obsoleta: se admite
+por compatibilidad de configuracion, pero no recibe copias ni es obligatoria
+para habilitar entrega real. Una lista de auditoria vacia deshabilita sus copias.
 
 Antes de habilitar entrega real, mantener QA y ejecutar:
 

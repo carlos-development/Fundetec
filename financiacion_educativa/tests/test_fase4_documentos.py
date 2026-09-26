@@ -4,8 +4,9 @@ from tempfile import TemporaryDirectory
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import TestCase, override_settings
-from django.urls import reverse
+from django.db import connection
+from django.test import RequestFactory, TestCase, override_settings
+from django.urls import resolve, reverse
 
 from financiacion_educativa.choices import (
     EstadoEscaneoDocumento,
@@ -59,6 +60,25 @@ def archivo_png(nombre='captura.png', marca=b'contenido'):
 
 
 class DocumentosPrivadosFase4Tests(TestCase):
+    def _respuesta_archivo(self, url):
+        request = RequestFactory().get(url)
+        request.user = self.usuario
+        vista = resolve(url)
+        respuesta = vista.func(request, *vista.args, **vista.kwargs)
+        self.addCleanup(respuesta.file_to_stream.close)
+        return respuesta
+
+    def _consumir_y_cerrar_archivo(self, respuesta):
+        conexion_original = connection.connection
+        try:
+            self.assertTrue(b''.join(respuesta.streaming_content))
+        finally:
+            # FileResponse.close emits request_finished inside TestCase's transaction.
+            respuesta.file_to_stream.close()
+        self.assertIs(connection.connection, conexion_original)
+        self.assertTrue(connection.is_usable())
+        self.assertTrue(type(self.solicitud).objects.filter(pk=self.solicitud.pk).exists())
+
     def setUp(self):
         self.private_root = TemporaryDirectory()
         self.override = override_settings(
@@ -232,14 +252,14 @@ class DocumentosPrivadosFase4Tests(TestCase):
         self.client.force_login(self.otro)
         self.assertEqual(self.client.get(url).status_code, 404)
         self.client.force_login(self.usuario)
-        respuesta = self.client.get(url)
+        respuesta = self._respuesta_archivo(url)
 
         self.assertEqual(respuesta.status_code, 200)
         self.assertIn('attachment;', respuesta['Content-Disposition'])
         self.assertEqual(respuesta['X-Content-Type-Options'], 'nosniff')
         self.assertIn('no-store', respuesta['Cache-Control'])
         self.assertNotIn(self.private_root.name, str(respuesta.headers))
-        respuesta.close()
+        self._consumir_y_cerrar_archivo(respuesta)
 
     def test_previsualizacion_es_inline_privada_y_solo_mismo_origen(self):
         documento = self._registrar()
@@ -255,7 +275,7 @@ class DocumentosPrivadosFase4Tests(TestCase):
         self.client.force_login(self.otro)
         self.assertEqual(self.client.get(url).status_code, 404)
         self.client.force_login(self.usuario)
-        respuesta = self.client.get(url)
+        respuesta = self._respuesta_archivo(url)
 
         self.assertEqual(respuesta.status_code, 200)
         self.assertEqual(respuesta['Content-Type'], 'application/pdf')
@@ -270,7 +290,7 @@ class DocumentosPrivadosFase4Tests(TestCase):
         self.assertNotIn('sandbox', respuesta['Content-Security-Policy'])
         self.assertIn('no-store', respuesta['Cache-Control'])
         self.assertNotIn(self.private_root.name, str(respuesta.headers))
-        respuesta.close()
+        self._consumir_y_cerrar_archivo(respuesta)
 
     def test_previsualizacion_privada_admite_pdf_jpeg_y_png_reales(self):
         casos = (
@@ -301,11 +321,11 @@ class DocumentosPrivadosFase4Tests(TestCase):
                         'documento_id': documento.pk,
                     },
                 )
-                respuesta = self.client.get(url)
+                respuesta = self._respuesta_archivo(url)
                 self.assertEqual(respuesta.status_code, 200)
                 self.assertEqual(respuesta['Content-Type'], mime)
                 self.assertIn('inline;', respuesta['Content-Disposition'])
-                respuesta.close()
+                self._consumir_y_cerrar_archivo(respuesta)
 
     def test_previsualizacion_rechaza_mime_no_permitido(self):
         documento = self._registrar()

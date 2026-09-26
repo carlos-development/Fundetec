@@ -31,8 +31,9 @@ from financiacion_educativa.tests.factories import crear_solicitud
     DEBUG=True,
     EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
     FINANCIACION_EDUCATIVA_REVIEW_NOTIFICATION_EMAILS=[
-        'soporte@aprobado.com.co',
+        'support@example.test',
     ],
+    EDUCATIONAL_AUDIT_NOTIFICATION_EMAILS=[],
     FINANCIACION_EDUCATIVA_EMAIL_OUTBOX_LEASE_SECONDS=60,
     FINANCIACION_EDUCATIVA_EMAIL_OUTBOX_MAX_ATTEMPTS=3,
     FINANCIACION_EDUCATIVA_EMAIL_OUTBOX_BACKOFF_BASE_SECONDS=10,
@@ -77,7 +78,7 @@ class OutboxCorreoEducativoTests(TestCase):
                 raise RuntimeError('rollback controlado')
         self.assertFalse(OutboxCorreoEducativo.objects.exists())
 
-    def test_entrega_exitosa_con_cc_y_message_id_determinista(self):
+    def test_entrega_exitosa_sin_cc_y_message_id_determinista(self):
         outbox = self._crear()
         resultado = procesar_siguiente_correo()
 
@@ -86,7 +87,8 @@ class OutboxCorreoEducativoTests(TestCase):
         self.assertEqual(outbox.estado, EstadoOutboxCorreoEducativo.SENT)
         self.assertEqual(len(mail.outbox), 1)
         self.assertEqual(mail.outbox[0].to, [self.solicitud.correo])
-        self.assertEqual(mail.outbox[0].cc, ['soporte@aprobado.com.co'])
+        self.assertEqual(mail.outbox[0].cc, [])
+        self.assertEqual(mail.outbox[0].bcc, [])
         self.assertEqual(
             mail.outbox[0].extra_headers['Message-ID'],
             outbox.message_id,

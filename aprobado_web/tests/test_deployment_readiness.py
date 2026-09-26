@@ -261,13 +261,11 @@ print(settings.DEBUG)
         self.assertNotEqual(unsafe_backend.returncode, 0)
         self.assertIn('Staging requiere SafeRoutingEmailBackend', unsafe_backend.stderr)
 
-    def test_staging_admite_entrega_real_explicita_con_notificacion_operativa(self):
+    def test_staging_admite_entrega_real_explicita_sin_cc_legacy(self):
         environment = self._staging_environment()
         environment['EMAIL_QA_MODE'] = 'false'
         environment['EMAIL_LIVE_DELIVERY_ENABLED'] = 'true'
-        environment['FINANCIACION_EDUCATIVA_REVIEW_NOTIFICATION_EMAILS'] = (
-            'soporte@example.test'
-        )
+        environment['FINANCIACION_EDUCATIVA_REVIEW_NOTIFICATION_EMAILS'] = ''
 
         result = self._load_settings(environment)
 
