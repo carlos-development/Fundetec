@@ -5,6 +5,7 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
+from financiacion_educativa.services.pausa_firma import firma_pausada
 
 from financiacion_educativa.choices import (
     EtapaAutomatizacionEducativa,
@@ -83,6 +84,7 @@ class SalidaEtapaPersistente:
     codigo: str
     siguiente_etapa: str = ''
     requisitos_correccion: tuple[str, ...] = ()
+    firma_pausada: bool = False
 
 
 def _resultado(solicitud, codigo):
@@ -435,6 +437,9 @@ def _continuar_firma(solicitud):
     if solicitud.estado != EstadoSolicitudFinanciacion.PENDING_PROMISSORY_NOTE:
         return _resultado(solicitud, 'NOT_PENDING_SIGNATURE_SEND')
     artefactos = generar_artefactos_contractuales(solicitud=solicitud)
+    if firma_pausada():
+        logger.info('Envio de firma pausado: solicitud=%s codigo=SIGNATURE_SEND_PAUSED', solicitud.pk)
+        return _resultado(solicitud, 'SIGNATURE_SEND_PAUSED')
     proceso = ProcesoFirmaEducativa.objects.get(artefacto=artefactos.pagare)
     try:
         proceso = enviar_pagare_educativo(proceso=proceso)
@@ -679,11 +684,18 @@ def ejecutar_etapa_persistente(*, solicitud_id, etapa):
         )
     if etapa == EtapaAutomatizacionEducativa.CONTRACT_GENERATION:
         generar_artefactos_contractuales(solicitud=solicitud)
-        return _salida_continuar(
-            EtapaAutomatizacionEducativa.SIGNATURE_SEND,
-            'CONTRACTS_GENERATED',
+        return SalidaEtapaPersistente(
+            estado=EstadoProcesoAutomatizacionEducativa.QUEUED,
+            siguiente_etapa=EtapaAutomatizacionEducativa.SIGNATURE_SEND,
+            codigo='CONTRACTS_GENERATED', firma_pausada=firma_pausada(),
         )
     if etapa == EtapaAutomatizacionEducativa.SIGNATURE_SEND:
+        if firma_pausada():
+            return SalidaEtapaPersistente(
+                estado=EstadoProcesoAutomatizacionEducativa.QUEUED,
+                siguiente_etapa=EtapaAutomatizacionEducativa.SIGNATURE_SEND,
+                codigo='CONTRACTS_GENERATED', firma_pausada=True,
+            )
         proceso_existente = solicitud.procesos_firma.order_by('-creado_en').first()
         if (
             proceso_existente

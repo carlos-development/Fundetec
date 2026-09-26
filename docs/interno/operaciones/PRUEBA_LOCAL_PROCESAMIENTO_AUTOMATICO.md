@@ -215,3 +215,62 @@ La prueba automatizada equivalente y mas segura es:
 ```powershell
 venv\Scripts\python.exe manage.py test financiacion_educativa.tests.test_flujo_automatico_e2e --noinput
 ```
+
+## Vinculacion del frente y pausa previa a firma
+
+`EDU_IDENTITY_FRONT_V1` aplica a frentes CC/TI nuevos: el numero debe ser
+exactamente igual tras quitar solo espacios, puntos y guiones. No acepta
+coincidencias parciales, letras ni prefijos/sufijos. Los nombres completos y
+apellidos deben coincidir como multiconjunto de componentes (incluidas sus
+repeticiones), con al menos dos componentes distintos. Se normalizan tildes,
+mayusculas, espacios, apostrofos y guiones; se permite distinto orden, no
+omitir componentes ni agregar otros. Las ambiguedades van a revision.
+
+La comparacion resuelve exclusivamente la dimension de datos. Conserva el
+puntaje original, incluso cero, y exige las demas dimensiones visuales y
+ausencia de contradicciones. La traza incluye `front_policy_version`,
+`identity_linked`, `identity_link_method`, `linked_dimensions`,
+`effective_reason_codes` y los ajustes positivos, sin copiar nombres ni numero.
+El reverso usa el frente aprobado del mismo participante mediante
+`EDU_IDENTITY_BACK_V1`. No se reescriben intentos historicos.
+
+### Pausa controlada en staging
+
+La bandera no secreta `FINANCIACION_EDUCATIVA_SIGNATURE_SEND_PAUSED=false`
+conserva el comportamiento habitual. Solo se permite activarla con
+`DEPLOYMENT_ENVIRONMENT=staging` o en settings de pruebas con ambiente `test`.
+Un check y la guarda del servicio rechazan su activacion en produccion/local.
+No basta con dejar de firmar en pantalla: normalmente se crea el documento
+remoto antes de abrir el enlace.
+
+Procedimiento, solo tras autorizacion operativa (no ejecutado por estas pruebas):
+
+1. Detener los workers educativos y las entradas web/comandos que puedan enviar
+   firmas. Esperar las operaciones en curso. Una pausa no cancela solicitudes
+   que ya salieron hacia el proveedor; los envios ambiguos requieren conciliacion.
+2. Cambiar solo `FINANCIACION_EDUCATIVA_SIGNATURE_SEND_PAUSED=true` en el entorno
+   de staging y ejecutar `staging_manage check`. Reiniciar todos los procesos
+   que cargan settings antes de reabrir el flujo. No cambiar proveedor ni tokens.
+3. Completar un expediente de prueba autorizado. Debe quedar solicitud
+   `PENDING_PROMISSORY_NOTE`, proceso `QUEUED`, etapa `SIGNATURE_SEND`, sin lease
+   ni consumo repetido de intentos. La etapa de generacion contractual registra
+   `metadata_publica.signature_send_paused=true`. La via sin cola devuelve
+   `SIGNATURE_SEND_PAUSED` y registra solo UUID y codigo. Las condiciones y
+   contratos locales pueden existir, pero la API no autoriza curso ni publica
+   `financial_terms`; el backend de firma no se invoca.
+
+Comprobacion de configuracion sin secretos:
+
+```bash
+staging_manage shell -c "from django.conf import settings as s; print('ENVIRONMENT=', s.DEPLOYMENT_ENVIRONMENT); print('SIGNATURE_SEND_PAUSED=', s.FINANCIACION_EDUCATIVA_SIGNATURE_SEND_PAUSED)"
+staging_manage check
+```
+
+Para reanudar, detener entradas y workers, poner la bandera en `false`, ejecutar
+el check y reiniciar con el mismo release. El worker reclama la etapa pendiente
+con su lease y lock existentes; no crear otro proceso ni alterar estados.
+Esto habilita llamadas reales al proveedor configurado y requiere autorizacion.
+Para volver a pausar, repetir la secuencia con `true`. Antes de volver a una
+version de codigo sin esta guarda, mantener detenidos los workers y las entradas
+de firma: ese codigo anterior no respeta la bandera. No hay migraciones que
+revertir ni documentos historicos que reclasificar.

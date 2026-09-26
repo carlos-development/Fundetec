@@ -48,6 +48,7 @@ from financiacion_educativa.services.validacion_documental_ia import (
     OpenAIDocumentAIValidationBackend,
     _es_concluyente,
     _evaluar_reverso,
+    _evaluar_frente,
     _reglas_tipo_identidad,
     puede_revalidar_vinculo_frente,
     _resultado_estructurado,
@@ -207,6 +208,83 @@ class ValidacionDocumentalIATests(TestCase):
         frente.refresh_from_db()
         self.assertEqual(frente.estado_validacion, EstadoValidacionDocumento.APPROVED)
         return frente
+
+    def _frente_determinista(self, **cambios):
+        return replace(BackendIAConcluyente().validar(), **{
+            'numero_documento_visible': '1.000.123.456',
+            'nombres_visibles': ('PEREZ ANA',),
+            'tipo_documento_visible': 'CC_FRONT',
+            'decision': 'MANUAL_REVIEW',
+            'confianza_datos': Decimal('0.70'),
+            'hallazgos': ('DATA_MATCH_LOW_CONFIDENCE',),
+            'razones': ('DATA_MATCH_LOW_CONFIDENCE',),
+            'ajustes_politica': ('FRONT_DECLARED_DATA_MATCH_APPLIED',),
+            **cambios,
+        })
+
+    def test_frente_determinista_conserva_confianza_y_vincula_reverso_sin_pii(self):
+        frente = self.documento_seguro(b'frente-v1', TipoDocumentoFinanciacion.STUDENT_ID_FRONT)
+        backend = Mock(enabled=True)
+        backend.validar.return_value = self._frente_determinista()
+        procesar_validacion_documental_ia(documento=frente, actor=self.operador, backend=backend)
+        intento = frente.validaciones_ia.get()
+        self.assertEqual(intento.estado, EstadoValidacionIADocumento.AUTO_APPROVED)
+        traza = intento.resultado_estructurado
+        self.assertEqual(traza['front_policy_version'], 'EDU_IDENTITY_FRONT_V1')
+        self.assertTrue(traza['identity_linked'])
+        self.assertEqual(traza['identity_link_method'], 'EXACT_DECLARED_DATA_COMPARISON')
+        self.assertEqual(traza['linked_dimensions'], ['data_match'])
+        self.assertEqual(traza['effective_reason_codes'], [])
+        self.assertEqual(traza['data_match_confidence'], '0.70')
+        self.assertNotIn('visible_names', traza)
+        self.assertNotIn('visible_document_number', traza)
+        original = deepcopy(traza)
+        reverso = self.documento_seguro(b'reverso-v1', TipoDocumentoFinanciacion.STUDENT_ID_BACK)
+        backend.validar.return_value = self._reverso_incierto()
+        procesar_validacion_documental_ia(documento=reverso, actor=self.operador, backend=backend)
+        self.assertEqual(reverso.validaciones_ia.get().estado, EstadoValidacionIADocumento.AUTO_APPROVED)
+        intento.refresh_from_db()
+        self.assertEqual(intento.resultado_estructurado, original)
+
+    def test_frente_no_sustituye_incertidumbres_independientes(self):
+        documento = self.documento_seguro(b'frente-reglas', TipoDocumentoFinanciacion.STUDENT_ID_FRONT)
+        casos = [
+            {'numero_documento_visible': '1000123457'},
+            {'numero_documento_visible': ''},
+            {'numero_documento_visible': 'X1000123456'},
+            {'numero_documento_visible': '10001234560'},
+            {'nombres_visibles': ('ANA',)},
+            {'nombres_visibles': ('OTRA PERSONA',)},
+            {'nombres_visibles': ('ANA PEREZ OTRA',)},
+            {'tipo_documento_visible': 'TI'},
+            {'tipo_documento_visible': 'CC_BACK'},
+            {'lado_correcto': False}, {'es_documento_colombiano': False},
+            {'corresponde_tipo': False}, {'campos_visibles': False},
+            {'calidad': Decimal('0.6')}, {'legibilidad': Decimal('0.6')},
+            {'captura_documento_fisico': False}, {'integridad_visual': False},
+            {'senales_manipulacion_visible': True}, {'confianza_manipulacion': Decimal('0')},
+            {'borrosa': True}, {'oscura': True}, {'reflejos': True},
+            {'recortada': True}, {'obstruida': True}, {'datos_consistentes': False},
+            {'hallazgos': ('DATA_MISMATCH',)},
+            {'ajustes_politica': ('DOCUMENT_NUMBER_NOT_VISIBLE',)},
+            {'decision': 'REJECTED'},
+        ]
+        for cambios in casos:
+            with self.subTest(cambios=cambios):
+                self.assertFalse(_evaluar_frente(documento, self._frente_determinista(**cambios))[0])
+
+    def test_frente_normalizacion_controlada_y_cero_no_se_reescriben(self):
+        documento = self.documento_seguro(b'frente-cero', TipoDocumentoFinanciacion.STUDENT_ID_FRONT)
+        resultado = self._frente_determinista(
+            nombres_visibles=('  p\u00e9rez   ana  ',), confianza_datos=Decimal('0'),
+            ajustes_politica=('FRONT_DECLARED_DATA_MATCH_APPLIED', 'DOCUMENT_TYPE_EQUIVALENCE_APPLIED'),
+        )
+        self.assertTrue(_evaluar_frente(documento, resultado)[0])
+        self.assertEqual(resultado.confianza_datos, Decimal('0'))
+        backend = Mock(enabled=True)
+        backend.validar.return_value = resultado
+        procesar_validacion_documental_ia(documento=documento, actor=self.operador, backend=backend)
+        self.assertEqual(documento.validaciones_ia.get().resultado_estructurado['data_match_confidence'], '0')
 
     def _reverso_incierto(self, **cambios):
         return replace(BackendIAConcluyente().validar(), **{
@@ -868,7 +946,8 @@ class AdaptadorOpenAIValidacionDocumentalTests(TestCase):
                 self.assertTrue(resultado.datos_consistentes)
                 self.assertNotIn('TYPE_MISMATCH', resultado.hallazgos)
                 self.assertNotIn('DATA_MISMATCH', resultado.hallazgos)
-                self.assertEqual(resultado.decision, 'MANUAL_REVIEW')
+                self.assertEqual(resultado.decision, 'REJECTED')
+                self.assertFalse(self._es_identidad_autoaprobable(resultado))
                 self.assertEqual(
                     resultado.version_politica,
                     IDENTITY_POLICY_VERSION,
@@ -1005,7 +1084,11 @@ class AdaptadorOpenAIValidacionDocumentalTests(TestCase):
         for nombre, cambios in casos:
             with self.subTest(garantia=nombre):
                 resultado = self._resultado_v4(**cambios)
-                self.assertFalse(self._es_identidad_autoaprobable(resultado))
+                if nombre == 'datos':
+                    self.assertIn('FRONT_DECLARED_DATA_MATCH_APPLIED', resultado.ajustes_politica)
+                    self.assertFalse(self._es_identidad_autoaprobable(replace(resultado, datos_consistentes=False)))
+                else:
+                    self.assertFalse(self._es_identidad_autoaprobable(resultado))
 
     def test_hallazgos_v4_impiden_autoaprobacion(self):
         for campo in ('finding_codes', 'reason_codes'):
@@ -1039,14 +1122,17 @@ class AdaptadorOpenAIValidacionDocumentalTests(TestCase):
         frente = _reglas_tipo_identidad(TipoDocumentoFinanciacion.STUDENT_ID_FRONT)
         self.assertEqual(frente['regla_datos'], 'Comparar numero y nombres visibles declarados.')
 
-    def test_ajuste_correctivo_v4_conserva_revision_manual(self):
+    def test_ajuste_positivo_no_veta_y_ajuste_bloqueante_conserva_revision(self):
         resultado = replace(
             self._resultado_v4(),
             decision='ACCEPTED',
             ajustes_politica=('DOCUMENT_TYPE_EQUIVALENCE_APPLIED',),
         )
 
-        self.assertFalse(self._es_identidad_autoaprobable(resultado))
+        self.assertTrue(self._es_identidad_autoaprobable(resultado))
+        self.assertFalse(self._es_identidad_autoaprobable(replace(
+            resultado, ajustes_politica=('VISIBLE_SIDE_CONTRADICTION',),
+        )))
         self.assertEqual(
             settings.FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_DIMENSION_CONFIDENCE,
             '0.80',

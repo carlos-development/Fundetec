@@ -8,6 +8,7 @@ from django.conf import settings
 from django.db import IntegrityError, connection, transaction
 from django.db.models import Max, Q
 from django.utils import timezone
+from financiacion_educativa.services.pausa_firma import firma_pausada
 
 from financiacion_educativa.choices import (
     CodigoRazonAutomatizacionEducativa,
@@ -133,6 +134,8 @@ def reclamar_siguiente_proceso():
     queryset = ProcesoAutomatizacionEducativa.objects.filter(
         _query_reclamable(ahora)
     ).order_by('proxima_ejecucion_en', 'creada_en')
+    if firma_pausada():
+        queryset = queryset.exclude(etapa_actual=EtapaAutomatizacionEducativa.SIGNATURE_SEND)
     if connection.features.has_select_for_update_skip_locked:
         queryset = queryset.select_for_update(skip_locked=True)
     else:
@@ -191,6 +194,7 @@ def _finalizar_etapa(*, proceso_id, lease_id, salida, iniciada_en):
         codigo_razon=codigo,
         metadata_publica={
             'requires_correction': bool(salida.requisitos_correccion),
+            'signature_send_paused': salida.firma_pausada,
         },
         iniciada_en=iniciada_en,
     )

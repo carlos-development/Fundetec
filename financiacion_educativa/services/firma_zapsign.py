@@ -376,6 +376,11 @@ def enviar_pagare_educativo(
     proceso,
     permitir_reintento_permanente=False,
 ):
+    from financiacion_educativa.services.pausa_firma import firma_pausada
+
+    if firma_pausada():
+        raise ValidationError('Envio de firma pausado por configuracion staging/test.',
+                              code='SIGNATURE_SEND_PAUSED')
     backend = _backend()
     ahora = timezone.now()
     with transaction.atomic():

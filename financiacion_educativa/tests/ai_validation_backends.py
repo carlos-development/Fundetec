@@ -11,7 +11,12 @@ class BackendIAConcluyente:
     proveedor = 'test-ai'
 
     def validar(self, **kwargs):
+        contexto = kwargs.get('contexto') or {}
+        if contexto.get('lado_esperado') not in {'front', 'back'}:
+            contexto = {}
         return ResultadoValidacionDocumentalIA(
+            numero_documento_visible=contexto.get('numero_documento', ''),
+            nombres_visibles=tuple(filter(None, [contexto.get('nombres'), contexto.get('apellidos')])),
             calidad=Decimal('0.9800'),
             legibilidad=Decimal('0.9700'),
             confianza=Decimal('0.9900'),

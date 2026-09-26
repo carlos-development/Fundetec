@@ -2,6 +2,7 @@ import base64
 import json
 import re
 import unicodedata
+from collections import Counter
 from dataclasses import dataclass, field, replace
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from io import BytesIO
@@ -458,6 +459,28 @@ def _normalizar_comparacion(valor):
     return re.sub(r'[^A-Z0-9]+', '', texto.upper())
 
 
+FRONT_IDENTITY_POLICY_VERSION = 'EDU_IDENTITY_FRONT_V1'
+AJUSTES_POSITIVOS = frozenset({
+    'FRONT_DECLARED_DATA_MATCH_APPLIED', 'BACK_NUMBER_MATCH_APPLIED',
+    'DOCUMENT_TYPE_EQUIVALENCE_APPLIED',
+})
+
+
+def _numero_identidad_exacto(valor):
+    texto = str(valor or '').strip()
+    if not re.fullmatch(r'[0-9 .\-]+', texto):
+        return ''
+    return re.sub(r'[ .\-]', '', texto)
+
+
+def _nombre_identidad_exacto(*valores):
+    texto = unicodedata.normalize('NFKD', ' '.join(str(v or '') for v in valores))
+    texto = ''.join(c for c in texto if not unicodedata.combining(c)).upper()
+    if re.search(r"[^A-Z\s'\-]", texto):
+        return Counter()
+    return Counter(re.findall(r'[A-Z]+', texto))
+
+
 def _normalizar_tokens_nombre(*valores):
     texto = ' '.join(str(valor or '') for valor in valores)
     texto = unicodedata.normalize('NFKD', texto)
@@ -557,7 +580,6 @@ def _aplicar_coherencia_identidad(payload, *, tipo_esperado, contexto):
                 normalizado['document_type_match'] = True
                 _reemplazar_codigo(normalizado, 'TYPE_MISMATCH')
                 ajustes.append('DOCUMENT_TYPE_EQUIVALENCE_APPLIED')
-                _forzar_revision_manual(normalizado)
         elif categoria_compatible is False:
             normalizado['document_type_match'] = False
             if 'TYPE_MISMATCH' not in normalizado['finding_codes']:
@@ -575,10 +597,13 @@ def _aplicar_coherencia_identidad(payload, *, tipo_esperado, contexto):
                 ajustes.append('DOCUMENT_TYPE_CONTRADICTION_INCONCLUSIVE')
                 _forzar_revision_manual(normalizado)
 
-    numero_visible = _normalizar_comparacion(
+    normalizar_numero = (
+        _numero_identidad_exacto if lado_esperado == 'front' else _normalizar_comparacion
+    )
+    numero_visible = normalizar_numero(
         normalizado['visible_document_number']
     )
-    numero_declarado = _normalizar_comparacion(
+    numero_declarado = normalizar_numero(
         contexto.get('numero_documento')
     )
     if not numero_visible or not numero_declarado:
@@ -603,16 +628,16 @@ def _aplicar_coherencia_identidad(payload, *, tipo_esperado, contexto):
             _reemplazar_codigo(normalizado, 'DATA_MISMATCH')
             _reemplazar_codigo(normalizado, 'DATA_CONSISTENCY_INCONCLUSIVE')
             ajustes.append('BACK_NUMBER_MATCH_APPLIED')
-            _forzar_revision_manual(normalizado)
     else:
         nombres_coherentes = _coherencia_nombres_frente(normalizado, contexto)
+        if not _nombre_identidad_exacto(*normalizado['visible_names']):
+            nombres_coherentes = None
         if nombres_coherentes is True:
             if normalizado['data_consistent'] is not True:
                 normalizado['data_consistent'] = True
                 _reemplazar_codigo(normalizado, 'DATA_MISMATCH')
                 _reemplazar_codigo(normalizado, 'DATA_CONSISTENCY_INCONCLUSIVE')
                 ajustes.append('FRONT_DECLARED_DATA_MATCH_APPLIED')
-                _forzar_revision_manual(normalizado)
         elif nombres_coherentes is False:
             normalizado['data_consistent'] = False
             _reemplazar_codigo(normalizado, 'DATA_CONSISTENCY_INCONCLUSIVE')
@@ -1160,7 +1185,7 @@ def _es_concluyente(
         and _integridad_visual(resultado) is True
         and _senales_manipulacion(resultado) is False
         and (identidad_vinculada or not resultado.hallazgos)
-        and (identidad_vinculada or not resultado.ajustes_politica)
+        and (identidad_vinculada or set(resultado.ajustes_politica).issubset(AJUSTES_POSITIVOS))
     )
     if not concluyente or not requiere_identidad:
         return concluyente
@@ -1183,6 +1208,51 @@ def _es_concluyente(
         and resultado.recortada is False
         and resultado.obstruida is False
     )
+
+
+def _evaluar_frente(documento, resultado):
+    participante = documento.participante
+    razones = list(dict.fromkeys([
+        *resultado.hallazgos, *resultado.razones,
+        *_razones_inconclusas(resultado, requiere_identidad=True),
+    ]))
+    if not participante:
+        return False, ['DATA_CONSISTENCY_INCONCLUSIVE']
+    numero = _numero_identidad_exacto(resultado.numero_documento_visible)
+    declarado = _numero_identidad_exacto(participante.numero_documento)
+    visibles = _nombre_identidad_exacto(*resultado.nombres_visibles)
+    nombres = _nombre_identidad_exacto(participante.nombres, participante.apellidos)
+    # Full multiset equality: order/accent variants are allowed, omissions are not.
+    vinculado = bool(
+        numero and numero == declarado and visibles == nombres and len(nombres) >= 2
+        and _nombre_identidad_exacto(participante.nombres)
+        and _nombre_identidad_exacto(participante.apellidos)
+        and participante.tipo_documento in {TipoDocumentoIdentidad.CC, TipoDocumentoIdentidad.TI}
+    )
+    codigos = set(resultado.hallazgos) | set(resultado.razones)
+    categoria, lado = _categoria_y_lado_visibles(resultado.tipo_documento_visible)
+    incertidumbre_datos = bool(
+        'DATA_MATCH_LOW_CONFIDENCE' in codigos
+        or _confianza_dimension(resultado, 'confianza_datos')
+        < Decimal(settings.FINANCIACION_EDUCATIVA_DOCUMENT_AI_MIN_DIMENSION_CONFIDENCE)
+    )
+    aceptado = bool(
+        vinculado
+        and resultado.datos_consistentes is True
+        and (not resultado.tipo_documento_visible or categoria == participante.tipo_documento)
+        and lado in {None, 'front'}
+        and codigos.issubset({'DATA_MATCH_LOW_CONFIDENCE'})
+        and set(resultado.ajustes_politica).issubset(AJUSTES_POSITIVOS)
+        and (
+            _decision_modelo(resultado) == 'ACCEPTED'
+            or (_decision_modelo(resultado) == 'MANUAL_REVIEW' and incertidumbre_datos)
+        )
+        and _es_concluyente(resultado, requiere_identidad=True,
+                           requiere_documento_colombiano=True, identidad_vinculada=True)
+    )
+    if aceptado:
+        return True, []
+    return False, razones or ['DATA_CONSISTENCY_INCONCLUSIVE']
 
 
 def _frentes_aprobados(documento):
@@ -1244,7 +1314,7 @@ def _evaluar_reverso(documento, resultado):
     codigos = set(resultado.hallazgos) | set(resultado.razones)
     puede_vincular = (
         codigos.issubset(redundantes)
-        and set(resultado.ajustes_politica).issubset(ajustes_redundantes)
+        and set(resultado.ajustes_politica).issubset(ajustes_redundantes | AJUSTES_POSITIVOS)
         and (_decision_modelo(resultado) == 'ACCEPTED' or incertidumbre_datos)
         and not (resultado.datos_consistentes is False and confianza_datos >= minimo)
         and documento.participante.tipo_documento in {
@@ -1396,7 +1466,16 @@ def _finalizar_validacion(*, validacion_id, resultado=None, codigo_error=''):
             documento=documento,
         )
         razones_reverso = None
+        razones_frente = None
         frente = None
+        if (
+            documento.tipo in TIPOS_REVERSO.values()
+            and (
+                not documento.participante_id
+                or documento.participante.tipo_documento in {TipoDocumentoIdentidad.CC, TipoDocumentoIdentidad.TI}
+            )
+        ):
+            concluyente, razones_frente = _evaluar_frente(documento, resultado)
         if documento.tipo in TIPOS_REVERSO:
             concluyente, razones_reverso, frente = _evaluar_reverso(documento, resultado)
             # Una contradiccion de identidad nunca es un rechazo automatico.
@@ -1419,7 +1498,20 @@ def _finalizar_validacion(*, validacion_id, resultado=None, codigo_error=''):
             hallazgos = ['INCONCLUSIVE']
         if razones_reverso is not None:
             hallazgos = razones_reverso
+        if razones_frente is not None:
+            hallazgos = razones_frente
         estructurado = _resultado_estructurado(resultado)
+        if razones_frente is not None:
+            estructurado.pop('visible_names', None)
+            estructurado.pop('visible_document_number', None)
+            estructurado.update(
+                front_policy_version=FRONT_IDENTITY_POLICY_VERSION,
+                identity_linked=concluyente,
+                identity_link_method='EXACT_DECLARED_DATA_COMPARISON' if concluyente else None,
+                linked_dimensions=['data_match'] if concluyente else [],
+                effective_decision=estado,
+                effective_reason_codes=hallazgos,
+            )
         if estado == EstadoValidacionIADocumento.MANUAL_REVIEW:
             estructurado['reason_codes'] = list(dict.fromkeys(hallazgos))
         if razones_reverso is not None:

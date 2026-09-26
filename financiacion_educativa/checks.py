@@ -8,6 +8,15 @@ from django.core.checks import Error, register
 from django.utils.module_loading import import_string
 
 
+@register()
+def check_signature_send_pause(app_configs, **kwargs):
+    if (settings.FINANCIACION_EDUCATIVA_SIGNATURE_SEND_PAUSED
+            and settings.DEPLOYMENT_ENVIRONMENT not in {'staging', 'test'}):
+        return [Error('La pausa de firma solo esta permitida en staging/test.',
+                      id='financiacion_educativa.E090')]
+    return []
+
+
 CLAMAV_BACKEND = (
     'financiacion_educativa.services.escaneo_documentos.'
     'ClamAVDocumentScanBackend'
