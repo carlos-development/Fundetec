@@ -4,6 +4,7 @@ import hmac
 import json
 import re
 import unicodedata
+from collections import Counter
 from dataclasses import dataclass, field, replace
 from decimal import Decimal, InvalidOperation
 from io import BytesIO
@@ -274,6 +275,7 @@ class ResultadoClasificacionContenido:
     proveedor: str = ''
     modelo: str = ''
     metricas_uso: dict = field(default_factory=dict)
+    vinculo_titular: dict = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -622,8 +624,59 @@ def _contexto_documento(documento):
     }
 
 
+HOLDER_POLICY_VERSION = 'EDU_FINANCIAL_HOLDER_V1'
+
+
+def _numero_titular(valor):
+    texto = str(valor or '').strip()
+    if not re.fullmatch(r'[0-9 .-]+', texto):
+        return ''
+    numero = re.sub(r'[ .-]', '', texto)
+    return numero if len(numero) >= 6 else ''
+
+
+def _nombre_titular(valor):
+    texto = unicodedata.normalize('NFKD', str(valor or ''))
+    texto = ''.join(c for c in texto if not unicodedata.combining(c)).upper()
+    if re.search(r"[^A-Z\s'-]", texto):
+        return Counter()
+    return Counter(re.findall(r'[A-Z]+', texto))
+
+
+def _vincular_titular_financiero(resultado, contexto):
+    campos = resultado.campos_extraidos
+    numero = _numero_titular(campos.get('holder_document_number'))
+    esperado = _numero_titular(contexto.get('holder_document_number'))
+    observado = _nombre_titular(campos.get('holder_name'))
+    nombre = _nombre_titular(contexto.get('holder_name'))
+    coincidencia, metodo = 'INCONCLUSIVE', 'INSUFFICIENT_EXTRACTION'
+    legible = (
+        resultado.legibilidad >= Decimal(settings.FINANCIACION_EDUCATIVA_CONTENT_MIN_LEGIBILITY)
+        and resultado.completitud_extraccion >= Decimal(settings.FINANCIACION_EDUCATIVA_CONTENT_MIN_COMPLETENESS)
+    )
+    if legible and numero and esperado:
+        coincidencia = 'MATCH' if numero == esperado else 'MISMATCH'
+        metodo = 'EXACT_DOCUMENT_NUMBER'
+    elif legible and not numero and len(nombre) >= 2 and len(observado) >= 2:
+        if observado == nombre:
+            coincidencia, metodo = 'MATCH', 'FULL_NAME_COMPONENTS'
+        elif not (observado.keys() & nombre.keys()) and sum(observado.values()) == sum(nombre.values()):
+            coincidencia, metodo = 'MISMATCH', 'DISJOINT_FULL_NAME'
+    return coincidencia, {
+        'holder_policy_version': HOLDER_POLICY_VERSION,
+        'holder_match': coincidencia,
+        'holder_link_method': metodo,
+    }
+
+
 def _aplicar_consistencia_determinista(resultado, *, contexto, tipo):
     campos = resultado.campos_extraidos
+    if tipo == TipoDocumentoFinanciacion.INCOME_CERTIFICATE:
+        coincidencia, vinculo = _vincular_titular_financiero(resultado, contexto)
+        return replace(
+            resultado, coincidencia_titular=coincidencia, vinculo_titular=vinculo,
+            codigos_razon=tuple(c for c in resultado.codigos_razon if c != 'DATA_MISMATCH'),
+        )
     titular = _coincide_texto(contexto['holder_name'], campos['holder_name'])
     if titular is True:
         coincidencia_titular = 'MATCH'
@@ -670,7 +723,9 @@ def _aplicar_consistencia_determinista(resultado, *, contexto, tipo):
     )
 
 
-def decidir_politica_contenido(resultado, *, tipo):
+def decidir_politica_contenido(resultado, *, tipo, contexto=None):
+    if contexto is not None:
+        resultado = _aplicar_consistencia_determinista(resultado, contexto=contexto, tipo=tipo)
     # Los codigos del proveedor son propuestas no autoritativas. La politica
     # deriva el resultado final solo de campos normalizados y reglas locales.
     razones = []
@@ -684,6 +739,11 @@ def decidir_politica_contenido(resultado, *, tipo):
             EstadoProcesamientoContenidoDocumento.CORRECTION_REQUIRED,
             ['CATEGORY_MISMATCH'],
         )
+    if tipo == TipoDocumentoFinanciacion.INCOME_CERTIFICATE and (
+        resultado.vinculo_titular.get('holder_policy_version') != HOLDER_POLICY_VERSION
+        or resultado.coincidencia_titular == 'INCONCLUSIVE'
+    ):
+        return EstadoProcesamientoContenidoDocumento.MANUAL_EXCEPTION, ['INCONCLUSIVE']
     if resultado.coincidencia_titular == 'MISMATCH':
         razones.append('DATA_MISMATCH')
     if (
@@ -839,6 +899,13 @@ def _iniciar(documento):
 
 
 def _campos_persistibles(resultado):
+    if resultado.vinculo_titular:
+        return {
+            **resultado.vinculo_titular,
+            'date_or_period_present': resultado.fecha_periodo_presente,
+            'required_content_present': resultado.contenido_requerido_presente,
+            'financial_values_present': resultado.campos_extraidos.get('financial_values_present'),
+        }
     campos = dict(resultado.campos_extraidos)
     numero = campos.pop('holder_document_number', '')
     if numero:

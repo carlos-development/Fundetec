@@ -1688,7 +1688,7 @@ def _simulacion_inicial(form_class, datos):
 
 
 @never_cache
-@require_GET
+@require_http_methods(['GET', 'POST'])
 def simulador_publico_view(request):
     datos = {
         'monto_solicitado': (
@@ -1698,7 +1698,18 @@ def simulador_publico_view(request):
             settings.FINANCIACION_EDUCATIVA_PUBLIC_SIMULATOR_INITIAL_TERM_MONTHS
         ),
     }
-    form = SimulacionPublicaFinanciacionEducativaForm(initial=datos)
+    if request.method == 'POST':
+        if limite_simulador_publico_excedido(request):
+            return render(request, 'financiacion_educativa/simulador.html', {
+                'form': SimulacionPublicaFinanciacionEducativaForm(request.POST),
+                'simulador_publico': True,
+                'error': 'Se alcanzo el limite temporal de simulaciones. Intenta de nuevo en un momento.',
+            }, status=429)
+        datos = request.POST
+    form = (
+        SimulacionPublicaFinanciacionEducativaForm(datos)
+        if request.method == 'POST' else SimulacionPublicaFinanciacionEducativaForm(initial=datos)
+    )
     simulacion, error = _simulacion_inicial(
         SimulacionPublicaFinanciacionEducativaForm,
         datos,
@@ -1741,14 +1752,19 @@ def calcular_simulacion_publica_view(request):
 
 @never_cache
 @login_required(login_url='/financiacion-educativa/acceso/')
-@require_GET
+@require_http_methods(['GET', 'POST'])
 def simulador_view(request, solicitud_id):
     solicitud = _solicitud_del_usuario(request, solicitud_id)
     datos_solicitud = {
         'monto_solicitado': solicitud.valor_plan,
         'plazo_meses': solicitud.plazo_meses,
     }
-    form = SimulacionFinanciacionEducativaForm(initial=datos_solicitud)
+    if request.method == 'POST':
+        datos_solicitud = request.POST
+    form = (
+        SimulacionFinanciacionEducativaForm(datos_solicitud)
+        if request.method == 'POST' else SimulacionFinanciacionEducativaForm(initial=datos_solicitud)
+    )
     simulacion, error = _simulacion_inicial(
         SimulacionFinanciacionEducativaForm,
         datos_solicitud,

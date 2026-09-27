@@ -270,7 +270,8 @@ class FlujoWebDocumentalFase4Tests(TestCase):
         resumen = self.client.get(self._url('documentacion'))
 
         self.assertContains(resumen, 'Motivo: Documento ilegible')
-        self.assertContains(resumen, 'Usa una captura de mayor resolucion')
+        self.assertContains(resumen, 'revisa que est\u00e9 completo y legible y vuelve a cargarlo.')
+        self.assertNotContains(resumen, documento.observacion_revision)
 
     def test_post_documental_exige_csrf(self):
         cliente = Client(enforce_csrf_checks=True)

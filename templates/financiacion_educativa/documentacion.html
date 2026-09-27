@@ -159,7 +159,7 @@
                                         {% if documento.estado_validacion == "REJECTED" %}
                                             <span class="edu-document-meta">Motivo: {{ documento.get_motivo_rechazo_display }}</span>
                                             {% if not documento.revisado_por_id and documento.observacion_revision %}
-                                                <span class="edu-document-meta">{{ documento.observacion_revision }}</span>
+                                                <span class="edu-document-meta">{{ documento|correccion_documental }}</span>
                                             {% endif %}
                                         {% endif %}
                                     </div>

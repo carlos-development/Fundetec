@@ -207,6 +207,7 @@ def crear_intencion_correo(
 
 
 def _asunto_original(outbox):
+    from financiacion_educativa.services.mensajes_correccion import TITULO_CORRECCION
     if outbox.codigo_mensaje == CodigoMensajeCorreoEducativo.INVITATION:
         from financiacion_educativa.services.entrega_invitaciones import (
             contenido_correo_invitacion,
@@ -216,7 +217,7 @@ def _asunto_original(outbox):
         CodigoMensajeCorreoEducativo.MOBILE_CAPTURE: ASUNTO_CAPTURA_MOVIL,
         CodigoMensajeCorreoEducativo.DOSSIER_RECEIVED: ASUNTO_EXPEDIENTE_RECIBIDO,
         CodigoMensajeCorreoEducativo.AUTOMATIC_CORRECTION: (
-            'Necesitamos una correccion en tu solicitud educativa'
+            TITULO_CORRECCION
         ),
         CodigoMensajeCorreoEducativo.AUTOMATIC_CONTINUATION: (
             'Tu expediente educativo esta listo para continuar a firma'
@@ -373,13 +374,17 @@ def crear_correo_decision(*, solicitud, decision, entrega_legacy=None):
 
 
 def crear_correo_correccion_automatica(*, solicitud, proceso_id, requisitos):
+    from financiacion_educativa.services.mensajes_correccion import razones_correccion_documental
     return crear_intencion_correo(
         solicitud=solicitud,
         tipo_evento=TipoEventoCorreoEducativo.AUTOMATIC_CORRECTION,
         clave_idempotencia=f'automatic-correction:{proceso_id}',
         codigo_mensaje=CodigoMensajeCorreoEducativo.AUTOMATIC_CORRECTION,
         destinatarios=[solicitud.correo],
-        contexto={'requirements': sorted(set(requisitos))},
+        contexto={
+            'requirements': sorted(set(requisitos)),
+            'reasons': razones_correccion_documental(solicitud),
+        },
     )
 
 
@@ -661,6 +666,7 @@ def _construir_mensaje(outbox, connection_mail):
         mensaje = construir_correo_correccion_automatica(
             recipient=outbox.destinatarios[0],
             requisitos=outbox.contexto.get('requirements', []),
+            razones=outbox.contexto.get('reasons', {}),
             connection=connection_mail,
         )
     elif outbox.codigo_mensaje == CodigoMensajeCorreoEducativo.AUTOMATIC_CONTINUATION:

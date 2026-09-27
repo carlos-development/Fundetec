@@ -2,6 +2,10 @@ from dataclasses import dataclass
 from urllib.parse import urlencode
 
 from django.urls import reverse
+from financiacion_educativa.services.mensajes_correccion import (
+    razones_correccion_documental, resolver_mensaje_correccion,
+    TITULO_CORRECCION, CONTINUIDAD_CORRECCION, CTA_CORRECCION,
+)
 
 from financiacion_educativa.choices import (
     EtapaAutomatizacionEducativa,
@@ -178,13 +182,17 @@ def _requisitos_correccion(solicitud, proceso):
         if decision:
             codigos = decision.requisitos_pendientes or []
     permitidos = set(RequisitoCorreccionEducativa.values)
+    razones = razones_correccion_documental(solicitud)
     resultado = []
     for codigo in dict.fromkeys(codigos):
         if codigo not in permitidos:
             continue
         accion = _accion_requisito(solicitud, codigo)
         resultado.append({
-            'message': MENSAJES_CORRECCION[codigo],
+            'message': (
+                resolver_mensaje_correccion(codigo, razones[codigo])
+                if razones.get(codigo) else MENSAJES_CORRECCION[codigo]
+            ),
             'action': accion.como_dict(),
         })
     return resultado
@@ -251,10 +259,10 @@ def obtener_progreso_publico(solicitud):
             estado='CORRECTION_REQUIRED',
             etapa=(proceso.etapa_actual if proceso else 'CORRECCION_DOCUMENTAL'),
             mensaje=(
-                'Necesitamos que actualices algunos elementos antes de continuar.'
+                f'{TITULO_CORRECCION} {CONTINUIDAD_CORRECCION}'
             ),
             accion=AccionPublica(
-                'Corregir expediente',
+                CTA_CORRECCION,
                 _url('documentacion', solicitud),
             ),
             correcciones=correcciones,

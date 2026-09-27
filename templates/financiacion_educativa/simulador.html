@@ -24,7 +24,7 @@
             data-education-simulator
             data-calculate-url="{% if simulador_publico %}{% url 'financiacion_educativa_web:simulador-publico-calcular' %}{% else %}{% url 'financiacion_educativa_web:simulador-calcular' solicitud.id %}{% endif %}"
         >
-            <form class="edu-simulator-controls" data-simulator-form novalidate>
+            <form class="edu-simulator-controls" data-simulator-form data-loader="off" method="post" action="{{ request.path }}">
                 {% csrf_token %}
                 {% if simulador_publico %}
                     <div class="edu-simulator-request">
@@ -62,10 +62,11 @@
                 </div>
 
                 <p class="edu-form-error" data-simulator-error role="alert" {% if not error %}hidden{% endif %}>{{ error }}</p>
+                <button type="submit" class="edu-button-primary"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i> Actualizar simulación</button>
                 <p class="edu-simulator-status" data-simulator-status aria-live="polite"></p>
             </form>
 
-            <section class="edu-simulator-results" aria-labelledby="simulation-results-title" aria-busy="false">
+            <section class="edu-simulator-results" aria-labelledby="simulation-results-title" aria-busy="false" aria-live="polite" {% if not simulacion %}hidden{% endif %}>
                 <div class="edu-simulator-results-heading">
                     <div>
                         <p class="edu-eyebrow">Resultado informativo</p>
@@ -101,14 +102,14 @@
             </section>
         </div>
 
-        <section class="edu-simulator-plan" aria-labelledby="simulation-plan-title">
+        <section class="edu-simulator-plan" aria-labelledby="simulation-plan-title" {% if not simulacion %}hidden{% endif %}>
             <div class="edu-simulator-results-heading">
                 <div>
                     <p class="edu-eyebrow">Plan estimado</p>
                     <h2 id="simulation-plan-title">Plan completo de pagos</h2>
                 </div>
             </div>
-            <div class="edu-table-scroll">
+            <div class="edu-table-scroll" role="region" aria-label="Plan de pagos" tabindex="0">
                 <table class="edu-table">
                     <thead>
                         <tr>

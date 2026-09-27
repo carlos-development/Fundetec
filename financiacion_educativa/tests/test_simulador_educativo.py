@@ -73,6 +73,19 @@ class SimuladorFinanciacionEducativaTests(TestCase):
 
 
 class SimuladorPublicoFinanciacionEducativaTests(TestCase):
+    def test_post_html_sin_javascript_recalcula_cuatro_cuotas(self):
+        response = self.client.post(self.pagina_url, {'monto_solicitado': '1000000', 'plazo_meses': '4'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.context['simulacion'].resultado.plan), 4)
+        self.assertContains(response, 'Actualizar simulación')
+        self.assertNotContains(response, 'name="monto_solicitado" value="2000000"')
+        self.assertFalse(SolicitudFinanciacionEducativa.objects.exists())
+
+    def test_post_invalido_no_muestra_resultado_anterior(self):
+        response = self.client.post(self.pagina_url, {'monto_solicitado': '-1', 'plazo_meses': '4'})
+        self.assertIsNone(response.context['simulacion'])
+        self.assertContains(response, 'aria-live="polite" hidden')
+
     def setUp(self):
         cache.clear()
         crear_configuracion_financiera()

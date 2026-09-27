@@ -389,14 +389,29 @@ class CalibracionDocumentalCommandTests(TestCase):
         case = self._content_case()
         self._write_image(case)
         self._write_manifest([case])
+        private_context = self.root / 'content-context.json'
+        private_context.write_text(json.dumps({
+            'schema_version': PRIVATE_CONTEXT_VERSION,
+            'cases': {case['case_id']: {
+                'holder_name': 'PERSONA SINTETICA',
+                'holder_document_number': '10000001',
+            }},
+        }), encoding='utf-8')
 
-        report, _ = self._run(execute=True)
+        report, _ = self._run(execute=True, private_context=str(private_context))
         result = report['cases'][0]
 
         self.assertEqual(result['deterministic_outcome'], 'ACCEPT')
         self.assertEqual(result['schema_validation'], 'VALID')
         self.assertEqual(result['provider_usage']['total_tokens'], 230)
         self.assertEqual(CalibrationContentConclusiveBackend.calls, 1)
+
+    def test_content_without_comparable_identity_is_inconclusive(self):
+        case = self._content_case()
+        self._write_image(case)
+        self._write_manifest([case])
+        report, _ = self._run(execute=True)
+        self.assertEqual(report['cases'][0]['deterministic_outcome'], 'INCONCLUSIVE')
 
     def test_usage_extraction_only_keeps_non_sensitive_integer_counters(self):
         response = SimpleNamespace(usage=SimpleNamespace(

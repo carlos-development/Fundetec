@@ -7,5 +7,6 @@
   <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;margin:0 0 22px;background-color:{{ status_background }};border-left:4px solid {{ status_border }};border-radius:6px;"><tr><td style="padding:15px 18px;color:#081F3D;font-size:15px;line-height:23px;">{{ message }}</td></tr></table>
   <p style="margin:0 0 8px;font-size:13px;line-height:20px;font-weight:700;color:#8A97A8;text-transform:uppercase;letter-spacing:0.5px;">Siguiente paso</p>
   <p style="margin:0;font-size:15px;line-height:23px;color:#5B6B82;">{{ next_step }}</p>
+  {% if correction_url %}<p style="margin:20px 0;"><a href="{{ correction_url }}" style="display:inline-block;padding:14px 20px;background:#0B2E59;color:#ffffff;text-decoration:none;border-radius:6px;">{{ correction_cta }}</a></p>{% endif %}
   {% if course_authorized %}<p style="margin:20px 0 0;padding:14px 16px;background-color:#EAF7EE;border-left:4px solid #33A55A;font-size:14px;line-height:21px;color:#237A43;">La instituci&oacute;n aliada puede activar el curso autorizado.</p>{% endif %}
 {% endblock %}

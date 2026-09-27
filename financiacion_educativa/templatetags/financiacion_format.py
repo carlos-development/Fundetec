@@ -6,6 +6,12 @@ from django import template
 register = template.Library()
 
 
+@register.filter
+def correccion_documental(documento):
+    from financiacion_educativa.services.mensajes_correccion import mensaje_correccion_documento
+    return mensaje_correccion_documento(documento)
+
+
 ETIQUETAS_ROL_PROGRAMA = {
     'INSTITUTION_ADMIN': 'Administrador de programa',
     'INSTITUTION_ANALYST': 'Analista de programa',

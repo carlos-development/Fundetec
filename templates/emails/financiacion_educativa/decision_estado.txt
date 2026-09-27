@@ -6,6 +6,9 @@ Estado: {{ status_label }}
 
 Siguiente paso:
 {{ next_step }}
+{% if correction_url %}
+{{ correction_cta }}: {{ correction_url }}
+{% endif %}
 
 {% if course_authorized %}La institucion aliada puede activar el curso autorizado.
 {% endif %}

@@ -25,6 +25,7 @@ from financiacion_educativa.models import (
 )
 from financiacion_educativa.services.clasificacion_contenido_documental import (
     ErrorClasificacionContenido,
+    _aplicar_consistencia_determinista,
     decidir_politica_contenido,
     esquema_clasificacion_contenido,
     normalizar_clasificacion,
@@ -159,7 +160,8 @@ class ClasificacionContenidoDocumentalTests(TestCase):
         self.assertEqual(traza.clasificacion, CategoriaContenidoDocumento.INCOME_CERTIFICATE)
         self.assertEqual(traza.metodo_extraccion, 'PDF_HYBRID')
         self.assertNotIn('holder_document_number', traza.campos_estructurados)
-        self.assertIn('holder_document_hash', traza.campos_estructurados)
+        self.assertEqual(traza.campos_estructurados['holder_policy_version'], 'EDU_FINANCIAL_HOLDER_V1')
+        self.assertNotIn('holder_name', traza.campos_estructurados)
 
     def test_clasificacion_no_inicia_antes_de_clamav_safe(self):
         documento = registrar_documento(
@@ -250,6 +252,14 @@ class ClasificacionContenidoDocumentalTests(TestCase):
         documento.refresh_from_db()
         self.assertEqual(documento.motivo_rechazo, 'OTHER')
         self.assertIn('protegido con contrasena', documento.observacion_revision)
+        from financiacion_educativa.services.mensajes_correccion import (
+            MENSAJES_RAZON, mensaje_correccion_documento, razones_correccion_documental,
+        )
+        self.assertIn(MENSAJES_RAZON['PDF_ENCRYPTED'], mensaje_correccion_documento(documento))
+        self.assertNotIn('PDF_ENCRYPTED', mensaje_correccion_documento(documento))
+        self.assertEqual(razones_correccion_documental(self.solicitud), {
+            'INCOME_CERTIFICATE': ['PDF_ENCRYPTED'],
+        })
 
     def test_pdf_con_adjunto_no_se_traduce_como_documento_equivocado(self):
         contenido = pdf_configurado(
@@ -477,6 +487,7 @@ class ClasificacionContenidoDocumentalTests(TestCase):
         estado, razones = decidir_politica_contenido(
             replace(base, senales_manipulacion_visible=True),
             tipo=TipoDocumentoFinanciacion.INCOME_CERTIFICATE,
+            contexto=base.campos_extraidos,
         )
 
         self.assertEqual(estado, EstadoProcesamientoContenidoDocumento.MANUAL_EXCEPTION)
@@ -507,6 +518,7 @@ class ClasificacionContenidoDocumentalTests(TestCase):
                 estado, _ = decidir_politica_contenido(
                     resultado,
                     tipo=TipoDocumentoFinanciacion.INCOME_CERTIFICATE,
+                    contexto=contexto,
                 )
                 self.assertEqual(estado, EstadoProcesamientoContenidoDocumento.ACCEPTED)
 
@@ -534,6 +546,7 @@ class ClasificacionContenidoDocumentalTests(TestCase):
         estado, razones = decidir_politica_contenido(
             resultado,
             tipo=TipoDocumentoFinanciacion.INCOME_CERTIFICATE,
+            contexto=contexto,
         )
 
         self.assertEqual(estado, EstadoProcesamientoContenidoDocumento.ACCEPTED)
@@ -603,6 +616,7 @@ class ClasificacionContenidoDocumentalTests(TestCase):
         estado, razones = decidir_politica_contenido(
             replace(base, campos_extraidos=campos),
             tipo=TipoDocumentoFinanciacion.INCOME_CERTIFICATE,
+            contexto=contexto,
         )
 
         self.assertEqual(estado, EstadoProcesamientoContenidoDocumento.ACCEPTED)
@@ -681,6 +695,7 @@ class ClasificacionContenidoDocumentalTests(TestCase):
                 coincidencia_titular='INCONCLUSIVE',
             ),
             tipo=TipoDocumentoFinanciacion.INCOME_CERTIFICATE,
+            contexto=contexto,
         )
 
         self.assertEqual(
@@ -705,11 +720,17 @@ class ClasificacionContenidoDocumentalTests(TestCase):
             contexto=contexto,
             categoria=CategoriaContenidoDocumento.BANK_ACCOUNT_CERTIFICATE,
             coincidencia_titular='MISMATCH',
+            campos_extraidos={
+                **contexto, 'holder_document_number': '99999999',
+                'issuer_name': 'EMISOR SINTETICO', 'date_or_period': '2026',
+                'financial_values_present': False,
+            },
         )
 
         estado, razones = decidir_politica_contenido(
             resultado,
             tipo=TipoDocumentoFinanciacion.INCOME_CERTIFICATE,
+            contexto=contexto,
         )
 
         self.assertEqual(

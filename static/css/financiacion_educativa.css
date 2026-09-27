@@ -810,6 +810,25 @@ body.edu-camera-page {
     min-width: 850px;
 }
 
+.edu-simulator-shell,
+.edu-simulator-layout > *,
+.edu-simulator-plan {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.edu-simulator-shell [hidden] { display: none !important; }
+.edu-simulator-plan .edu-table-scroll { max-width: 100%; overflow-x: auto; }
+.edu-simulator-controls input { min-width: 0; max-width: 100%; }
+.edu-simulator-breakdown dt { overflow-wrap: anywhere; }
+
+@media (max-width: 600px) {
+    .edu-simulator-layout { grid-template-columns: minmax(0, 1fr); }
+    .edu-simulator-plan { padding: 16px; }
+    .edu-simulator-results-heading { flex-wrap: wrap; gap: 12px; }
+    .edu-simulator-breakdown > div { gap: 12px; }
+}
+
 .edu-page-band {
     min-height: calc(100vh - 160px);
     padding: 48px 0 64px;

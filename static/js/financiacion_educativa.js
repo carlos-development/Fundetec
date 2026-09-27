@@ -164,6 +164,17 @@ document.addEventListener('DOMContentLoaded', function () {
         });
         let timer = null;
         let activeRequest = null;
+        let revision = 0;
+        const planSection = document.querySelector('.edu-simulator-plan');
+
+        function invalidate() {
+            revision += 1;
+            if (activeRequest) activeRequest.abort();
+            results.setAttribute('aria-busy', 'false');
+            results.hidden = true;
+            if (planSection) planSection.hidden = true;
+            status.textContent = 'Cambios pendientes de calcular.';
+        }
 
         function percent(value) {
             return String(value).replace(/\.0+$/, '').replace('.', ',');
@@ -208,6 +219,9 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         async function calculate() {
+            window.clearTimeout(timer);
+            invalidate();
+            const currentRevision = revision;
             if (!amount.checkValidity() || !term.checkValidity()) {
                 error.textContent = 'Revisa el monto y el plazo indicados.';
                 error.hidden = false;
@@ -228,28 +242,39 @@ document.addEventListener('DOMContentLoaded', function () {
                     signal: activeRequest.signal
                 });
                 const payload = await response.json();
+                if (currentRevision !== revision) return;
                 if (!response.ok || !payload.ok) {
                     throw new Error(payload.error || 'No fue posible actualizar la simulacion.');
                 }
                 showSimulation(payload.simulation);
+                results.hidden = false;
+                if (planSection) planSection.hidden = false;
                 status.textContent = 'Resultado actualizado.';
             } catch (requestError) {
-                if (requestError.name === 'AbortError') return;
+                if (requestError.name === 'AbortError' || currentRevision !== revision) return;
                 error.textContent = requestError.message || 'No fue posible actualizar la simulacion.';
                 error.hidden = false;
                 status.textContent = '';
             } finally {
-                results.setAttribute('aria-busy', 'false');
+                if (currentRevision === revision) results.setAttribute('aria-busy', 'false');
             }
         }
 
         function scheduleCalculation() {
+            invalidate();
             window.clearTimeout(timer);
             timer = window.setTimeout(calculate, 300);
         }
 
         amount.addEventListener('input', scheduleCalculation);
         term.addEventListener('input', scheduleCalculation);
+        amount.addEventListener('change', scheduleCalculation);
+        term.addEventListener('change', scheduleCalculation);
+        window.addEventListener('pagehide', function () {
+            window.clearTimeout(timer);
+            revision += 1;
+            if (activeRequest) activeRequest.abort();
+        });
         form.addEventListener('submit', function (event) {
             event.preventDefault();
             calculate();

@@ -12,6 +12,10 @@ from django.template.loader import render_to_string
 from django.urls import reverse
 
 from financiacion_educativa.choices import TipoDecisionRevisionEducativa
+from financiacion_educativa.services.mensajes_correccion import (
+    CONTINUIDAD_CORRECCION, CTA_CORRECCION, TITULO_CORRECCION,
+    resolver_mensaje_correccion,
+)
 
 
 SMTP_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
@@ -203,16 +207,15 @@ def construir_correo_correccion_automatica(
     *,
     recipient,
     requisitos,
+    razones=None,
     connection=None,
 ):
     recipient = normalizar_destinatario(recipient)
-    requisitos_publicos = [str(item)[:80] for item in requisitos or []]
-    titulo = 'Necesitamos una correccion en tu solicitud educativa'
-    detalle = (
-        'Debes repetir o actualizar los documentos indicados antes de continuar.'
+    titulo = TITULO_CORRECCION
+    detalle = CONTINUIDAD_CORRECCION + ' ' + ' '.join(
+        resolver_mensaje_correccion(item, (razones or {}).get(item, ()))
+        for item in dict.fromkeys(requisitos or [])
     )
-    if requisitos_publicos:
-        detalle = f'{detalle} Requisitos: {", ".join(requisitos_publicos)}.'
     contexto = {
         'brand_name': 'Aprobado',
         'decision_type': TipoDecisionRevisionEducativa.CORRECTION_REQUESTED,
@@ -223,6 +226,10 @@ def construir_correo_correccion_automatica(
             TipoDecisionRevisionEducativa.CORRECTION_REQUESTED
         ),
         'email_logo_url': obtener_email_logo_url(),
+        'correction_url': str(settings.BRAND_PUBLIC_BASE_URL).rstrip('/') + reverse(
+            'financiacion_educativa_web:reanudar-solicitudes'
+        ),
+        'correction_cta': CTA_CORRECCION,
     }
     texto = render_to_string(
         'emails/financiacion_educativa/decision_estado.txt', contexto

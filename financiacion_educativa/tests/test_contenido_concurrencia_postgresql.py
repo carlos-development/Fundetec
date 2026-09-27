@@ -110,6 +110,7 @@ class ConcurrenciaContenidoPostgreSQLTests(TransactionTestCase):
                 return resultado_concluyente(
                     tipo_esperado=tipo_esperado,
                     contexto=contexto,
+                    coincidencia_titular='MISMATCH',
                 )
 
         def procesar():
@@ -139,3 +140,6 @@ class ConcurrenciaContenidoPostgreSQLTests(TransactionTestCase):
         self.assertEqual(llamadas, [1])
         self.assertCountEqual(resultados, ['IN_PROGRESS', 'ACCEPTED'])
         self.assertEqual(self.documento.procesamientos_contenido.count(), 1)
+        traza = self.documento.procesamientos_contenido.get()
+        self.assertEqual(traza.campos_estructurados['holder_policy_version'], 'EDU_FINANCIAL_HOLDER_V1')
+        self.assertEqual(traza.campos_estructurados['holder_match'], 'MATCH')

@@ -314,7 +314,8 @@ class SimulacionFinanciacionEducativaForm(forms.Form):
             attrs={
                 'inputmode': 'decimal',
                 'min': '1',
-                'step': '50000',
+                'step': '0.01',
+                'enterkeyhint': 'done',
                 'autocomplete': 'off',
             }
         ),
@@ -344,7 +345,8 @@ class SimulacionPublicaFinanciacionEducativaForm(forms.Form):
         widget=forms.NumberInput(
             attrs={
                 'inputmode': 'decimal',
-                'step': '50000',
+                'step': '0.01',
+                'enterkeyhint': 'done',
                 'autocomplete': 'off',
             }
         ),
