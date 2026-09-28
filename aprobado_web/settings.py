@@ -40,9 +40,9 @@ DEPLOYMENT_ENVIRONMENT = os.environ.get(
     'DEPLOYMENT_ENVIRONMENT',
     'local',
 ).strip().lower()
-if DEPLOYMENT_ENVIRONMENT not in {'local', 'staging', 'production'}:
+if DEPLOYMENT_ENVIRONMENT not in {'local', 'staging', 'test', 'production'}:
     raise ImproperlyConfigured(
-        'DEPLOYMENT_ENVIRONMENT debe ser local, staging o production.'
+        'DEPLOYMENT_ENVIRONMENT debe ser local, staging, test o production.'
     )
 
 _external_secret_key = os.environ.get('SECRET_KEY', '').strip()

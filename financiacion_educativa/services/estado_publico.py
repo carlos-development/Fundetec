@@ -55,9 +55,23 @@ class ResultadoPublicoSolicitud:
     autorizacion_efectiva_en: object = None
     motivo_decision: str = ''
     condiciones_financieras: dict | None = None
+    actualizada_en: object = None
 
 
-def obtener_resultado_publico(solicitud):
+def obtener_resultado_publico(solicitud, *, aplicar_sandbox=True):
+    from financiacion_educativa.models import ResultadoPublicoSandboxSolicitud
+    from financiacion_educativa.services.resultado_sandbox import validar_ambiente_sandbox
+    simulacion = ResultadoPublicoSandboxSolicitud.objects.filter(solicitud_id=solicitud.pk).first()
+    if simulacion:
+        validar_ambiente_sandbox()
+        if aplicar_sandbox and simulacion.activo:
+            return ResultadoPublicoSolicitud(
+                estado=simulacion.estado_publico, curso_autorizado=simulacion.course_authorized,
+                autorizacion_efectiva_en=simulacion.actualizada_en if simulacion.course_authorized else None,
+                motivo_decision=simulacion.decision_reason,
+                condiciones_financieras=simulacion.condiciones_financieras or None,
+                actualizada_en=max(solicitud.actualizada_en, simulacion.actualizada_en),
+            )
     estado = MAPA_ESTADO_PUBLICO.get(
         solicitud.estado,
         EstadoPublicoSolicitud.UNDER_REVIEW,
@@ -109,4 +123,5 @@ def obtener_resultado_publico(solicitud):
             else ''
         ),
         condiciones_financieras=condiciones,
+        actualizada_en=max(solicitud.actualizada_en, simulacion.actualizada_en) if simulacion and aplicar_sandbox else solicitud.actualizada_en,
     )

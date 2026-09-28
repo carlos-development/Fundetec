@@ -8,7 +8,9 @@ from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils import timezone
 
+
 from .models import (
+    ResultadoPublicoSandboxSolicitud,
     ArtefactoContractualEducativo,
     ConfiguracionFinancieraEducativa,
     CondicionesFinancieras,
@@ -73,6 +75,24 @@ from .services.orquestacion import (
     revocar_invitacion_orquestada,
 )
 from .services.revision import decidir_solicitud
+
+
+@admin.register(ResultadoPublicoSandboxSolicitud)
+class ResultadoSandboxSoloLecturaAdmin(admin.ModelAdmin):
+    actions = None
+    list_display = ('solicitud_id', 'estado_publico', 'activo', 'creada_en', 'actualizada_en')
+
+    def get_readonly_fields(self, request, obj=None):
+        return [campo.name for campo in self.model._meta.fields]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(DestinatarioNotificacionInstitucionalEducativa)

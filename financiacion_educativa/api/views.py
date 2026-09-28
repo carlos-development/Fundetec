@@ -141,8 +141,8 @@ def _url_estado(request, solicitud):
     return request.build_absolute_uri(ruta)
 
 
-def _respuesta_creacion(request, solicitud):
-    resultado_publico = obtener_resultado_publico(solicitud)
+def _respuesta_creacion(request, solicitud, *, resultado_publico=None):
+    resultado_publico = resultado_publico or obtener_resultado_publico(solicitud, aplicar_sandbox=False)
     return {
         'application_id': solicitud.pk,
         'external_reference': solicitud.referencia_externa,
@@ -497,9 +497,10 @@ class SolicitudDetalleAPIView(InstitutionalAPIView):
             pk=application_id,
             institucion=request.user,
         )
+        resultado_publico = obtener_resultado_publico(solicitud)
         return Response({
-            **_respuesta_creacion(request, solicitud),
-            'updated_at': solicitud.actualizada_en,
+            **_respuesta_creacion(request, solicitud, resultado_publico=resultado_publico),
+            'updated_at': resultado_publico.actualizada_en,
         })
 
 

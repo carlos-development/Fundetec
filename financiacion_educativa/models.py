@@ -95,6 +95,70 @@ def ruta_artefacto_contractual_privado(instance, _filename):
     return f'contratos/{instance.solicitud_id}/{instance.tipo.lower()}/{nombre}'
 
 
+class ResultadoPublicoSandboxSolicitud(models.Model):
+    """Certificacion de API: nunca constituye una decision contractual real."""
+
+    solicitud = models.OneToOneField(
+        'SolicitudFinanciacionEducativa', on_delete=models.PROTECT,
+        related_name='resultado_sandbox',
+    )
+    estado_publico = models.CharField(max_length=8, choices=[('APPROVED', 'APPROVED'), ('REJECTED', 'REJECTED')])
+    course_authorized = models.BooleanField()
+    decision_reason = models.CharField(max_length=40, blank=True, default='')
+    condiciones_financieras = models.JSONField(default=dict, blank=True)
+    configuracion_financiera = models.JSONField(default=dict, blank=True)
+    activo = models.BooleanField(default=True)
+    creado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='+')
+    actualizado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='+')
+    creada_en = models.DateTimeField(auto_now_add=True)
+    actualizada_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [models.CheckConstraint(
+            name='edu_sandbox_result_coherent',
+            condition=(
+                models.Q(estado_publico='APPROVED', course_authorized=True, decision_reason='')
+                & ~models.Q(condiciones_financieras={})
+            ) | models.Q(
+                estado_publico='REJECTED', course_authorized=False,
+                condiciones_financieras={}, decision_reason__in=[
+                    'INCOMPLETE_INFORMATION', 'UNREADABLE_DOCUMENT', 'IDENTITY_MISMATCH',
+                    'GUARDIANSHIP_NOT_VERIFIED', 'ENROLLMENT_NOT_VERIFIED', 'OTHER',
+                ],
+            ),
+        )]
+
+    def clean(self):
+        super().clean()
+        if self.estado_publico != 'APPROVED':
+            return
+        campos = {'currency', 'requested_amount', 'financed_amount', 'term_months', 'estimated_installment'}
+        datos = self.condiciones_financieras
+        valido = isinstance(datos, dict) and set(datos) == campos
+        if valido:
+            valido = (
+                datos['currency'] == 'COP'
+                and type(datos['term_months']) is int and datos['term_months'] > 0
+            )
+            for campo in ('requested_amount', 'financed_amount', 'estimated_installment'):
+                try:
+                    valor = Decimal(datos[campo])
+                    valido = valido and isinstance(datos[campo], str) and valor.is_finite() and valor > 0
+                except (ArithmeticError, ValueError, TypeError):
+                    valido = False
+        if not valido:
+            raise ValidationError({'condiciones_financieras': 'Snapshot Sandbox financiero invalido.'})
+
+    def save(self, *args, **kwargs):
+        from financiacion_educativa.services.resultado_sandbox import validar_ambiente_sandbox
+        validar_ambiente_sandbox()
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f'SANDBOX {self.solicitud_id}'
+
+
 class ModeloInmutableMixin:
     def save(self, *args, **kwargs):
         if not self._state.adding:

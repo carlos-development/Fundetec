@@ -164,6 +164,11 @@ MODELOS_CON_ARCHIVOS = (
     ('ArtefactoContractualEducativo', 'archivo_firmado', 'solicitud_id__in'),
 )
 
+# Auditoria Sandbox conocida, pero no eliminable por la limpieza masiva QA.
+DEPENDENCIAS_PRESERVADAS = (
+    EspecificacionDependencia('ResultadoPublicoSandboxSolicitud', 'solicitud_id__in'),
+)
+
 
 def _modelo(nombre):
     return apps.get_model('financiacion_educativa', nombre)
@@ -194,6 +199,7 @@ def validar_cobertura_dependencias():
     declarados = {
         SolicitudFinanciacionEducativa,
         *(_modelo(item.modelo) for item in DEPENDENCIAS_EN_ORDEN),
+        *(_modelo(item.modelo) for item in DEPENDENCIAS_PRESERVADAS),
     }
     faltantes = sorted(
         modelo._meta.label for modelo in detectados - declarados
@@ -282,7 +288,7 @@ def _relaciones_protegidas(solicitud_ids):
         item.modelo: _modelo(item.modelo).objects.filter(
             **{item.filtro_solicitudes: solicitud_ids}
         ).count()
-        for item in DEPENDENCIAS_EN_ORDEN
+        for item in (*DEPENDENCIAS_EN_ORDEN, *DEPENDENCIAS_PRESERVADAS)
     }
     for modelo in detectados:
         for campo in modelo._meta.get_fields():
