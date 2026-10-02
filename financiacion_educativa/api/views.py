@@ -99,6 +99,7 @@ EJEMPLO_FINANCIERO_APROBADO = {
 }
 
 EJEMPLO_RESPUESTA = {
+    'environment': 'staging',
     'application_id': '9ed3b91b-d97f-4eaf-bff7-95a24dd51d41',
     'external_reference': EJEMPLO_CREACION['external_reference'],
     'status': 'RECEIVED',
@@ -144,6 +145,7 @@ def _url_estado(request, solicitud):
 def _respuesta_creacion(request, solicitud, *, resultado_publico=None):
     resultado_publico = resultado_publico or obtener_resultado_publico(solicitud, aplicar_sandbox=False)
     return {
+        'environment': settings.DEPLOYMENT_ENVIRONMENT,
         'application_id': solicitud.pk,
         'external_reference': solicitud.referencia_externa,
         'status': resultado_publico.estado,

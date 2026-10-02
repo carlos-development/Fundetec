@@ -108,3 +108,33 @@ def imagen_jpeg_prueba(nombre='documento.jpg', marca='documento-prueba'):
         salida.getvalue(),
         content_type='image/jpeg',
     )
+
+
+def aceptar_terminos_fixture(solicitud):
+    """Prepara evidencia sintética sin alterar el estado de la solicitud."""
+    from financiacion_educativa.choices import TipoConsentimiento
+    from financiacion_educativa.models import Consentimiento, VersionTerminosFinanciacion
+    from financiacion_educativa.services.consentimientos import registrar_consentimiento
+    from financiacion_educativa.services.terminos import publicar_version_terminos
+
+    version, creada = VersionTerminosFinanciacion.objects.get_or_create(
+        tipo=TipoConsentimiento.TERMS,
+        version='fixture-terminos-contractuales-v1',
+        defaults={
+            'titulo': 'Texto sintetico exclusivo para pruebas',
+            'contenido': 'Texto sintetico completo sin validez juridica para pruebas.',
+            'obligatorio': True,
+        },
+    )
+    if creada:
+        version = publicar_version_terminos(version=version)
+    if not Consentimiento.objects.filter(
+        solicitud=solicitud, usuario=solicitud.usuario,
+        tipo=version.tipo, version_texto=version.version,
+    ).exists():
+        registrar_consentimiento(
+            solicitud=solicitud, usuario=solicitud.usuario,
+            tipo=version.tipo, version_texto=version.version,
+            texto=version.contenido,
+        )
+    return version

@@ -15,6 +15,7 @@
     @page ficha { size: Letter; margin: 10mm 11mm 9mm; }
     * { box-sizing: border-box; }
     body { color: #12253a; font-family: Arial, Helvetica, sans-serif; margin: 0; }
+    .environment-watermark { color: rgba(170, 30, 30, .16); font-size: 42pt; font-weight: 700; left: 18mm; position: fixed; top: 120mm; transform: rotate(-35deg); z-index: 20; }
     .contract-page { break-after: page; page: contract; }
     .contract-content { font-size: 8pt; line-height: 1.24; }
     h1 { color: #074f9f; font-size: 14pt; letter-spacing: 0; margin: 0 0 3mm; text-align: center; }
@@ -67,6 +68,7 @@
   </style>
 </head>
 <body>
+  {% if ambiente_no_productivo %}<div class="environment-watermark">{{ etiqueta_ambiente }} &middot; SIN VALIDEZ CONTRACTUAL</div>{% endif %}
   <section class="contract-page">
     <div class="contract-content">
       <h1>PAGAR&Eacute; EDUCATIVO</h1>

@@ -219,6 +219,10 @@ class TerminosFinancierosSerializer(serializers.Serializer):
 
 
 class SolicitudCreadaSerializer(serializers.Serializer):
+    environment = serializers.ChoiceField(
+        choices=('local', 'staging', 'test', 'production'),
+        help_text='Ambiente que emitio la respuesta.',
+    )
     application_id = serializers.UUIDField()
     external_reference = serializers.CharField()
     status = serializers.ChoiceField(choices=EstadoPublicoSolicitud.choices)

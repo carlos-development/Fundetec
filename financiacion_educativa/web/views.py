@@ -59,8 +59,11 @@ from financiacion_educativa.services.invitaciones import (
     obtener_invitacion_vigente_por_token,
 )
 from financiacion_educativa.services.terminos import (
+    ESTADOS_REACEPTACION_TERMINOS,
     aceptar_terminos_solicitud,
     obtener_versiones_terminos_vigentes,
+    requiere_aceptacion_terminos_vigentes,
+    validar_versiones_juridicas_publicadas,
 )
 from financiacion_educativa.services.documentos import (
     registrar_documento,
@@ -567,15 +570,18 @@ def _session_terminos_key(solicitud_id):
 @require_http_methods(['GET', 'POST'])
 def terminos_view(request, solicitud_id):
     solicitud = _solicitud_del_usuario(request, solicitud_id)
-    if solicitud.estado == EstadoSolicitudFinanciacion.PENDING_DOCUMENT:
-        return redirect(
-            'financiacion_educativa_web:siguiente',
-            solicitud_id=solicitud.pk,
-        )
-    if solicitud.estado != EstadoSolicitudFinanciacion.PENDING_TERMS:
+    if solicitud.estado not in ESTADOS_REACEPTACION_TERMINOS:
         raise Http404
+    if not requiere_aceptacion_terminos_vigentes(solicitud=solicitud):
+        if solicitud.estado == EstadoSolicitudFinanciacion.PENDING_DOCUMENT:
+            return redirect('financiacion_educativa_web:siguiente', solicitud_id=solicitud.pk)
+        return redirect(resolver_url_reanudacion(solicitud))
 
     versiones = obtener_versiones_terminos_vigentes(obligatorios=True)
+    try:
+        validar_versiones_juridicas_publicadas(versiones=versiones)
+    except ValidationError:
+        versiones = []
     session_key = _session_terminos_key(solicitud.pk)
     error = ''
     if request.method == 'GET':
@@ -600,21 +606,30 @@ def terminos_view(request, solicitud_id):
                     ip_address=request.META.get('REMOTE_ADDR'),
                     user_agent=request.META.get('HTTP_USER_AGENT', ''),
                 )
-            except ValidationError:
-                error = (
-                    'Los terminos cambiaron o ya no estan vigentes. '
-                    'Revisa nuevamente su contenido.'
-                )
+            except ValidationError as validation_error:
+                if getattr(validation_error, 'code', '') == 'LEGAL_TERMS_NOT_READY':
+                    error = (
+                        'Estamos actualizando los textos juridicos de este '
+                        'proceso. Tu expediente se conserva y no necesitas '
+                        'volver a cargar documentos.'
+                    )
+                else:
+                    error = (
+                        'Los terminos cambiaron o ya no estan vigentes. '
+                        'Revisa nuevamente su contenido.'
+                    )
             else:
                 request.session.pop(session_key, None)
-                sincronizar_estudiante_desde_solicitud(
-                    solicitud=resultado.solicitud,
-                    actor=request.user,
-                )
-                return redirect(
-                    'financiacion_educativa_web:siguiente',
-                    solicitud_id=resultado.solicitud.pk,
-                )
+                if solicitud.estado == EstadoSolicitudFinanciacion.PENDING_TERMS:
+                    sincronizar_estudiante_desde_solicitud(
+                        solicitud=resultado.solicitud,
+                        actor=request.user,
+                    )
+                    return redirect(
+                        'financiacion_educativa_web:siguiente',
+                        solicitud_id=resultado.solicitud.pk,
+                    )
+                return redirect(resolver_url_reanudacion(resultado.solicitud))
 
     return render(
         request,
@@ -623,6 +638,9 @@ def terminos_view(request, solicitud_id):
             'solicitud': solicitud,
             'versiones': versiones,
             'error': error,
+            'es_reaceptacion': (
+                solicitud.estado != EstadoSolicitudFinanciacion.PENDING_TERMS
+            ),
         },
     )
 
@@ -657,6 +675,8 @@ def estado_procesamiento_view(request, solicitud_id):
 @require_GET
 def procesamiento_view(request, solicitud_id):
     solicitud = _solicitud_del_usuario(request, solicitud_id)
+    if requiere_aceptacion_terminos_vigentes(solicitud=solicitud):
+        return redirect('financiacion_educativa_web:terminos', solicitud_id=solicitud.pk)
     respuesta = render(
         request,
         'financiacion_educativa/procesamiento.html',

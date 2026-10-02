@@ -29,6 +29,9 @@ from financiacion_educativa.models import (
     SolicitudFinanciacionEducativa,
 )
 from financiacion_educativa.services.estados import transicionar_solicitud
+from financiacion_educativa.services.terminos import (
+    validar_terminos_obligatorios_vigentes,
+)
 
 
 MAX_SIGNED_PDF_BYTES = 20 * 1024 * 1024
@@ -425,6 +428,7 @@ def enviar_pagare_educativo(
             != EstadoSolicitudFinanciacion.PENDING_PROMISSORY_NOTE
         ):
             raise ValidationError('La solicitud no esta pendiente de pagare.')
+        validar_terminos_obligatorios_vigentes(solicitud=proceso.solicitud)
         if (
             proceso.artefacto.estado
             != EstadoArtefactoContractualEducativo.GENERATED

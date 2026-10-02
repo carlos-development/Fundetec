@@ -68,6 +68,7 @@ from financiacion_educativa.tests.ai_validation_backends import (
     BackendIAFallaUnaVez,
 )
 from financiacion_educativa.tests.factories import (
+    aceptar_terminos_fixture,
     crear_configuracion_financiera,
     crear_solicitud,
     imagen_jpeg_prueba,
@@ -237,6 +238,7 @@ class OrquestacionAutomaticaTests(TestCase):
         )
         solicitud.estado = EstadoSolicitudFinanciacion.PENDING_DOCUMENT
         solicitud.save(update_fields=['estado'])
+        aceptar_terminos_fixture(solicitud)
         return solicitud
 
     def _participante(self, solicitud, *, tutor=False, menor=False):

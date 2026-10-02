@@ -10,8 +10,8 @@
             <article class="edu-surface">
                 <div class="edu-page-heading">
                     <p class="edu-eyebrow">Consentimientos</p>
-                    <h1>Revisa y acepta los t&eacute;rminos</h1>
-                    <p>Lee cada versi&oacute;n vigente. Tu aceptaci&oacute;n quedar&aacute; vinculada a esta solicitud mediante la l&oacute;gica de consentimiento existente.</p>
+                    <h1>{% if es_reaceptacion %}Actualizamos los t&eacute;rminos de tu financiaci&oacute;n{% else %}Revisa y acepta los t&eacute;rminos{% endif %}</h1>
+                    <p>{% if es_reaceptacion %}Antes de preparar o enviar tus documentos contractuales, revisa y acepta las versiones jur&iacute;dicas vigentes. Tu expediente y los documentos ya aprobados se conservan.{% else %}Lee cada versi&oacute;n vigente. Tu aceptaci&oacute;n quedar&aacute; vinculada a esta solicitud mediante la l&oacute;gica de consentimiento existente.{% endif %}</p>
                 </div>
                 {% if error %}<div class="edu-error-summary" role="alert">{{ error }}</div>{% endif %}
                 {% if versiones %}
@@ -40,7 +40,7 @@
                         </div>
                     </form>
                 {% else %}
-                    <div class="alert-warning" role="status">No hay t&eacute;rminos vigentes disponibles. Intenta nuevamente m&aacute;s tarde.</div>
+                    <div class="alert-warning" role="status">Estamos actualizando las autorizaciones de este proceso. Tu expediente se conserva. Intenta nuevamente m&aacute;s tarde.</div>
                 {% endif %}
             </article>
             {% include "financiacion_educativa/_application_summary.html" %}

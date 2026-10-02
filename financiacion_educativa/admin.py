@@ -570,7 +570,12 @@ class VersionTerminosFinanciacionAdmin(admin.ModelAdmin):
         for version in queryset:
             try:
                 publicar_version_terminos(version=version)
-            except ValidationError:
+            except ValidationError as error:
+                self.message_user(
+                    request,
+                    f'No se publico {version.version}: {"; ".join(error.messages)}',
+                    level=messages.ERROR,
+                )
                 continue
             publicadas += 1
         self.message_user(request, f'Versiones publicadas: {publicadas}.')

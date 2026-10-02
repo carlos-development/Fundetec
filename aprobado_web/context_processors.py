@@ -66,6 +66,16 @@ def brand_processor(request):
     )
 
     return {
+        'deployment_environment': getattr(
+            settings,
+            'DEPLOYMENT_ENVIRONMENT',
+            'local',
+        ),
+        'is_non_production_environment': getattr(
+            settings,
+            'DEPLOYMENT_ENVIRONMENT',
+            'local',
+        ) != 'production',
         'brand': {
             'name': getattr(settings, 'BRAND_NAME', 'FUNDETEC'),
             'legal_name': getattr(

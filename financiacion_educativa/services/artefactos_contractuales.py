@@ -27,6 +27,9 @@ from financiacion_educativa.services.formato_contractual import (
     formatear_cop,
     numero_cop_a_letras,
 )
+from financiacion_educativa.services.terminos import (
+    validar_terminos_obligatorios_vigentes,
+)
 
 
 VERSION_PLANTILLA_PAQUETE = 'PAQUETE-EDU-3.0'
@@ -115,6 +118,10 @@ def _contexto_base(solicitud, fotografia):
     otros_conceptos = fotografia.capital_financiado - fotografia.valor_financiado
     return {
         'solicitud': solicitud,
+        'ambiente_no_productivo': (
+            settings.DEPLOYMENT_ENVIRONMENT != 'production'
+        ),
+        'etiqueta_ambiente': settings.DEPLOYMENT_ENVIRONMENT.upper(),
         'fotografia': fotografia,
         **datos_acreedor,
         **textos_juridicos,
@@ -292,6 +299,7 @@ def generar_artefactos_contractuales(*, solicitud, actor=None):
         raise ValidationError(
             'Los documentos contractuales solo se generan despues de la aprobacion.'
         )
+    validar_terminos_obligatorios_vigentes(solicitud=solicitud)
     fotografia = solicitud.fotografias_financieras.filter(
         activa=True,
         bloqueada=True,
@@ -377,6 +385,7 @@ def generar_artefactos_contractuales(*, solicitud, actor=None):
                 raise ValidationError(
                     'Los documentos contractuales solo se generan despues de la aprobacion.'
                 )
+            validar_terminos_obligatorios_vigentes(solicitud=solicitud)
             fotografia = solicitud.fotografias_financieras.select_for_update().get(
                 pk=fotografia.pk,
                 activa=True,

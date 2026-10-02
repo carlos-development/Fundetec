@@ -7,6 +7,7 @@
     @page { size: Letter; margin: 0; }
     * { box-sizing: border-box; }
     body { color: #111; font: 6.7pt Arial, Helvetica, sans-serif; margin: 0; }
+    .environment-watermark { color: rgba(170, 30, 30, .16); font-size: 36pt; font-weight: 700; left: 18mm; position: fixed; top: 120mm; transform: rotate(-35deg); z-index: 20; }
     .ficha-page { height: 279.4mm; overflow: hidden; padding: 10mm 11mm 9mm; position: relative; width: 215.9mm; }
     table { border-collapse: collapse; width: 100%; }
     th, td { vertical-align: top; }
@@ -44,6 +45,7 @@
   </style>
 </head>
 <body>
+  {% if ambiente_no_productivo %}<div class="environment-watermark">{{ etiqueta_ambiente }} &middot; SIN VALIDEZ CONTRACTUAL</div>{% endif %}
   <section class="ficha-page">
     {% include "financiacion_educativa/documentos/_ficha_matricula_contenido.html" %}
   </section>

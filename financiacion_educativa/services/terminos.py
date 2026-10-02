@@ -24,6 +24,23 @@ class ResultadoAceptacionTerminos:
     repetida: bool
 
 
+ESTADOS_REACEPTACION_TERMINOS = frozenset({
+    EstadoSolicitudFinanciacion.PENDING_TERMS,
+    EstadoSolicitudFinanciacion.PENDING_DOCUMENT,
+    EstadoSolicitudFinanciacion.PENDING_GUARDIAN,
+    EstadoSolicitudFinanciacion.PENDING_MANUAL_REVIEW,
+    EstadoSolicitudFinanciacion.CORRECTION_REQUIRED,
+    EstadoSolicitudFinanciacion.PENDING_PROMISSORY_NOTE,
+})
+CONTENIDOS_JURIDICOS_DE_PRUEBA = frozenset({
+    'QA',
+    'PRUEBA',
+    'TEST',
+    'TESTING',
+    'TESTING QA',
+})
+
+
 def obtener_versiones_terminos_vigentes(*, obligatorios=True, ahora=None):
     ahora = ahora or timezone.now()
     consulta = VersionTerminosFinanciacion.objects.filter(
@@ -59,6 +76,46 @@ def terminos_obligatorios_aceptados(*, solicitud):
     )
 
 
+def validar_versiones_juridicas_publicadas(*, versiones):
+    for version in versiones:
+        contenido = ' '.join(str(version.contenido or '').split()).upper()
+        if (
+            contenido in CONTENIDOS_JURIDICOS_DE_PRUEBA
+            or '[CORREO Y DIRECCIÓN POR CONFIRMAR]' in contenido
+        ):
+            raise ValidationError(
+                'Los textos juridicos vigentes aun no estan listos.',
+                code='LEGAL_TERMS_NOT_READY',
+            )
+
+
+def validar_terminos_obligatorios_vigentes(*, solicitud):
+    vigentes = obtener_versiones_terminos_vigentes(obligatorios=True)
+    if not vigentes:
+        raise ValidationError(
+            'No hay terminos obligatorios vigentes.',
+            code='LEGAL_TERMS_NOT_READY',
+        )
+    validar_versiones_juridicas_publicadas(versiones=vigentes)
+    if not terminos_obligatorios_aceptados(solicitud=solicitud):
+        raise ValidationError(
+            'Debes revisar y aceptar los terminos vigentes antes de continuar.',
+            code='CURRENT_TERMS_REQUIRED',
+        )
+
+
+def requiere_aceptacion_terminos_vigentes(*, solicitud):
+    if solicitud.estado == EstadoSolicitudFinanciacion.PENDING_TERMS:
+        return True
+    if solicitud.estado not in ESTADOS_REACEPTACION_TERMINOS:
+        return False
+    try:
+        validar_terminos_obligatorios_vigentes(solicitud=solicitud)
+    except ValidationError:
+        return True
+    return False
+
+
 @transaction.atomic
 def publicar_version_terminos(*, version, vigente_desde=None):
     version = VersionTerminosFinanciacion.objects.select_for_update().get(
@@ -66,6 +123,7 @@ def publicar_version_terminos(*, version, vigente_desde=None):
     )
     if version.estado != EstadoVersionTerminos.DRAFT:
         raise ValidationError({'estado': 'Solo puede publicarse un borrador.'})
+    validar_versiones_juridicas_publicadas(versiones=[version])
     ahora = timezone.now()
     version.estado = EstadoVersionTerminos.PUBLISHED
     version.publicada_en = ahora
@@ -109,15 +167,13 @@ def aceptar_terminos_solicitud(
     )
     if solicitud.usuario_id != usuario.pk:
         raise ValidationError('No es posible aceptar terminos para esta solicitud.')
-    if solicitud.estado not in {
-        EstadoSolicitudFinanciacion.PENDING_TERMS,
-        EstadoSolicitudFinanciacion.PENDING_DOCUMENT,
-    }:
+    if solicitud.estado not in ESTADOS_REACEPTACION_TERMINOS:
         raise ValidationError({'estado': 'La solicitud no admite terminos.'})
 
     vigentes = obtener_versiones_terminos_vigentes(obligatorios=True)
     if not vigentes:
         raise ValidationError('No hay terminos obligatorios vigentes.')
+    validar_versiones_juridicas_publicadas(versiones=vigentes)
     ids_vigentes = {version.pk for version in vigentes}
     ids_recibidos = {version.pk for version in versiones}
     if ids_recibidos != ids_vigentes:
@@ -157,6 +213,28 @@ def aceptar_terminos_solicitud(
                 'versions': sorted(version.version for version in vigentes),
             },
         )
+    elif (
+        creados
+        and solicitud.estado
+        == EstadoSolicitudFinanciacion.PENDING_PROMISSORY_NOTE
+    ):
+        from financiacion_educativa.services.reaceptacion_contractual import (
+            invalidar_paquete_pendiente_por_nuevos_terminos,
+        )
+
+        invalidar_paquete_pendiente_por_nuevos_terminos(
+            solicitud=solicitud
+        )
+        solicitud_id = solicitud.pk
+
+        def reanudar_automatizacion():
+            from financiacion_educativa.services.orquestacion_automatica import (
+                programar_orquestacion_automatica,
+            )
+
+            programar_orquestacion_automatica(solicitud_id=solicitud_id)
+
+        transaction.on_commit(reanudar_automatizacion)
     return ResultadoAceptacionTerminos(
         solicitud=solicitud,
         consentimientos=tuple(consentimientos),

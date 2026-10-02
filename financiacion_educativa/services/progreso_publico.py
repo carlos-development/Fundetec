@@ -246,6 +246,20 @@ def _progreso_base(*, solicitud, proceso, estado, etapa, mensaje,
 
 
 def obtener_progreso_publico(solicitud):
+    from financiacion_educativa.services.terminos import requiere_aceptacion_terminos_vigentes
+
+    if requiere_aceptacion_terminos_vigentes(solicitud=solicitud):
+        return _progreso_base(
+            solicitud=solicitud,
+            proceso=None,
+            estado='NOT_STARTED',
+            etapa='RECEIVED',
+            mensaje=(
+                'Revisa y acepta los terminos vigentes para continuar. '
+                'Tu expediente y tus documentos se conservan.'
+            ),
+            accion=AccionPublica('Revisar terminos', _url('terminos', solicitud)),
+        )
     proceso = solicitud.procesos_automatizacion.order_by(
         '-version_expediente'
     ).first()

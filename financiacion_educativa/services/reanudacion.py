@@ -112,6 +112,16 @@ if set(MAPA_REANUDACION) != set(Estado.values):
 
 
 def resolver_destino_reanudacion(solicitud):
+    from financiacion_educativa.services.terminos import (
+        ESTADOS_REACEPTACION_TERMINOS,
+        requiere_aceptacion_terminos_vigentes,
+    )
+
+    if (
+        solicitud.estado in ESTADOS_REACEPTACION_TERMINOS
+        and requiere_aceptacion_terminos_vigentes(solicitud=solicitud)
+    ):
+        return MAPA_REANUDACION[Estado.PENDING_TERMS]
     return MAPA_REANUDACION[solicitud.estado]
 
 

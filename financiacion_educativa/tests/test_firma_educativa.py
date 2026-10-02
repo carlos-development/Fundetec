@@ -51,6 +51,7 @@ from financiacion_educativa.services.reglas_financieras import (
     crear_fotografia_condiciones_financieras,
 )
 from financiacion_educativa.tests.factories import (
+    aceptar_terminos_fixture,
     crear_configuracion_financiera,
     crear_solicitud,
 )
@@ -105,6 +106,7 @@ class FirmaEducativaTests(TestCase):
             password='Clave-2026',
         )
         self.solicitud = crear_solicitud(usuario=self.usuario)
+        aceptar_terminos_fixture(self.solicitud)
         self.solicitud.estado = EstadoSolicitudFinanciacion.PENDING_DOCUMENT
         self.solicitud.plazo_meses = 3
         self.solicitud.save(update_fields=['estado', 'plazo_meses'])
@@ -468,6 +470,7 @@ class FirmaEducativaMenorTests(TestCase):
                 password='Clave-2026',
             )
             solicitud = crear_solicitud(usuario=usuario)
+            aceptar_terminos_fixture(solicitud)
             solicitud.estado = EstadoSolicitudFinanciacion.PENDING_DOCUMENT
             solicitud.plazo_meses = 3
             solicitud.save(update_fields=['estado', 'plazo_meses'])

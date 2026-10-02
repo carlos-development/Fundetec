@@ -23,6 +23,10 @@ from financiacion_educativa.choices import (
     TipoDocumentoIdentidad,
 )
 from financiacion_educativa.models import ArtefactoContractualEducativo
+from financiacion_educativa.models import ProcesoFirmaEducativa, VersionTerminosFinanciacion
+from financiacion_educativa.services.terminos import (
+    aceptar_terminos_solicitud, publicar_version_terminos,
+)
 from financiacion_educativa.services.artefactos_contractuales import (
     generar_artefactos_contractuales,
 )
@@ -34,6 +38,7 @@ from financiacion_educativa.services.reglas_financieras import (
     crear_fotografia_condiciones_financieras,
 )
 from financiacion_educativa.tests.factories import (
+    aceptar_terminos_fixture,
     crear_configuracion_financiera,
     crear_solicitud,
 )
@@ -84,6 +89,7 @@ class ArtefactosContractualesTests(TestCase):
             password='Clave-2026',
         )
         self.solicitud = crear_solicitud(usuario=self.usuario)
+        aceptar_terminos_fixture(self.solicitud)
         self.solicitud.estado = EstadoSolicitudFinanciacion.PENDING_DOCUMENT
         self.solicitud.plazo_meses = 3
         self.solicitud.save(update_fields=['estado', 'plazo_meses'])
@@ -154,6 +160,77 @@ class ArtefactosContractualesTests(TestCase):
                 for pagina in PdfReader(archivo).pages
             )
         return re.sub(r'\s+', ' ', texto)
+
+    def _publicar_version_nueva(self):
+        return publicar_version_terminos(version=VersionTerminosFinanciacion.objects.create(
+            tipo='TERMS', version='fixture-terminos-contractuales-v2',
+            titulo='Nueva version sintetica', contenido='Texto sintetico revisado para pruebas.',
+            obligatorio=True,
+        ))
+
+    def test_reaceptacion_regenera_paquete_y_conserva_evidencia_anterior(self):
+        self._participante()
+        self._preparar_finanzas()
+        anterior = generar_artefactos_contractuales(solicitud=self.solicitud)
+        firma_anterior = ProcesoFirmaEducativa.objects.get(artefacto=anterior.pagare)
+        version = self._publicar_version_nueva()
+
+        with self.assertRaises(ValidationError) as error:
+            generar_artefactos_contractuales(solicitud=self.solicitud)
+        self.assertEqual(error.exception.code, 'CURRENT_TERMS_REQUIRED')
+
+        aceptar_terminos_solicitud(
+            solicitud=self.solicitud, usuario=self.usuario, versiones=[version],
+        )
+        nuevo = generar_artefactos_contractuales(solicitud=self.solicitud)
+        anterior.pagare.refresh_from_db()
+        firma_anterior.refresh_from_db()
+        self.assertFalse(anterior.pagare.vigente)
+        self.assertEqual(anterior.pagare.estado, 'CANCELLED')
+        self.assertEqual(firma_anterior.estado, 'CANCELLED')
+        self.assertEqual(nuevo.pagare.numero_version, 2)
+        self.assertNotEqual(nuevo.pagare.pk, anterior.pagare.pk)
+        self.assertEqual(ArtefactoContractualEducativo.objects.count(), 4)
+        with anterior.pagare.archivo.open('rb') as archivo:
+            self.assertTrue(archivo.read().startswith(b'%PDF'))
+
+    def test_reaceptacion_no_cancela_envio_ambiguo_y_revierte_consentimiento(self):
+        self._participante()
+        self._preparar_finanzas()
+        paquete = generar_artefactos_contractuales(solicitud=self.solicitud)
+        firma = ProcesoFirmaEducativa.objects.get(artefacto=paquete.pagare)
+        firma.estado = 'FAILED'
+        firma.intentos_envio = 1
+        firma.codigo_ultimo_error = 'SIGNATURE_SEND_AMBIGUOUS'
+        firma.save()
+        version = self._publicar_version_nueva()
+
+        with self.assertRaises(ValidationError):
+            aceptar_terminos_solicitud(
+                solicitud=self.solicitud, usuario=self.usuario, versiones=[version],
+            )
+        paquete.pagare.refresh_from_db()
+        firma.refresh_from_db()
+        self.assertTrue(paquete.pagare.vigente)
+        self.assertEqual(firma.estado, 'FAILED')
+        self.assertFalse(self.solicitud.consentimientos.filter(version_texto=version.version).exists())
+
+    @override_settings(DEPLOYMENT_ENVIRONMENT='staging')
+    def test_documentos_sandbox_muestran_marca_visible(self):
+        self._participante()
+        self._preparar_finanzas()
+        resultado = generar_artefactos_contractuales(solicitud=self.solicitud)
+        for artefacto in (resultado.pagare, resultado.ficha_matricula):
+            # El texto rotado puede extraerse sin separadores entre palabras.
+            self.assertIn('SINVALIDEZCONTRACTUAL', self._texto_pdf(artefacto).replace(' ', ''))
+
+    @override_settings(DEPLOYMENT_ENVIRONMENT='production')
+    def test_documentos_production_no_muestran_marca_sandbox(self):
+        self._participante()
+        self._preparar_finanzas()
+        resultado = generar_artefactos_contractuales(solicitud=self.solicitud)
+        for artefacto in (resultado.pagare, resultado.ficha_matricula):
+            self.assertNotIn('SINVALIDEZCONTRACTUAL', self._texto_pdf(artefacto).replace(' ', ''))
 
     def test_genera_paquete_y_ficha_privados_versionados_e_idempotentes(self):
         self._participante()

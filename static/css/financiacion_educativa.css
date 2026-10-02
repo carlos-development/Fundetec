@@ -3499,3 +3499,13 @@ body.education-flow-shell img {
         text-align: center;
     }
 }
+/* Identificacion persistente de ambientes no productivos. */
+.edu-environment-banner {
+    background: #7c2d12;
+    color: #fff;
+    font-size: .82rem;
+    font-weight: 700;
+    letter-spacing: .02em;
+    padding: .55rem 1rem;
+    text-align: center;
+}

@@ -683,13 +683,40 @@ def ejecutar_etapa_persistente(*, solicitud_id, etapa):
             'FINANCIAL_SNAPSHOT_LOCKED',
         )
     if etapa == EtapaAutomatizacionEducativa.CONTRACT_GENERATION:
-        generar_artefactos_contractuales(solicitud=solicitud)
+        try:
+            generar_artefactos_contractuales(solicitud=solicitud)
+        except ValidationError as error:
+            if getattr(error, 'code', '') in {
+                'CURRENT_TERMS_REQUIRED',
+                'LEGAL_TERMS_NOT_READY',
+            }:
+                return SalidaEtapaPersistente(
+                    estado=EstadoProcesoAutomatizacionEducativa.MANUAL_EXCEPTION,
+                    codigo=error.code,
+                )
+            raise
         return SalidaEtapaPersistente(
             estado=EstadoProcesoAutomatizacionEducativa.QUEUED,
             siguiente_etapa=EtapaAutomatizacionEducativa.SIGNATURE_SEND,
             codigo='CONTRACTS_GENERATED', firma_pausada=firma_pausada(),
         )
     if etapa == EtapaAutomatizacionEducativa.SIGNATURE_SEND:
+        from financiacion_educativa.services.terminos import (
+            validar_terminos_obligatorios_vigentes,
+        )
+
+        try:
+            validar_terminos_obligatorios_vigentes(solicitud=solicitud)
+        except ValidationError as error:
+            if getattr(error, 'code', '') in {
+                'CURRENT_TERMS_REQUIRED',
+                'LEGAL_TERMS_NOT_READY',
+            }:
+                return SalidaEtapaPersistente(
+                    estado=EstadoProcesoAutomatizacionEducativa.MANUAL_EXCEPTION,
+                    codigo=error.code,
+                )
+            raise
         if firma_pausada():
             return SalidaEtapaPersistente(
                 estado=EstadoProcesoAutomatizacionEducativa.QUEUED,

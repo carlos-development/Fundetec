@@ -2,6 +2,22 @@ from django.conf import settings
 from django.http import HttpResponseNotFound, HttpResponsePermanentRedirect
 
 
+class DeploymentEnvironmentHeaderMiddleware:
+    """Expone el ambiente sin revelar configuracion sensible."""
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        response = self.get_response(request)
+        response['X-Aprobado-Environment'] = getattr(
+            settings,
+            'DEPLOYMENT_ENVIRONMENT',
+            'local',
+        )
+        return response
+
+
 class RetiredLegacySurfaceMiddleware:
     """Bloquea hosts y archivos publicos de productos retirados."""
 

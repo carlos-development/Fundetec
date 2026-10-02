@@ -802,6 +802,7 @@ if DEBUG:
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'aprobado_web.middleware.DeploymentEnvironmentHeaderMiddleware',
     'aprobado_web.middleware.RetiredLegacySurfaceMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',

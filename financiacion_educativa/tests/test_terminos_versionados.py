@@ -2,15 +2,21 @@ from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from financiacion_educativa.choices import (
+    EtapaAutomatizacionEducativa,
+    EstadoProcesoAutomatizacionEducativa,
     EstadoSolicitudFinanciacion,
     EstadoVersionTerminos,
     TipoConsentimiento,
 )
-from financiacion_educativa.models import Consentimiento, VersionTerminosFinanciacion
+from financiacion_educativa.models import (
+    Consentimiento,
+    ProcesoAutomatizacionEducativa,
+    VersionTerminosFinanciacion,
+)
 from financiacion_educativa.services.consentimientos import (
     calcular_evidencia_consentimiento,
 )
@@ -18,6 +24,8 @@ from financiacion_educativa.services.terminos import (
     aceptar_terminos_solicitud,
     obtener_versiones_terminos_vigentes,
     publicar_version_terminos,
+    terminos_obligatorios_aceptados,
+    validar_terminos_obligatorios_vigentes,
     retirar_version_terminos,
 )
 from financiacion_educativa.tests.factories import crear_solicitud
@@ -60,6 +68,21 @@ class TerminosVersionadosTests(TestCase):
             version.hash_integridad,
             VersionTerminosFinanciacion.calcular_hash(CONTENIDO_FIXTURE),
         )
+
+    def test_no_publica_testing_ni_contacto_sin_completar(self):
+        for indice, contenido in enumerate((
+            'TESTING QA',
+            'Contacto: [CORREO Y DIRECCIÓN POR CONFIRMAR]',
+        )):
+            with self.subTest(contenido=contenido):
+                version = self._borrador(version=f'incompleto-{indice}')
+                version.contenido = contenido
+                version.save()
+                with self.assertRaises(ValidationError) as error:
+                    publicar_version_terminos(version=version)
+                self.assertEqual(error.exception.code, 'LEGAL_TERMS_NOT_READY')
+                version.refresh_from_db()
+                self.assertEqual(version.estado, EstadoVersionTerminos.DRAFT)
 
     def test_solo_publicada_y_vigente_se_presenta(self):
         vigente = publicar_version_terminos(version=self._borrador())
@@ -194,3 +217,72 @@ class TerminosVersionadosTests(TestCase):
             )
 
         self.assertFalse(Consentimiento.objects.exists())
+
+    def test_no_admite_texto_juridico_placeholder(self):
+        version = self._borrador(version='testing-v1')
+        version.contenido = 'TESTING QA'
+        version.save()
+        ahora = timezone.now()
+        VersionTerminosFinanciacion.objects.filter(pk=version.pk).update(
+            estado=EstadoVersionTerminos.PUBLISHED,
+            publicada_en=ahora,
+            vigente_desde=ahora,
+        )
+        version.refresh_from_db()
+
+        with self.assertRaises(ValidationError) as contexto:
+            aceptar_terminos_solicitud(
+                solicitud=self.solicitud,
+                usuario=self.usuario,
+                versiones=[version],
+            )
+
+        self.assertEqual(contexto.exception.code, 'LEGAL_TERMS_NOT_READY')
+        self.assertFalse(Consentimiento.objects.exists())
+
+    @override_settings(DEPLOYMENT_ENVIRONMENT='staging')
+    def test_version_nueva_invalida_cola_contractual_y_preserva_estado(self):
+        primera = publicar_version_terminos(version=self._borrador())
+        aceptar_terminos_solicitud(
+            solicitud=self.solicitud,
+            usuario=self.usuario,
+            versiones=[primera],
+        )
+        segunda = publicar_version_terminos(
+            version=self._borrador(version='fixture-v2')
+        )
+        self.solicitud.estado = EstadoSolicitudFinanciacion.PENDING_PROMISSORY_NOTE
+        self.solicitud.save(update_fields=['estado'])
+        proceso = ProcesoAutomatizacionEducativa.objects.create(
+            solicitud=self.solicitud,
+            version_expediente=1,
+            estado=EstadoProcesoAutomatizacionEducativa.QUEUED,
+            etapa_actual=EtapaAutomatizacionEducativa.SIGNATURE_SEND,
+        )
+
+        self.assertFalse(
+            terminos_obligatorios_aceptados(solicitud=self.solicitud)
+        )
+        with self.assertRaises(ValidationError) as contexto:
+            validar_terminos_obligatorios_vigentes(solicitud=self.solicitud)
+        self.assertEqual(contexto.exception.code, 'CURRENT_TERMS_REQUIRED')
+
+        resultado = aceptar_terminos_solicitud(
+            solicitud=self.solicitud,
+            usuario=self.usuario,
+            versiones=[segunda],
+        )
+
+        self.assertEqual(
+            resultado.solicitud.estado,
+            EstadoSolicitudFinanciacion.PENDING_PROMISSORY_NOTE,
+        )
+        proceso.refresh_from_db()
+        self.assertEqual(
+            proceso.estado,
+            EstadoProcesoAutomatizacionEducativa.MANUAL_EXCEPTION,
+        )
+        self.assertEqual(proceso.codigo_razon, 'CURRENT_TERMS_REQUIRED')
+        self.assertTrue(
+            terminos_obligatorios_aceptados(solicitud=resultado.solicitud)
+        )

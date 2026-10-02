@@ -84,6 +84,10 @@ class APIInstitucionalFinanciacionTests(APITestCase):
             'RECEIVED',
         )
         self.assertFalse(respuesta.data['course_authorized'])
+        from django.conf import settings
+
+        self.assertEqual(respuesta.data['environment'], settings.DEPLOYMENT_ENVIRONMENT)
+        self.assertEqual(respuesta['X-Aprobado-Environment'], settings.DEPLOYMENT_ENVIRONMENT)
         solicitud = SolicitudFinanciacionEducativa.objects.get()
         self.assertEqual(str(solicitud.id), str(respuesta.data['application_id']))
         self.assertIsNone(solicitud.usuario)

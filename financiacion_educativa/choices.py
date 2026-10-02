@@ -515,6 +515,18 @@ class CodigoRazonAutomatizacionEducativa(models.TextChoices):
         'Fotografia financiera bloqueada',
     )
     CONTRACTS_GENERATED = 'CONTRACTS_GENERATED', 'Contratos generados'
+    CURRENT_TERMS_REQUIRED = (
+        'CURRENT_TERMS_REQUIRED',
+        'Aceptacion de terminos vigentes requerida',
+    )
+    LEGAL_TERMS_NOT_READY = (
+        'LEGAL_TERMS_NOT_READY',
+        'Textos juridicos vigentes no disponibles',
+    )
+    SANDBOX_APPLICATION_CANCELLED = (
+        'SANDBOX_APPLICATION_CANCELLED',
+        'Solicitud Sandbox cancelada operativamente',
+    )
     PENDING_SIGNATURE = 'PENDING_SIGNATURE', 'Pendiente de firma'
     SIGNATURE_SEND_AMBIGUOUS = (
         'SIGNATURE_SEND_AMBIGUOUS',

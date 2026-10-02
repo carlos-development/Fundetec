@@ -15,6 +15,7 @@ from financiacion_educativa.choices import (
 )
 from financiacion_educativa.models import ProcesoAutomatizacionEducativa
 from financiacion_educativa.tests.factories import (
+    aceptar_terminos_fixture,
     crear_institucion,
     crear_solicitud,
 )
@@ -37,6 +38,7 @@ class ProgresoProcesamientoWebTests(TestCase):
             referencia='PROGRESO-001',
             usuario=self.usuario,
         )
+        aceptar_terminos_fixture(self.solicitud)
         self.solicitud.estado = EstadoSolicitudFinanciacion.PENDING_MANUAL_REVIEW
         self.solicitud.save(update_fields=['estado'])
         self.estado_url = reverse(
@@ -76,6 +78,27 @@ class ProgresoProcesamientoWebTests(TestCase):
 
         self.client.force_login(self.otro)
         self.assertEqual(self.client.get(self.pagina_url).status_code, 404)
+
+    def test_version_nueva_ofrece_reaceptacion_sin_reiniciar_expediente(self):
+        from financiacion_educativa.models import VersionTerminosFinanciacion
+        from financiacion_educativa.services.terminos import publicar_version_terminos
+
+        publicar_version_terminos(version=VersionTerminosFinanciacion.objects.create(
+            tipo='TERMS', version='progreso-nueva-v2', titulo='Nueva version sintetica',
+            contenido='Texto sintetico actualizado para pruebas.', obligatorio=True,
+        ))
+        self._proceso(estado='MANUAL_EXCEPTION', etapa='CONTRACT_GENERATION')
+        self.client.force_login(self.usuario)
+        terminos_url = reverse(
+            'financiacion_educativa_web:terminos',
+            kwargs={'solicitud_id': self.solicitud.pk},
+        )
+        self.assertRedirects(self.client.get(self.pagina_url), terminos_url)
+        datos = self.client.get(self.estado_url).json()
+        self.assertEqual(datos['status'], 'NOT_STARTED')
+        self.assertIn('terminos', str(datos).lower())
+        self.solicitud.refresh_from_db()
+        self.assertEqual(self.solicitud.estado, 'PENDING_MANUAL_REVIEW')
 
     def test_endpoint_traduce_estados_activos_sin_detalles_internos(self):
         proceso = self._proceso()
