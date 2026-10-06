@@ -12,6 +12,8 @@ material heredado sin presentarlo como parte del producto educativo actual.
 
 ## Uso interno
 
+- `ROADMAP_FINANCIACION_EDUCATIVA.md`: fases, criterios de cierre y dashboard
+  financiero consultivo de obligaciones autorizadas.
 - `interno/arquitectura/`: fuente HTML y documento tecnico derivado.
 - `interno/operaciones/`: procedimientos para reanudar y validar el proyecto.
 - `interno/operaciones/MANTENIMIENTO_STAGING.md`: configuracion, correo y

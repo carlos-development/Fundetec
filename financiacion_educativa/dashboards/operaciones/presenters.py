@@ -100,6 +100,25 @@ def presentar_resumen_solicitud(solicitud):
     }
 
 
+def presentar_obligacion(fotografia):
+    solicitud = fotografia.solicitud
+    return {
+        'id': solicitud.pk,
+        'referencia': solicitud.referencia_externa,
+        'solicitante': f'{solicitud.nombres} {solicitud.apellidos}'.strip(),
+        'documento': enmascarar_documento(solicitud.numero_documento_estudiante),
+        'institucion': solicitud.institucion.nombre_comercial,
+        'curso': solicitud.nombre_curso,
+        'autorizada_en': fotografia.autorizada_en,
+        'solicitado': fotografia.valor_financiado,
+        'capital': fotografia.capital_financiado,
+        'cuota': fotografia.valor_cuota_estimada,
+        'plazo': fotografia.plazo_meses,
+        'proximo_vencimiento': fotografia.proximo_vencimiento,
+        'proxima_cuota': fotografia.proxima_cuota,
+    }
+
+
 def _presentar_participantes(solicitud, *, datos_integrales):
     participantes = []
     for participante in getattr(solicitud, 'participantes_operativos', ()):

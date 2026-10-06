@@ -306,12 +306,12 @@ def obtener_indicadores_globales():
     indicadores['correos_conciliacion'] = OutboxCorreoEducativo.objects.filter(
         estado=EstadoOutboxCorreoEducativo.AMBIGUOUS
     ).count()
-    indicadores['valor_financiado'] = (
-        CondicionesFinancieras.objects.filter(activa=True).aggregate(
-            total=Sum('capital_financiado')
-        )['total']
-        or Decimal('0')
+    from .cartera import (
+        expedientes_en_tramite, indicadores_obligaciones,
+        indicadores_tramite, obligaciones_autorizadas,
     )
+    indicadores['obligaciones'] = indicadores_obligaciones(obligaciones_autorizadas())
+    indicadores['tramite'] = indicadores_tramite(expedientes_en_tramite(filtros={}))
     indicadores['valor_solicitado'] = (
         indicadores['valor_solicitado'] or Decimal('0')
     )

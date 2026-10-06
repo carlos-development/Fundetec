@@ -158,6 +158,35 @@ class FiltrosSolicitudesOperativasForm(forms.Form):
         return datos
 
 
+class FiltrosObligacionesForm(forms.Form):
+    ambito = forms.ChoiceField(
+        required=False, label='Vista',
+        choices=(('autorizadas', 'Obligaciones autorizadas'), ('tramite', 'Expedientes en tramite')),
+    )
+    institucion = forms.ChoiceField(required=False, label='Institucion')
+    estado = forms.ChoiceField(
+        required=False, label='Estado publico',
+        choices=(('', 'Todos los estados'),) + tuple(EstadoPublicoSolicitud.choices),
+    )
+    desde = forms.DateField(required=False, widget=forms.DateInput(attrs={'type': 'date'}))
+    hasta = forms.DateField(required=False, widget=forms.DateInput(attrs={'type': 'date'}))
+    page = forms.IntegerField(required=False, min_value=1, widget=forms.HiddenInput)
+
+    def __init__(self, *args, instituciones=(), **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['institucion'].choices = [('', 'Todas las instituciones'), *instituciones]
+        tramite = self.data.get('ambito') == 'tramite'
+        self.fields['desde'].label = 'Creada desde' if tramite else 'Autorizada desde'
+        self.fields['hasta'].label = 'Creada hasta' if tramite else 'Autorizada hasta'
+
+    def clean(self):
+        datos = super().clean()
+        datos['ambito'] = datos.get('ambito') or 'autorizadas'
+        if datos.get('desde') and datos.get('hasta') and datos['desde'] > datos['hasta']:
+            raise forms.ValidationError('La fecha inicial no puede ser posterior a la fecha final.')
+        return datos
+
+
 class FiltrosRevisionDocumentalForm(forms.Form):
     q = forms.CharField(
         required=False,

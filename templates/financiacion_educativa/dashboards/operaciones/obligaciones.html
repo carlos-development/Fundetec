@@ -1,0 +1,29 @@
+{% extends "financiacion_educativa/dashboards/operaciones/_base.html" %}
+{% load financiacion_format %}
+{% block title %}Obligaciones educativas | Aprobado{% endblock %}
+{% block operations_content %}
+<header class="edu-dashboard-heading"><p class="edu-eyebrow">Consulta financiera</p><h1>{% if en_tramite %}Financiaci&oacute;n en tr&aacute;mite{% else %}Obligaciones autorizadas{% endif %}</h1></header>
+<form method="get" class="edu-contract-filters" aria-label="Filtros financieros">
+    {% for campo in formulario_filtros.visible_fields %}<div class="edu-field"><label for="{{ campo.id_for_label }}">{{ campo.label }}</label>{{ campo }}{{ campo.errors }}</div>{% endfor %}
+    <div class="edu-dashboard-filter-actions"><button type="submit" class="edu-button"><i class="bi bi-search" aria-hidden="true"></i> Consultar</button><a class="edu-dashboard-text-link" href="{% url 'financiacion_educativa_web:operaciones:obligaciones' %}{% if en_tramite %}?ambito=tramite{% endif %}">Limpiar</a></div>
+    {{ formulario_filtros.non_field_errors }}{{ formulario_filtros.page.errors }}
+</form>
+{% include "financiacion_educativa/dashboards/operaciones/_indicadores_financieros.html" %}
+{% if en_tramite %}<p class="edu-dashboard-muted">Fechas de creaci&oacute;n del expediente. Los importes calculados a&uacute;n no constituyen obligaciones autorizadas.</p>{% else %}<p class="edu-dashboard-muted">Fechas de autorizaci&oacute;n efectiva. Calendario contractual programado, sin conciliaci&oacute;n de pagos.</p>{% endif %}
+{% if pagina.object_list %}
+<div class="edu-dashboard-table-wrap edu-contract-table-wrap" tabindex="0" role="region" aria-label="Listado financiero desplazable">
+<table class="edu-dashboard-table edu-contract-table">
+    <thead><tr><th>Referencia / estudiante</th><th>Instituci&oacute;n / curso</th><th>{% if en_tramite %}Estado / creaci&oacute;n{% else %}Autorizaci&oacute;n{% endif %}</th><th>Solicitado</th>{% if not en_tramite %}<th>Capital contractual</th><th>Cuota / plazo</th><th>Pr&oacute;ximo vencimiento programado</th>{% endif %}<th>Consulta</th></tr></thead>
+    <tbody>{% for item in pagina.object_list %}<tr>
+        <td><strong>{{ item.referencia }}</strong><small>{{ item.solicitante }}</small><small>{{ item.documento }}</small></td>
+        <td>{{ item.institucion }}<small>{% if en_tramite %}{{ item.programa }}{% else %}{{ item.curso }}{% endif %}</small></td>
+        <td>{% if en_tramite %}{{ item.estado.etiqueta }}<small>{{ item.creada_en|date:"d/m/Y" }}</small>{% else %}{{ item.autorizada_en|date:"d/m/Y H:i" }}{% endif %}</td>
+        <td>{% if en_tramite %}{{ item.valor|cop }}{% else %}{{ item.solicitado|cop }}{% endif %}</td>
+        {% if not en_tramite %}<td>{{ item.capital|cop }}</td><td>{{ item.cuota|cop }}<small>{{ item.plazo }} meses</small></td><td>{% if item.proximo_vencimiento %}{{ item.proximo_vencimiento|date:"d/m/Y" }}<small>{{ item.proxima_cuota|cop }}</small>{% else %}Sin fechas futuras en el calendario{% endif %}</td>{% endif %}
+        <td><a class="edu-dashboard-text-link" href="{% if en_tramite %}{% url 'financiacion_educativa_web:operaciones:solicitud-detalle' item.id %}{% else %}{% url 'financiacion_educativa_web:operaciones:obligacion-detalle' item.id %}{% endif %}">Ver detalle</a></td>
+    </tr>{% endfor %}</tbody>
+</table></div>
+{% else %}<div class="edu-dashboard-empty"><i class="bi bi-calendar-check" aria-hidden="true"></i><h2>Sin {% if en_tramite %}expedientes{% else %}obligaciones autorizadas{% endif %}</h2><p>No hay registros que cumplan estos filtros.</p></div>{% endif %}
+{% include "financiacion_educativa/dashboards/operaciones/_paginacion.html" %}
+{% if not en_tramite %}{% include "financiacion_educativa/dashboards/operaciones/_pagos_no_disponibles.html" %}{% endif %}
+{% endblock %}

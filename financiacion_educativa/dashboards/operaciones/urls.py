@@ -10,6 +10,8 @@ urlpatterns = [
     path('solicitudes/', views.solicitudes_view, name='solicitudes'),
     path('bandejas/', views.bandejas_view, name='bandejas'),
     path('instituciones/', views.instituciones_view, name='instituciones'),
+    path('obligaciones/', views.obligaciones_view, name='obligaciones'),
+    path('obligaciones/<uuid:application_id>/', views.obligacion_detalle_view, name='obligacion-detalle'),
     path(
         'revision-documental/',
         views.revision_documental_view,

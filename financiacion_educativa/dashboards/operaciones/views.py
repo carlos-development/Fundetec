@@ -11,6 +11,7 @@ from .forms import (
     CorreccionDocumentoOperativoForm,
     FiltrosRevisionDocumentalForm,
     FiltrosSolicitudesOperativasForm,
+    FiltrosObligacionesForm,
 )
 from .permissions import (
     PERMISO_DOCUMENTOS,
@@ -26,6 +27,11 @@ from .presenters import (
     presentar_resumen_solicitud,
     presentar_documento_revision,
     presentar_resumen_documento_revision,
+    presentar_obligacion,
+)
+from .cartera import (
+    expedientes_en_tramite, filtrar_obligaciones, indicadores_obligaciones,
+    indicadores_tramite, obtener_obligacion,
 )
 from .selectors import (
     filtrar_solicitudes_operativas,
@@ -173,6 +179,52 @@ def instituciones_view(request):
             seccion='instituciones',
             instituciones=obtener_instituciones_operativas(),
         ),
+    )
+
+
+@never_cache
+@requiere_permisos_operativos(PERMISO_SOLICITUDES)
+@require_GET
+def obligaciones_view(request):
+    formulario = FiltrosObligacionesForm(
+        request.GET, instituciones=obtener_opciones_filtros()['instituciones'],
+    )
+    valido = formulario.is_valid()
+    filtros = formulario.cleaned_data if valido else {}
+    tramite = filtros.get('ambito') == 'tramite'
+    consulta = (expedientes_en_tramite(filtros=filtros) if tramite
+                else filtrar_obligaciones(filtros=filtros))
+    if not valido:
+        consulta = consulta.none()
+    indicadores = (indicadores_tramite(consulta) if tramite else indicadores_obligaciones(consulta))
+    paginador = Paginator(consulta, 25)
+    estado_http = 200 if valido else 400
+    try:
+        pagina = paginador.page(filtros.get('page') or 1)
+    except (EmptyPage, PageNotAnInteger):
+        pagina = paginador.get_page(1)
+        formulario.add_error('page', 'La pagina solicitada no es valida.')
+        estado_http = 400
+    presentar = presentar_resumen_solicitud if tramite else presentar_obligacion
+    pagina.object_list = [presentar(item) for item in pagina.object_list]
+    return render(
+        request, 'financiacion_educativa/dashboards/operaciones/obligaciones.html',
+        _contexto(request, seccion='obligaciones', formulario_filtros=formulario,
+                  pagina=pagina, querystring=_querystring_sin_pagina(request),
+                  indicadores_financieros=indicadores, en_tramite=tramite),
+        status=estado_http,
+    )
+
+
+@never_cache
+@requiere_permisos_operativos(PERMISO_SOLICITUDES)
+@require_GET
+def obligacion_detalle_view(request, application_id):
+    fotografia = obtener_obligacion(application_id)
+    return render(
+        request, 'financiacion_educativa/dashboards/operaciones/obligacion_detalle.html',
+        _contexto(request, seccion='obligaciones', obligacion=presentar_obligacion(fotografia),
+                  fotografia=fotografia, cuotas=fotografia.cuotas.all()),
     )
 
 

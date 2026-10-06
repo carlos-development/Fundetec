@@ -1,0 +1,30 @@
+{% extends "financiacion_educativa/dashboards/operaciones/_base.html" %}
+{% load financiacion_format %}
+{% block title %}Obligaci&oacute;n {{ obligacion.referencia }} | Aprobado{% endblock %}
+{% block operations_content %}
+<header class="edu-dashboard-heading"><a class="edu-dashboard-text-link" href="{% url 'financiacion_educativa_web:operaciones:obligaciones' %}"><i class="bi bi-arrow-left" aria-hidden="true"></i> Obligaciones</a><h1>{{ obligacion.referencia }}</h1><p>{{ obligacion.solicitante }} &middot; {{ obligacion.documento }}</p></header>
+<section class="edu-dashboard-panel"><h2>Contrato autorizado</h2><dl class="edu-dashboard-data-list">
+    <div><dt>Instituci&oacute;n</dt><dd>{{ obligacion.institucion }}</dd></div><div><dt>Curso financiado</dt><dd>{{ obligacion.curso }}</dd></div>
+    <div><dt>Autorizaci&oacute;n efectiva</dt><dd>{{ obligacion.autorizada_en|date:"d/m/Y H:i" }}</dd></div><div><dt>Fotograf&iacute;a contractual</dt><dd>Versi&oacute;n {{ fotografia.numero_version }} &middot; {{ fotografia.version_regla }}</dd></div>
+    <div><dt>Inicio del plan</dt><dd>{{ fotografia.fecha_inicio_plan|date:"d/m/Y"|default:"No registrado" }}</dd></div><div><dt>Primer vencimiento</dt><dd>{{ fotografia.fecha_primer_vencimiento|date:"d/m/Y"|default:"No registrado" }}</dd></div>
+    <div><dt>&Uacute;ltimo vencimiento</dt><dd>{{ fotografia.fecha_ultimo_vencimiento|date:"d/m/Y"|default:"No registrado" }}</dd></div><div><dt>Plazo</dt><dd>{{ fotografia.plazo_meses }} meses</dd></div>
+</dl></section>
+<section class="edu-dashboard-panel"><h2>Desglose contractual en COP</h2><dl class="edu-dashboard-data-list">
+    <div><dt>Monto solicitado</dt><dd>{{ fotografia.valor_financiado|cop }}</dd></div>
+    <div><dt>Originaci&oacute;n ({{ fotografia.tasa_comision|porcentaje }}%)</dt><dd>{{ fotografia.valor_comision|cop }}</dd></div>
+    <div><dt>IVA de originaci&oacute;n ({{ fotografia.tasa_iva_comision|porcentaje }}%)</dt><dd>{{ fotografia.valor_iva_comision|cop }}</dd></div>
+    <div><dt>Garant&iacute;a ({{ fotografia.tasa_fondo_garantias|porcentaje }}%) &middot; {{ fotografia.proveedor_fondo_garantias }}</dt><dd>{{ fotografia.valor_fondo_garantias|cop }}</dd></div>
+    <div><dt>Seguro de vida ({{ fotografia.tasa_seguro_vida|porcentaje }}%) &middot; {{ fotografia.proveedor_seguro_vida }}</dt><dd>{{ fotografia.valor_seguro_vida|cop }}</dd></div>
+    <div><dt>Capital contractual financiado</dt><dd>{{ fotografia.capital_financiado|cop }}</dd></div>
+    <div><dt>Intereses totales programados</dt><dd>{{ fotografia.interes_total_estimado|cop }}</dd></div>
+    <div><dt>Total contractual programado</dt><dd>{{ fotografia.total_estimado|cop }}</dd></div>
+    <div><dt>Cuota programada</dt><dd>{{ fotografia.valor_cuota_estimada|cop }}</dd></div>
+    <div><dt>Tasa mensual / m&eacute;todo</dt><dd>{{ fotografia.tasa_interes_mensual|porcentaje }}% &middot; {{ fotografia.get_metodo_calculo_display }}</dd></div>
+</dl></section>
+<section class="edu-dashboard-panel"><h2>Calendario de amortizaci&oacute;n programado</h2><p class="edu-dashboard-muted">Saldos y cuotas pactados de la fotograf&iacute;a que respalda la firma. No son saldos efectivos de cartera.</p>
+<div class="edu-dashboard-table-wrap edu-contract-table-wrap" tabindex="0" role="region" aria-label="Calendario programado desplazable"><table class="edu-dashboard-table edu-contract-table">
+    <thead><tr><th>Cuota</th><th>Vencimiento</th><th>Saldo inicial programado</th><th>Capital</th><th>Inter&eacute;s</th><th>Cuota programada</th><th>Saldo final programado</th></tr></thead>
+    <tbody>{% for cuota in cuotas %}<tr><td>{{ cuota.numero }}</td><td>{{ cuota.fecha_vencimiento|date:"d/m/Y" }}</td><td>{{ cuota.saldo_inicial|cop }}</td><td>{{ cuota.capital|cop }}</td><td>{{ cuota.interes|cop }}</td><td>{{ cuota.valor_cuota|cop }}</td><td>{{ cuota.saldo_final|cop }}</td></tr>{% empty %}<tr><td colspan="7">Calendario no disponible en esta fotograf&iacute;a. Requiere verificaci&oacute;n operativa.</td></tr>{% endfor %}</tbody>
+</table></div></section>
+{% include "financiacion_educativa/dashboards/operaciones/_pagos_no_disponibles.html" %}
+{% endblock %}

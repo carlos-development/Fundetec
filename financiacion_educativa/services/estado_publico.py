@@ -1,11 +1,14 @@
 from dataclasses import dataclass
 
+from django.db.models import F
+
 from financiacion_educativa.choices import (
     EstadoArtefactoContractualEducativo,
     EstadoProcesoFirmaEducativa,
     EstadoPublicoSolicitud,
     EstadoSolicitudFinanciacion,
     TipoDecisionRevisionEducativa,
+    TipoArtefactoContractualEducativo,
 )
 
 
@@ -58,6 +61,36 @@ class ResultadoPublicoSolicitud:
     actualizada_en: object = None
 
 
+def firmas_contractuales_vigentes():
+    """Evidencia de firma coherente; no consulta simulaciones ni proveedores."""
+    from financiacion_educativa.models import ProcesoFirmaEducativa
+
+    return ProcesoFirmaEducativa.objects.select_related(
+        'artefacto__fotografia_financiera',
+    ).filter(
+        estado=EstadoProcesoFirmaEducativa.SIGNED,
+        firmado_en__isnull=False,
+        artefacto__solicitud_id=F('solicitud_id'),
+        artefacto__tipo=TipoArtefactoContractualEducativo.PROMISSORY_NOTE,
+        artefacto__vigente=True,
+        artefacto__estado=EstadoArtefactoContractualEducativo.SIGNED,
+        artefacto__firmado_en=F('firmado_en'),
+        artefacto__tamano_firmado_bytes__gt=0,
+        artefacto__fotografia_financiera__solicitud_id=F('solicitud_id'),
+        artefacto__fotografia_financiera__activa=True,
+        artefacto__fotografia_financiera__bloqueada=True,
+        artefacto__fotografia_financiera__es_legado=False,
+    ).exclude(artefacto__archivo_firmado='').exclude(
+        artefacto__archivo_firmado__isnull=True,
+    ).exclude(artefacto__hash_firmado_sha256='')
+
+
+def firmas_autorizadas_reales():
+    return firmas_contractuales_vigentes().filter(
+        solicitud__estado=EstadoSolicitudFinanciacion.APPROVED,
+    )
+
+
 def obtener_resultado_publico(solicitud, *, aplicar_sandbox=True):
     from financiacion_educativa.models import ResultadoPublicoSandboxSolicitud
     from financiacion_educativa.services.resultado_sandbox import validar_ambiente_sandbox
@@ -80,16 +113,9 @@ def obtener_resultado_publico(solicitud, *, aplicar_sandbox=True):
         '-creada_en',
         '-id',
     ).first()
-    firma = solicitud.procesos_firma.select_related(
-        'artefacto__fotografia_financiera'
-    ).filter(
-        estado=EstadoProcesoFirmaEducativa.SIGNED,
-        artefacto__vigente=True,
-        artefacto__estado=EstadoArtefactoContractualEducativo.SIGNED,
-        artefacto__fotografia_financiera__activa=True,
-        artefacto__fotografia_financiera__bloqueada=True,
-        artefacto__fotografia_financiera__es_legado=False,
-    ).order_by('-firmado_en').first()
+    firma = firmas_autorizadas_reales().filter(
+        solicitud_id=solicitud.pk,
+    ).order_by('-firmado_en', '-pk').first()
     aprobada = bool(
         estado == EstadoPublicoSolicitud.APPROVED
         and firma

@@ -6,7 +6,7 @@
     <article><span>Correcci&oacute;n</span><strong>{{ indicadores.correccion }}</strong><small>Acci&oacute;n requerida</small></article>
     <article><span>Revisi&oacute;n manual</span><strong>{{ indicadores.revision_manual }}</strong><small>Exige criterio humano</small></article>
     <article><span>Firma</span><strong>{{ indicadores.firma }}</strong><small>Pagar&eacute; pendiente</small></article>
-    <article><span>Aprobadas</span><strong>{{ indicadores.aprobadas }}</strong><small>Curso autorizado</small></article>
+    <article><span>Estado aprobado</span><strong>{{ indicadores.aprobadas }}</strong><small>Estado interno del expediente</small></article>
     <article><span>Cerradas</span><strong>{{ indicadores.cerradas }}</strong><small>Rechazadas o finalizadas</small></article>
     {% if capacidades_operativas.procesos %}
         <article><span>Excepciones</span><strong>{{ indicadores.procesos_excepcion }}</strong><small>Automatizaci&oacute;n</small></article>
@@ -14,5 +14,4 @@
         <article><span>Conciliaci&oacute;n</span><strong>{{ indicadores.correos_conciliacion }}</strong><small>Correo ambiguo</small></article>
     {% endif %}
     <article class="is-wide"><span>Valor solicitado</span><strong>{{ indicadores.valor_solicitado|cop }}</strong><small>Todos los planes</small></article>
-    <article class="is-wide"><span>Capital financiado</span><strong>{{ indicadores.valor_financiado|cop }}</strong><small>Fotograf&iacute;as activas</small></article>
 </section>

@@ -6,6 +6,15 @@
 {% block operations_content %}
 <header class="edu-dashboard-heading"><p class="edu-eyebrow">Control operativo</p><h1>Financiaci&oacute;n educativa</h1><p>Vista global y exclusivamente consultiva para el equipo autorizado de Aprobado.</p></header>
 {% include "financiacion_educativa/dashboards/operaciones/_metricas.html" %}
+<section class="edu-dashboard-panel" aria-labelledby="authorized-title">
+    <div class="edu-dashboard-section-heading"><h2 id="authorized-title">Obligaciones autorizadas</h2><a class="edu-dashboard-text-link" href="{% url 'financiacion_educativa_web:operaciones:obligaciones' %}">Consultar obligaciones</a></div>
+    {% include "financiacion_educativa/dashboards/operaciones/_indicadores_financieros.html" with indicadores_financieros=indicadores.obligaciones en_tramite=False %}
+    <p class="edu-dashboard-muted">Pr&oacute;ximos 30 d&iacute;as: {{ indicadores.obligaciones.vencimientos_30_dias }} cuotas programadas por {{ indicadores.obligaciones.cuotas_30_dias|cop }}. No representan recaudos ni saldo pendiente de pago.</p>
+</section>
+<section class="edu-dashboard-panel" aria-labelledby="pipeline-title">
+    <div class="edu-dashboard-section-heading"><h2 id="pipeline-title">Financiaci&oacute;n en tr&aacute;mite</h2><a class="edu-dashboard-text-link" href="{% url 'financiacion_educativa_web:operaciones:obligaciones' %}?ambito=tramite">Consultar expedientes</a></div>
+    {% include "financiacion_educativa/dashboards/operaciones/_indicadores_financieros.html" with indicadores_financieros=indicadores.tramite en_tramite=True %}
+</section>
 
 {% if capacidades_operativas.procesos %}
 <section class="edu-dashboard-panel" aria-labelledby="operations-queues-title">
