@@ -1,5 +1,6 @@
 <aside class="edu-dashboard-sidebar" aria-label="Navegaci&oacute;n operativa">
     <nav>
+        {% if capacidades_operativas.recaudos %}<a{% if seccion_operativa == 'recaudos' %} class="is-active" aria-current="page"{% endif %} href="{% url 'financiacion_educativa_web:operaciones:recaudos' %}"><i class="bi bi-bank" aria-hidden="true"></i> Recaudos</a>{% endif %}
         <a{% if seccion_operativa == 'resumen' %} class="is-active" aria-current="page"{% endif %} href="{% url 'financiacion_educativa_web:operaciones:inicio' %}"><i class="bi bi-grid" aria-hidden="true"></i> Resumen</a>
         {% if capacidades_operativas.solicitudes %}<a{% if seccion_operativa == 'solicitudes' %} class="is-active" aria-current="page"{% endif %} href="{% url 'financiacion_educativa_web:operaciones:solicitudes' %}"><i class="bi bi-file-earmark-text" aria-hidden="true"></i> Solicitudes</a>{% endif %}
         {% if capacidades_operativas.procesos %}<a{% if seccion_operativa == 'bandejas' %} class="is-active" aria-current="page"{% endif %} href="{% url 'financiacion_educativa_web:operaciones:bandejas' %}"><i class="bi bi-inboxes" aria-hidden="true"></i> Bandejas operativas</a>{% endif %}

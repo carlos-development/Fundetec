@@ -33,6 +33,7 @@
         <a class="edu-inline-link" href="{% url 'financiacion_educativa_web:reanudar-solicitudes' %}">
             <i class="bi bi-arrow-left" aria-hidden="true"></i> Volver a mis solicitudes
         </a>
+        {% if recaudos_disponibles %}<p><a class="edu-inline-link" href="{% url 'financiacion_educativa_web:pagos' solicitud.pk %}">Pagos y reportes BRE-B</a></p>{% endif %}
     </div>
 </section>
 {% endblock %}

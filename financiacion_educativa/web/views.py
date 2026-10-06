@@ -4,6 +4,7 @@ from datetime import timedelta
 from urllib.parse import urlencode
 
 from django.conf import settings
+from financiacion_educativa.dashboards.operaciones.cartera import obligaciones_autorizadas
 from django.core import signing
 from django.contrib import messages
 from django.contrib.auth import login as auth_login
@@ -1862,6 +1863,7 @@ def estado_solicitud_view(request, solicitud_id):
             'solicitud': solicitud,
             'destino': resolver_destino_reanudacion(solicitud),
             'resultado_publico': obtener_resultado_publico(solicitud),
+            'recaudos_disponibles': settings.FINANCIACION_EDUCATIVA_RECAUDOS_ENABLED and obligaciones_autorizadas().filter(solicitud_id=solicitud.pk).exists(),
         },
     )
 

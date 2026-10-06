@@ -60,6 +60,24 @@ Las decisiones requieren tambien `decidir_revision_documental_operativa`.
 Sus acciones usan POST, proteccion CSRF y los servicios de dominio existentes;
 la consulta de obligaciones no concede ninguna de estas capacidades.
 
+## Recaudos BRE-B (Fase 2A)
+
+`consultar_recaudos_educativos` permite consultar la bandeja y soportes seguros,
+ademas de `acceder_dashboard_operativo`. `conciliar_recaudos_educativos` es
+independiente: solo debe asignarse al representante legal identificado por
+Carlos, en su cuenta individual activa. No se asigna automaticamente por una
+migracion, por ser staff ni por membresia institucional.
+
+`configurar_receptor_breb` permite versionar y activar el receptor en Admin;
+`escanear_comprobantes_educativos` permite recuperacion manual auditada del
+antivirus. Las evidencias, reportes y conciliaciones son de solo lectura en
+Admin. No hay reversion, borrado ni edicion de un ingreso confirmado en 2A.
+La evidencia del banco es distinta del comprobante declarado del pagador.
+Confirmar un ingreso no aplica dinero a cuotas/capital ni modifica la API,
+autorizacion o contrato. No se agregan notificaciones ni copias nuevas.
+
+Activacion y recuperacion: [recaudos BRE-B](RECAUDOS_BREB_FASE_2A.md).
+
 ## Ciclo de acceso
 
 1. El responsable del area solicita el alta y justifica rol y permisos.
@@ -81,8 +99,8 @@ Django Admin es la herramienta temporal para administrar grupos y permisos. El
 operador que realiza altas, cambios o revocaciones debe quedar identificado en
 el procedimiento interno. Las decisiones documentales existentes registran
 actor, accion, observacion o motivo, fecha y documento afectado mediante los
-servicios de revision. Los futuros reintentos y conciliaciones requeriran
-igualmente permisos independientes y trazabilidad.
+servicios de revision. La conciliacion BRE-B y la recuperacion de sus escaneos
+registran actor, fecha, evidencia y motivo con permisos independientes.
 
 Django Admin permanece disponible como respaldo tecnico; no debe usarse para
 eludir los servicios de dominio. La gestion autoservicio de operadores y la

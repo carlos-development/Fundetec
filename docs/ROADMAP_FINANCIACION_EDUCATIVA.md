@@ -8,8 +8,10 @@ El backlog legado se conserva en `archivo/legacy/` y no gobierna este roadmap.
 | Bloque | Estado | Criterio de cierre |
 | --- | --- | --- |
 | Firma, webhook y API | Cierre verificado en produccion para los dos casos Jowalth | JOW-4FE29332-PROD y JOW-88C00418-PROD devuelven APPROVED, course_authorized=true, fecha de autorizacion y financial_terms. Las fechas de firma del proceso y del artefacto coinciden. Verificacion operativa confirmada por Carlos; no constituye certificacion de otros casos. |
-| Dashboard financiero inicial | Implementado y validado localmente en PostgreSQL; pendiente revision y staging | Indicadores y listado reconcilian, solo cuentan contratos realmente autorizados, excluyen simulaciones, muestran el calendario firmado y funcionan en movil. |
-| Registro y conciliacion de pagos | Pendiente prioritario antes del primer vencimiento | Registrar pago y evidencia, identificar obligacion, conciliar con fuente bancaria, evitar duplicados y aplicar atomicamente con actor e historial. |
+| Dashboard financiero inicial | Desplegado y comprobado en produccion por Carlos | Indicadores y listado reconcilian, solo cuentan contratos realmente autorizados, excluyen simulaciones y muestran el calendario firmado. |
+| Fase 2A: reportes BRE-B y conciliacion | Implementacion local, pendiente revision y activacion | Evidencia privada escaneada, ingreso bancario verificado, identidad global de movimiento, actor y registro inmutable. No aplica pagos al contrato. |
+| Fase 2B: libro de aplicaciones | Pendiente prioritario antes del primer vencimiento | Aplicacion a capital/intereses, saldos/cortes, cuotas/abonos y cierre reproducibles sobre ingresos conciliados, sin alterar la fotografia firmada. |
+| Fase 2C: ePayco | Pendiente, sin adaptadores ni integracion activados | Comercio y credenciales sandbox autorizados; confirmacion servidor a servidor autenticada, importe/moneda/orden, idempotencia, ambiente y reversos. Nunca confirmar por la redireccion del navegador. |
 | Saldos y causacion de intereses | Pendiente de pagos | Saldo real y capital/intereses aplicados derivan del libro de pagos conciliados; calculos reproducibles a fecha de corte y separados del calendario programado. |
 | Mora | Pendiente de politica aprobada | Aprobar regla, tasas, base y fechas; implementar y probar sobre pagos conciliados. El dashboard inicial no calcula cargos por mora. |
 | Abonos y pago total | Pendiente | Pagos anticipados con intereses a la fecha, reduccion de plazo manteniendo cuota, nuevas proyecciones trazables y cierre sin alterar el contrato original. |
@@ -25,6 +27,9 @@ COP, metodo frances, tasa mensual 1%, originacion 10%, IVA de originacion 19%,
 garantia 2%, seguro de vida 0,3711%. Los cargos y el calendario de cada contrato
 se consultan desde su fotografia versionada, no se recalculan en el dashboard.
 Pagos anticipados: intereses a la fecha y reduccion de plazo manteniendo cuota.
+Para 2B se conserva causacion diaria base comercial 30 y vencimientos sin
+desplazamiento por festivos. Antes de automatizar aplicaciones deben aprobarse
+pagos tardios/parciales, excedentes, fechas retroactivas, correcciones y cierre.
 No existe una politica de cargos por mora aprobada para este incremento.
 
 ## Dashboard inicial y verificacion

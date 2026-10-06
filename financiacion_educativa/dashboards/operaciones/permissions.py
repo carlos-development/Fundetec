@@ -1,4 +1,5 @@
 from functools import wraps
+from django.conf import settings
 
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
@@ -45,6 +46,7 @@ def requiere_permisos_operativos(*permisos):
 
 def capacidades_operativas(usuario):
     return {
+        'recaudos': settings.FINANCIACION_EDUCATIVA_RECAUDOS_ENABLED and usuario.is_active and usuario.has_perm('financiacion_educativa.consultar_recaudos_educativos'),
         'solicitudes': usuario.has_perm(PERMISO_SOLICITUDES),
         'documentos': usuario.has_perm(PERMISO_DOCUMENTOS),
         'procesos': usuario.has_perm(PERMISO_PROCESOS),

@@ -1,0 +1,22 @@
+[Unit]
+Description=Escaneo privado de evidencias BRE-B Fundetec (staging)
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=fundetec-staging
+Group=fundetec-staging
+WorkingDirectory=/var/www/fundetec-staging/current
+EnvironmentFile=/var/www/fundetec-staging/shared/staging.env
+Environment=PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
+ExecStart=/var/www/fundetec-staging/shared/venv/bin/python manage.py procesar_comprobantes_educativos
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/www/fundetec-staging/shared/private
+
+[Install]
+WantedBy=multi-user.target

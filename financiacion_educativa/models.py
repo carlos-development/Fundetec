@@ -3202,3 +3202,11 @@ class OutboxCorreoEducativo(models.Model):
 
     def __str__(self):
         return f'{self.tipo_evento} - {self.estado}'
+
+
+# Modelos aditivos de recaudos: no alteran el estado ni la fotografia contractual.
+from .models_recaudos import (  # noqa: E402,F401
+    ArchivoRecaudoEducativo, IntentoEscaneoRecaudo, CuentaRecaudoEducativa,
+    ReceptorBrebEducativo, EventoReceptorBrebEducativo, ReporteRecaudoEducativo,
+    ConciliacionRecaudoEducativo, RechazoReporteRecaudoEducativo,
+)

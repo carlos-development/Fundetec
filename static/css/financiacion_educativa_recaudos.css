@@ -1,0 +1,15 @@
+.edu-recaudos-shell { max-width: 800px; }
+.edu-recaudos-shell, .edu-recaudos-band { overflow-wrap: anywhere; }
+.edu-recaudos-band { padding: 20px 0; border-bottom: 1px solid #e6ebf2; }
+.edu-recaudos-band h2 { font-size: 20px; }
+.edu-recaudos-qr { display: block; max-width: 100%; width: 280px; height: auto; }
+.edu-recaudos-form input:not([type="hidden"]), .edu-recaudos-form select,
+.edu-recaudos-form textarea, .edu-recaudos-copy input { box-sizing: border-box; max-width: 100%; width: 100%; border: 1px solid #cad5df; border-radius: 4px; padding: 10px; font: inherit; background: #fff; }
+.edu-recaudos-form label { display: block; margin-bottom: 5px; }
+.edu-recaudos-form button, .edu-recaudos-copy button { padding: 10px 16px; background: #086e9e; color: #fff; border: 0; border-radius: 4px; min-height: 44px; cursor: pointer; }
+.edu-recaudos-copy { display: flex; gap: 8px; align-items: center; }
+.edu-recaudos-copy input { min-width: 0; flex: 1; }
+.edu-recaudos-copy button { flex: 0 0 auto; }
+.edu-recaudos-reference { overflow-wrap: anywhere; }
+.edu-recaudos-form .errorlist { color: #9c2330; }
+@media (max-width: 480px) { .edu-recaudos-copy { flex-wrap: wrap; } .edu-recaudos-copy input { flex-basis: 100%; } }

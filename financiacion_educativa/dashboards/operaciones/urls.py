@@ -1,11 +1,18 @@
 from django.urls import path
 
 from . import views
+from financiacion_educativa.web import recaudos
 
 
 app_name = 'operaciones'
 
 urlpatterns = [
+    path('recaudos/', recaudos.bandeja_view, name='recaudos'),
+    path('recaudos/<uuid:reporte_id>/', recaudos.detalle_operativo_view, name='recaudo-detalle'),
+    path('recaudos/<uuid:reporte_id>/confirmar/', recaudos.confirmar_view, name='recaudo-confirmar'),
+    path('recaudos/<uuid:reporte_id>/rechazar/', recaudos.rechazar_view, name='recaudo-rechazar'),
+    path('recaudos/<uuid:reporte_id>/evidencia/', recaudos.evidencia_view, name='recaudo-evidencia'),
+    path('recaudos/<uuid:reporte_id>/soporte/', recaudos.soporte_operativo_view, name='recaudo-soporte'),
     path('', views.inicio_view, name='inicio'),
     path('solicitudes/', views.solicitudes_view, name='solicitudes'),
     path('bandejas/', views.bandejas_view, name='bandejas'),

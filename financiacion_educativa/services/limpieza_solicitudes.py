@@ -166,6 +166,9 @@ MODELOS_CON_ARCHIVOS = (
 
 # Auditoria Sandbox conocida, pero no eliminable por la limpieza masiva QA.
 DEPENDENCIAS_PRESERVADAS = (
+    EspecificacionDependencia('ReporteRecaudoEducativo', 'solicitud_id__in'),
+    EspecificacionDependencia('ConciliacionRecaudoEducativo', 'reporte__solicitud_id__in'),
+    EspecificacionDependencia('RechazoReporteRecaudoEducativo', 'reporte__solicitud_id__in'),
     EspecificacionDependencia('ResultadoPublicoSandboxSolicitud', 'solicitud_id__in'),
 )
 

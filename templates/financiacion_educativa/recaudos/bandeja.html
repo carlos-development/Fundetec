@@ -1,0 +1,10 @@
+{% extends "financiacion_educativa/dashboards/operaciones/_base.html" %}
+{% load financiacion_format recaudo_format %}
+{% block operations_content %}<header class="edu-dashboard-heading"><h1>Recaudos educativos</h1><p>Ingresos reportados y verificados. No representan aplicaciones contables ni saldos reales.</p></header>
+<form method="get" class="edu-dashboard-filter-form">{{ form.as_p }}<button type="submit">Consultar</button><a href="{% url 'financiacion_educativa_web:operaciones:recaudos' %}">Limpiar</a></form>
+<dl class="edu-dashboard-data-list"><div><dt>Reportado pendiente (fecha de creaci&oacute;n)</dt><dd>{{ pendiente|cop_recaudo }}</dd></div><div><dt>Recaudo confirmado (fecha efectiva bancaria)</dt><dd>{{ confirmado|cop_recaudo }}</dd></div></dl>
+<div class="edu-dashboard-table-wrap"><table class="edu-dashboard-table"><thead><tr><th>Obligaci&oacute;n</th><th>Instituci&oacute;n</th><th>Reportado</th><th>Creado</th><th>Estado</th></tr></thead><tbody>
+{% for reporte in pagina %}<tr><td><a href="{% url 'financiacion_educativa_web:operaciones:recaudo-detalle' reporte.pk %}">{{ reporte.solicitud.referencia_externa }}</a></td><td>{{ reporte.solicitud.institucion.nombre_comercial }}</td><td>{{ reporte.monto_reportado|cop_recaudo }}</td><td>{{ reporte.creado_en|date:"d/m/Y" }}</td><td>{{ reporte.estado_publico }}</td></tr>{% empty %}<tr><td colspan="5">Sin reportes en este rango.</td></tr>{% endfor %}</tbody></table></div>
+{% if pagina.has_previous %}<a href="?{{ querystring }}&page={{ pagina.previous_page_number }}">Anterior</a>{% endif %} {{ pagina.number }} / {{ pagina.paginator.num_pages }} {% if pagina.has_next %}<a href="?{{ querystring }}&page={{ pagina.next_page_number }}">Siguiente</a>{% endif %}
+{% with importe=confirmado|cop_recaudo %}{% include "financiacion_educativa/dashboards/operaciones/_pagos_no_disponibles.html" with recaudos_confirmados=importe %}{% endwith %}
+{% endblock %}
