@@ -24,6 +24,7 @@ from financiacion_educativa.services.orquestacion_automatica import (
 from financiacion_educativa.services.politica_documental import (
     construir_politica_documental,
     requisito_listo_para_envio,
+    resumir_politica_documental,
 )
 from financiacion_educativa.services.terminos import terminos_obligatorios_aceptados
 
@@ -33,6 +34,8 @@ class RequisitoDocumental:
     codigo: str
     descripcion: str
     cumplido: bool
+    obligatorio: bool = True
+    aportado: bool = False
 
 
 def _requisito_actualizado_despues_de_correccion(
@@ -124,6 +127,7 @@ def _aplicar_correccion_vigente(
                 requisito.cumplido
                 and (
                     requisito.codigo not in pendientes
+                    or (not requisito.obligatorio and not requisito.aportado)
                     or _requisito_actualizado_despues_de_correccion(
                         solicitud=solicitud,
                         requisito=requisito.codigo,
@@ -135,6 +139,8 @@ def _aplicar_correccion_vigente(
                     )
                 )
             ),
+            obligatorio=requisito.obligatorio,
+            aportado=requisito.aportado,
         )
         for requisito in requisitos
     ]
@@ -188,6 +194,8 @@ def calcular_requisitos_documentales(solicitud):
             requisito.codigo,
             requisito.descripcion,
             requisito_listo_para_envio(requisito),
+            obligatorio=requisito.obligatorio,
+            aportado=requisito.documento is not None,
         )
         for requisito in construir_politica_documental(solicitud)
     )
@@ -224,9 +232,10 @@ def completar_fase_documental(*, solicitud, actor):
     }:
         raise ValidationError('La solicitud no esta en fase documental.')
 
+    requisitos = calcular_requisitos_documentales(solicitud)
     pendientes = [
         requisito.codigo
-        for requisito in calcular_requisitos_documentales(solicitud)
+        for requisito in requisitos
         if not requisito.cumplido
     ]
     if pendientes:
@@ -241,6 +250,7 @@ def completar_fase_documental(*, solicitud, actor):
         metadata={
             'requisitos_completados': True,
             'automation_enabled': settings.FINANCIACION_EDUCATIVA_AUTOMATION_ENABLED,
+            'politica_documental': resumir_politica_documental(solicitud, requisitos=requisitos),
         },
     )
     crear_correo_expediente_recibido(solicitud=solicitud)

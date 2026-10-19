@@ -22,6 +22,14 @@ class Institucion(models.Model):
     )
     numero_identificacion_tributaria = models.CharField(max_length=40)
     activa = models.BooleanField(default=True)
+    requiere_soporte_ingresos = models.BooleanField(
+        'Soporte de ingresos obligatorio en financiacion educativa',
+        default=True,
+        help_text=(
+            'Si se desmarca, se permite continuar sin soporte. Todo soporte '
+            'aportado conserva sus controles de seguridad y validacion.'
+        ),
+    )
     creada_en = models.DateTimeField(auto_now_add=True)
     actualizada_en = models.DateTimeField(auto_now=True)
 

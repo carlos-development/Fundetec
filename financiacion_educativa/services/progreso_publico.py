@@ -174,6 +174,8 @@ def _accion_requisito(solicitud, codigo):
 
 
 def _requisitos_correccion(solicitud, proceso):
+    from financiacion_educativa.services.politica_documental import requisito_ausente_opcional
+
     codigos = []
     if proceso and proceso.estado == EstadoProcesoAutomatizacionEducativa.CORRECTION_REQUIRED:
         codigos = proceso.requisitos_correccion or []
@@ -186,6 +188,8 @@ def _requisitos_correccion(solicitud, proceso):
     resultado = []
     for codigo in dict.fromkeys(codigos):
         if codigo not in permitidos:
+            continue
+        if requisito_ausente_opcional(solicitud, codigo):
             continue
         accion = _accion_requisito(solicitud, codigo)
         resultado.append({

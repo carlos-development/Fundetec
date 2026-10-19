@@ -128,9 +128,10 @@ peticion HTTP ni aparece en access logs. La pagina de handoff lo retira de la
 barra y lo envia una sola vez mediante POST protegido por CSRF antes de
 redirigir a autenticacion.
 
-El certificado de ingresos permanece obligatorio para revision manual: del
-estudiante/deudor adulto o del tutor/deudor principal cuando el estudiante es
-menor. Admite PDF, JPEG y PNG, almacenamiento privado y reemplazo trazable.
+El soporte de ingresos es obligatorio por defecto y configurable en Institucion
+mediante `requiere_soporte_ingresos`. Si se aporta, corresponde al estudiante/
+deudor adulto o al tutor/deudor principal cuando el estudiante es menor.
+Admite PDF, JPEG y PNG, almacenamiento privado y reemplazo trazable.
 OCR, IA, scoring y aprobacion automatica quedan para una fase posterior.
 
 ## Seguridad
@@ -301,9 +302,11 @@ solo decide la experiencia. El grant temporal conserva esas mismas reglas para
 el handoff desde computador. La autenticidad del documento sigue sujeta a
 controles tecnicos adicionales y revision humana.
 
-El soporte de ingresos o certificacion bancaria es una carga privada obligatoria
-en PDF, JPEG o PNG. Corresponde al estudiante deudor cuando es adulto y al tutor
-deudor cuando el estudiante es menor. Siempre requiere escaneo tecnico. JPEG,
+El soporte de ingresos o certificacion bancaria es una carga privada en PDF,
+JPEG o PNG, obligatoria salvo configuracion institucional explicita. Su ausencia
+opcional no bloquea el expediente. Corresponde al estudiante deudor cuando es
+adulto y al tutor deudor cuando el estudiante es menor. Si se aporta, siempre
+requiere escaneo tecnico y debe resolverse antes de aprobar. JPEG,
 PNG y PDF se clasifican por contenido cuando el procesador esta habilitado. Se
 admiten certificado laboral, certificado de ingresos, ingresos y retenciones,
 extracto bancario, certificacion bancaria de titularidad y desprendible de

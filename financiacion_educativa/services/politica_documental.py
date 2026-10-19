@@ -7,11 +7,13 @@ from financiacion_educativa.choices import (
     EstadoEscaneoDocumento,
     EstadoEvidenciaMatricula,
     EstadoValidacionDocumento,
+    EstadoSolicitudFinanciacion,
     RolParticipante,
     TipoDocumentoFinanciacion,
     TipoDocumentoIdentidad,
 )
 from financiacion_educativa.models import EvidenciaMatricula
+from instituciones.models import Institucion
 from financiacion_educativa.services.participantes import solicitud_requiere_tutor
 
 
@@ -43,6 +45,48 @@ class RequisitoDocumentoPolitica:
     obligatorio: bool = True
     documento: object = None
     evidencia_matricula: object = None
+
+
+def soporte_ingresos_obligatorio(solicitud):
+    if solicitud.estado in {
+        EstadoSolicitudFinanciacion.PENDING_PROMISSORY_NOTE,
+        EstadoSolicitudFinanciacion.PENDING_SIGNATURE,
+        EstadoSolicitudFinanciacion.APPROVED,
+        EstadoSolicitudFinanciacion.ACTIVE,
+        EstadoSolicitudFinanciacion.PAYMENT_REPORTED,
+        EstadoSolicitudFinanciacion.PAYMENT_UNDER_REVIEW,
+        EstadoSolicitudFinanciacion.PAID,
+    }:
+        # La contratacion conserva la politica aprobada; el legado era obligatorio.
+        aprobacion = solicitud.historial_estados.filter(
+            estado_nuevo=EstadoSolicitudFinanciacion.PENDING_PROMISSORY_NOTE,
+            metadata__politica_documental__isnull=False,
+        ).order_by('-creado_en', '-id').first()
+        if aprobacion:
+            valor = aprobacion.metadata['politica_documental'].get('soporte_ingresos_obligatorio')
+            if isinstance(valor, bool):
+                return valor
+        return True
+    return Institucion.objects.values_list('requiere_soporte_ingresos', flat=True).get(pk=solicitud.institucion_id)
+
+
+def resumir_politica_documental(solicitud, *, requisitos=None):
+    obligatorio = (
+        next((item.obligatorio for item in requisitos if item.codigo == 'INCOME_CERTIFICATE'), True)
+        if requisitos is not None else soporte_ingresos_obligatorio(solicitud)
+    )
+    return {
+        'version': 'EDU_DOCUMENTAL_V2',
+        'institucion_id': str(solicitud.institucion_id),
+        'soporte_ingresos_obligatorio': obligatorio,
+    }
+
+
+def requisito_ausente_opcional(solicitud, codigo):
+    return any(
+        item.codigo == codigo and not item.obligatorio and item.documento is None
+        for item in construir_politica_documental(solicitud)
+    )
 
 
 def caras_identificacion_requeridas(tipo_documento):
@@ -156,13 +200,16 @@ def construir_politica_documental(solicitud):
             )
         )
     if deudor:
+        ingresos_obligatorios = soporte_ingresos_obligatorio(solicitud)
         requisitos.append(
             RequisitoDocumentoPolitica(
                 codigo='INCOME_CERTIFICATE',
                 descripcion=(
                     'Soporte de ingresos o certificacion bancaria del '
                     'responsable contractual aportado'
+                    if ingresos_obligatorios else 'Soporte de ingresos - opcional'
                 ),
+                obligatorio=ingresos_obligatorios,
                 tipo=TipoDocumentoFinanciacion.INCOME_CERTIFICATE,
                 participante=deudor,
                 documento=_documento_activo(

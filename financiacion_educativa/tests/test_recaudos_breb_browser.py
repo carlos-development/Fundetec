@@ -18,6 +18,8 @@ class RecaudosBrowserTests(DatosRecaudosMixin, StaticLiveServerTestCase):
     def test_reportar_desde_movil_y_consulta_operativa_sin_overflow(self):
         self.preparar_recaudos()
         reporte, _ = self.reportar()
+        self.escanear(reporte.comprobante_id)
+        evidencia = self.evidencia()
         estudiante = Client()
         estudiante.force_login(self.pagador)
         operador = Client()
@@ -32,6 +34,7 @@ class RecaudosBrowserTests(DatosRecaudosMixin, StaticLiveServerTestCase):
             'EDU_BREB_FORM': reverse('financiacion_educativa_web:pagos', args=[self.solicitud.pk]),
             'EDU_BREB_STATE': reverse('financiacion_educativa_web:reporte-pago', args=[self.solicitud.pk, reporte.pk]),
             'EDU_BREB_DETAIL': reverse('financiacion_educativa_web:operaciones:recaudo-detalle', args=[reporte.pk]),
+            'EDU_BREB_EVIDENCE': str(evidencia.pk),
             'EDU_BREB_RECEIPT': str(soporte), 'EDU_BREB_SCREENSHOTS': muestras,
         }
         script = Path(__file__).parent / 'js' / 'test_recaudos_breb_browser.js'

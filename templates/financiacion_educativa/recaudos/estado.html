@@ -1,15 +1,18 @@
 {% extends "financiacion_educativa/_base.html" %}
-{% load static financiacion_format recaudo_format %}
+{% load static recaudo_format %}
 {% block extra_head %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/financiacion_educativa_recaudos.css' %}">{% endblock %}
+{% block title %}Estado del reporte | Aprobado{% endblock %}
 {% block content %}<section class="edu-page-band"><div class="edu-page-shell edu-recaudos-shell">
-<h1>{{ reporte.estado_publico }}</h1><p>{{ solicitud.referencia_externa }}</p>
-<dl><dt>Proposito declarado</dt><dd>{{ reporte.get_proposito_display }}</dd><dt>Monto reportado</dt><dd>{{ reporte.monto_reportado|cop_recaudo }}</dd><dt>Fecha declarada</dt><dd>{{ reporte.fecha_declarada|date:"d/m/Y" }}</dd><dt>Receptor mostrado</dt><dd>{{ reporte.receptor.titular }}</dd></dl>
-{% if reporte.conciliacion %}<p>El ingreso se confirm&oacute;. Est&aacute; pendiente de aplicaci&oacute;n: todav&iacute;a no acredita cuota pagada, reducci&oacute;n de capital ni paz y salvo.</p><p>Monto recibido: {{ reporte.conciliacion.monto_recibido|cop_recaudo }} &middot; Fecha efectiva: {{ reporte.conciliacion.fecha_efectiva|date:"d/m/Y" }}</p>
-{% elif reporte.rechazo %}<p>{{ reporte.rechazo.motivo_publico }}</p><p>La financiaci&oacute;n no ha sido rechazada. Puedes registrar un nuevo reporte con el soporte correcto.</p>
-{% else %}<p>Reporte recibido. La revisi&oacute;n requiere comprobar el ingreso efectivo en el banco.</p>{% endif %}
-{% if reporte.comprobante.estado_escaneo == 'SAFE' %}<a href="{% url 'financiacion_educativa_web:pago-comprobante' solicitud.pk reporte.pk %}">Descargar comprobante</a>
-{% elif reporte.comprobante.estado_escaneo == 'BLOCKED' %}<p>El soporte no super&oacute; la verificaci&oacute;n de seguridad. Contacta a soporte y presenta un nuevo reporte con un archivo seguro.</p>
-{% elif reporte.comprobante.estado_escaneo == 'ERROR' %}<p>La verificaci&oacute;n de seguridad tuvo un fallo t&eacute;cnico. El soporte permanece protegido; el equipo puede reintentar su an&aacute;lisis.</p>
-{% else %}<p>Comprobante pendiente de verificaci&oacute;n de seguridad.</p>{% endif %}
+<header class="edu-page-heading"><h1>{{ reporte.estado_publico }}</h1><p>{{ solicitud.referencia_externa }}</p></header>
+<dl class="edu-recaudos-summary"><div><dt>Prop&oacute;sito declarado</dt><dd>{{ reporte.get_proposito_display }}</dd></div><div><dt>Monto reportado</dt><dd class="edu-recaudos-amount">{{ reporte.monto_reportado|cop_recaudo }}</dd></div><div><dt>Fecha declarada</dt><dd>{{ reporte.fecha_declarada|date:"d/m/Y" }}</dd></div><div><dt>Receptor mostrado</dt><dd>{{ reporte.receptor.titular }}</dd></div></dl>
+{% if reporte.conciliacion %}<section class="edu-recaudos-band"><span class="edu-recaudos-badge is-safe">Ingreso bancario confirmado</span><p>Est&aacute; pendiente de aplicaci&oacute;n: todav&iacute;a no acredita cuota pagada, reducci&oacute;n de capital ni paz y salvo.</p><dl class="edu-recaudos-summary"><div><dt>Monto recibido</dt><dd class="edu-recaudos-amount">{{ reporte.conciliacion.monto_recibido|cop_recaudo }}</dd></div><div><dt>Fecha efectiva bancaria</dt><dd>{{ reporte.conciliacion.fecha_efectiva|date:"d/m/Y" }}</dd></div></dl></section>
+{% elif reporte.rechazo %}<p class="edu-recaudos-notice">{{ reporte.rechazo.motivo_publico }}</p><p>La financiaci&oacute;n no ha sido rechazada. Puedes registrar un nuevo reporte con el soporte correcto.</p>
+{% else %}<p class="edu-recaudos-notice">Reporte recibido. La revisi&oacute;n requiere comprobar el ingreso efectivo en el banco.</p>{% endif %}
+<section class="edu-recaudos-band"><h2>Comprobante</h2>
+{% if reporte.comprobante.estado_escaneo == 'SAFE' %}<span class="edu-recaudos-badge is-safe">Sin hallazgos de seguridad</span><p><a href="{% url 'financiacion_educativa_web:pago-comprobante' solicitud.pk reporte.pk %}"><i class="bi bi-download" aria-hidden="true"></i> Descargar comprobante</a></p>
+{% elif reporte.comprobante.estado_escaneo == 'BLOCKED' %}<span class="edu-recaudos-badge is-blocked">Soporte bloqueado</span><p>El soporte no super&oacute; la verificaci&oacute;n de seguridad. Contacta a soporte y presenta un nuevo reporte con un archivo seguro.</p>
+{% elif reporte.comprobante.estado_escaneo == 'ERROR' %}<span class="edu-recaudos-badge is-blocked">Verificaci&oacute;n no disponible</span><p>La verificaci&oacute;n de seguridad tuvo un fallo t&eacute;cnico. El soporte permanece protegido; el equipo puede reintentar su an&aacute;lisis.</p>
+{% else %}<span class="edu-recaudos-badge">Comprobante pendiente de verificaci&oacute;n de seguridad</span>{% endif %}
+<p><a href="{% url 'financiacion_educativa_web:reporte-pago' solicitud.pk reporte.pk %}"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i> Consultar nuevamente</a></p></section>
 <p><a href="{% url 'financiacion_educativa_web:pagos' solicitud.pk %}">Volver a pagos y reportes</a></p>
 </div></section>{% endblock %}

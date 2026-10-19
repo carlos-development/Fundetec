@@ -246,6 +246,17 @@ class DocumentoFinanciacionForm(forms.Form):
         self.fields['tipo'].choices = _opciones_tipos_documentales_usuario(
             tipos
         )
+        from financiacion_educativa.services.politica_documental import soporte_ingresos_obligatorio
+
+        if not soporte_ingresos_obligatorio(solicitud):
+            self.fields['tipo'].choices = [
+                (valor, 'Soporte de ingresos - opcional' if valor == TipoDocumentoFinanciacion.INCOME_CERTIFICATE else etiqueta)
+                for valor, etiqueta in self.fields['tipo'].choices
+            ]
+            self.fields['tipo'].help_text = (
+                'Puedes continuar sin cargar soporte de ingresos. Si lo aportas, '
+                'debera superar los controles de seguridad y validacion.'
+            )
         if tipo_inicial in tipos:
             self.fields['tipo'].initial = tipo_inicial
         if participante_inicial:

@@ -18,9 +18,10 @@ class InstitucionAdmin(admin.ModelAdmin):
         'tipo_identificacion_tributaria',
         'numero_identificacion_tributaria',
         'activa',
+        'requiere_soporte_ingresos',
         'creada_en',
     )
-    list_filter = ('activa', 'tipo_identificacion_tributaria', 'creada_en')
+    list_filter = ('activa', 'requiere_soporte_ingresos', 'tipo_identificacion_tributaria', 'creada_en')
     search_fields = (
         'nombre_comercial',
         'razon_social',

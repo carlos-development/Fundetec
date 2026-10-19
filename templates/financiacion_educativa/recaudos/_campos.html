@@ -1,0 +1,11 @@
+{% include "financiacion_educativa/recaudos/_errores.html" %}
+{% for field in form %}
+    {% if field.is_hidden %}{{ field }}{% else %}
+    <div class="edu-recaudos-field{% if field.errors %} has-error{% endif %}">
+        {{ field.label_tag }}{{ field }}
+        {% if field.help_text %}<small id="{{ field.auto_id }}_helptext">{{ field.help_text }}</small>{% endif %}
+        {{ field.errors }}
+    </div>
+    {% endif %}
+{% endfor %}
+{% if form.is_bound and form.errors and form.archivo %}<p class="edu-recaudos-notice">Por seguridad, el navegador no conserva el archivo adjunto. Selecci&oacute;nalo nuevamente; los dem&aacute;s datos se conservan.</p>{% endif %}

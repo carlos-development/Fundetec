@@ -625,3 +625,39 @@ class ConcurrenciaRecaudosTests(DatosRecaudosMixin, TransactionTestCase):
         self.assertEqual(errores, [])
         self.assertEqual(sum(resultado is not None for resultado in resultados), 1)
         self.assertEqual(reporte.comprobante.escaneos.count(), 1)
+
+    def test_observacion_vacia_concurrente_reutiliza_un_ingreso(self):
+        reporte, _ = self.reportar()
+        self.escanear(reporte.comprobante_id)
+        datos = self.datos_confirmacion(reporte, observacion='')
+
+        def confirmar():
+            actor = get_user_model().objects.get(pk=self.actor.pk)
+            return servicios.confirmar_recaudo(**{**datos, 'actor': actor})
+
+        resultados, errores = self.paralelos([confirmar, confirmar])
+        self.assertEqual(errores, [])
+        self.assertEqual(len(resultados), 2)
+        self.assertEqual(sorted(replay for _, replay in resultados), [False, True])
+        ingreso = ConciliacionRecaudoEducativo.objects.get()
+        self.assertEqual(ingreso.observacion, servicios.OBSERVACION_SIN_ADICIONAL)
+        self.assertEqual({resultado[0].pk for resultado in resultados}, {ingreso.pk})
+
+    def test_dos_reportes_reutilizan_evidencia_con_referencias_distintas(self):
+        primero, _ = self.reportar()
+        segundo, _ = self.reportar()
+        for reporte in (primero, segundo):
+            self.escanear(reporte.comprobante_id)
+        evidencia = self.evidencia()
+        datos = [self.datos_confirmacion(reporte, evidencia, referencia=f'REUSO-{indice}', observacion='')
+            for indice, reporte in enumerate((primero, segundo))]
+
+        def confirmar(indice):
+            actor = get_user_model().objects.get(pk=self.actor.pk)
+            return servicios.confirmar_recaudo(**{**datos[indice], 'actor': actor})
+
+        resultados, errores = self.paralelos([lambda: confirmar(0), lambda: confirmar(1)])
+        self.assertEqual(errores, [])
+        self.assertEqual(len(resultados), 2)
+        self.assertEqual(ConciliacionRecaudoEducativo.objects.filter(evidencia_movimiento=evidencia).count(), 2)
+        self.assertEqual(ArchivoRecaudoEducativo.objects.filter(pk=evidencia.pk).count(), 1)

@@ -1,0 +1,4 @@
+{% if archivo.estado_escaneo == 'SAFE' %}<span class="edu-recaudos-badge is-safe">Sin hallazgos de seguridad</span>
+{% elif archivo.estado_escaneo == 'BLOCKED' %}<span class="edu-recaudos-badge is-blocked">Bloqueado por seguridad</span>
+{% elif archivo.estado_escaneo == 'ERROR' %}<span class="edu-recaudos-badge is-blocked">Fallo t&eacute;cnico de escaneo</span>
+{% else %}<span class="edu-recaudos-badge">Verificaci&oacute;n en curso</span>{% endif %}

@@ -35,6 +35,8 @@ from financiacion_educativa.services.orquestacion_automatica import (
 )
 from financiacion_educativa.services.politica_documental import (
     validar_expediente_para_aprobacion,
+    resumir_politica_documental,
+    requisito_ausente_opcional,
 )
 from financiacion_educativa.services.reglas_financieras import (
     crear_fotografia_condiciones_financieras,
@@ -66,7 +68,7 @@ def _validar_revisor_documental_operativo(actor):
 
 
 def _validar_aprobacion(solicitud):
-    validar_expediente_para_aprobacion(solicitud)
+    return validar_expediente_para_aprobacion(solicitud)
 
 
 def _programar_correo(*, solicitud, decision):
@@ -120,6 +122,7 @@ def _persistir_decision(
             'requisitos_pendientes': 'Selecciona requisitos validos.',
         })
     fotografia = None
+    politica_aprobada = None
     if tipo == TipoDecisionRevisionEducativa.APPROVED:
         if requisitos:
             raise ValidationError({
@@ -131,7 +134,7 @@ def _persistir_decision(
             raise ValidationError({
                 'motivo': 'La aprobacion usa el motivo de requisitos verificados.',
             })
-        _validar_aprobacion(solicitud)
+        politica_aprobada = _validar_aprobacion(solicitud)
         fotografia = CondicionesFinancieras.objects.select_for_update().filter(
             solicitud=solicitud,
             activa=True,
@@ -186,6 +189,8 @@ def _persistir_decision(
                     'Selecciona al menos un requisito por corregir.'
                 ),
             })
+        if any(requisito_ausente_opcional(solicitud, codigo) for codigo in requisitos):
+            raise ValidationError({'requisitos_pendientes': 'No solicites un documento opcional que no ha sido aportado.'})
         nuevo_estado = EstadoSolicitudFinanciacion.CORRECTION_REQUIRED
 
     decision = DecisionRevisionEducativa(
@@ -210,6 +215,7 @@ def _persistir_decision(
             'decision_type': tipo,
             'reason_code': motivo,
             'course_authorized': False,
+            'politica_documental': resumir_politica_documental(solicitud, requisitos=politica_aprobada),
         },
     )
     if tipo == TipoDecisionRevisionEducativa.APPROVED:

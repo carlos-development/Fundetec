@@ -37,7 +37,11 @@ def _propiedad(request, solicitud_id):
 
 
 def _error(form, error):
-    form.add_error(None, '; '.join(error.messages))
+    if hasattr(error, 'error_dict'):
+        for campo, errores in error.error_dict.items():
+            form.add_error(campo if campo in form.fields else None, errores)
+    else:
+        form.add_error(None, error)
 
 
 def _reportes():
@@ -164,11 +168,16 @@ def bandeja_view(request):
 def detalle_operativo_view(request, reporte_id):
     _habilitado()
     reporte = get_object_or_404(_reportes(), pk=reporte_id)
+    return _render_detalle(request, reporte)
+
+
+def _render_detalle(request, reporte, *, confirmar_form=None, evidencia_form=None, rechazar_form=None):
     # Evidencias del operador que no son QR ni comprobantes de pagadores.
     evidencias = ArchivoRecaudoEducativo.objects.filter(creado_por=request.user, finalidad='BANK_EVIDENCE').prefetch_related('escaneos').order_by('-creado_en')[:10]
     return render(request, 'financiacion_educativa/recaudos/detalle_operativo.html', _contexto(request,
-        reporte=reporte, confirmar_form=ConfirmarRecaudoForm(initial={'monto': reporte.monto_reportado, 'fecha': timezone.localdate()}),
-        evidencia_form=EvidenciaBancariaForm(), rechazar_form=RechazarReporteForm(),
+        reporte=reporte, confirmar_form=confirmar_form if confirmar_form is not None else ConfirmarRecaudoForm(actor=request.user, initial={'monto': reporte.monto_reportado, 'fecha': reporte.fecha_declarada}),
+        evidencia_form=evidencia_form if evidencia_form is not None else EvidenciaBancariaForm(),
+        rechazar_form=rechazar_form if rechazar_form is not None else RechazarReporteForm(),
         puede_conciliar=request.user.is_active and request.user.has_perm(servicios.PERMISO_CONCILIAR),
         ultimo_escaneo=reporte.comprobante.escaneos.order_by('-numero').first(),
         evidencias=evidencias,
@@ -181,17 +190,16 @@ def detalle_operativo_view(request, reporte_id):
 def confirmar_view(request, reporte_id):
     _habilitado()
     reporte = get_object_or_404(_reportes(), pk=reporte_id)
-    form = ConfirmarRecaudoForm(request.POST)
+    form = ConfirmarRecaudoForm(request.POST, actor=request.user)
     if form.is_valid():
         try:
             servicios.confirmar_recaudo(reporte_id=reporte_id, actor=request.user, cuenta_id=reporte.receptor.cuenta_id, **form.cleaned_data)
         except (ValidationError, ArchivoRecaudoEducativo.DoesNotExist) as error:
-            messages.error(request, '; '.join(error.messages) if isinstance(error, ValidationError) else 'Evidencia no disponible.')
+            _error(form, error if isinstance(error, ValidationError) else ValidationError({'evidencia_id': 'Evidencia no disponible.'}))
         else:
             messages.success(request, 'Ingreso confirmado pendiente de aplicacion. No se modifico el contrato ni el saldo.')
-    else:
-        messages.error(request, 'Revise los datos de conciliacion: monto, fecha, referencia, evidencia y observacion son obligatorios.')
-    return redirect('financiacion_educativa_web:operaciones:recaudo-detalle', reporte_id=reporte_id)
+            return redirect('financiacion_educativa_web:operaciones:recaudo-detalle', reporte_id=reporte_id)
+    return _render_detalle(request, reporte, confirmar_form=form)
 
 
 @never_cache
@@ -199,13 +207,17 @@ def confirmar_view(request, reporte_id):
 @require_POST
 def rechazar_view(request, reporte_id):
     _habilitado()
+    reporte = get_object_or_404(_reportes(), pk=reporte_id)
     form = RechazarReporteForm(request.POST)
     if form.is_valid():
         try:
             servicios.rechazar_reporte(reporte_id=reporte_id, actor=request.user, **form.cleaned_data)
         except ValidationError as error:
-            messages.error(request, '; '.join(error.messages))
-    return redirect('financiacion_educativa_web:operaciones:recaudo-detalle', reporte_id=reporte_id)
+            _error(form, error)
+        else:
+            messages.success(request, 'Reporte no conciliado. El motivo quedo registrado para el pagador.')
+            return redirect('financiacion_educativa_web:operaciones:recaudo-detalle', reporte_id=reporte_id)
+    return _render_detalle(request, reporte, rechazar_form=form)
 
 
 @never_cache
@@ -213,18 +225,17 @@ def rechazar_view(request, reporte_id):
 @require_POST
 def evidencia_view(request, reporte_id):
     _habilitado()
-    get_object_or_404(_reportes(), pk=reporte_id)
+    reporte = get_object_or_404(_reportes(), pk=reporte_id)
     form = EvidenciaBancariaForm(request.POST, request.FILES)
     if form.is_valid():
         try:
-            evidencia = servicios.registrar_evidencia_bancaria(archivo=form.cleaned_data['archivo'], actor=request.user)
+            servicios.registrar_evidencia_bancaria(archivo=form.cleaned_data['archivo'], actor=request.user)
         except ValidationError as error:
-            messages.error(request, '; '.join(error.messages))
+            form.add_error('archivo', error)
         else:
-            messages.success(request, f'Evidencia registrada: {evidencia.pk}. Pendiente de escaneo de seguridad.')
-    else:
-        messages.error(request, 'Adjunte una evidencia bancaria valida.')
-    return redirect('financiacion_educativa_web:operaciones:recaudo-detalle', reporte_id=reporte_id)
+            messages.success(request, 'Evidencia registrada. Pendiente de escaneo de seguridad; consulte su estado antes de confirmar.')
+            return redirect('financiacion_educativa_web:operaciones:recaudo-detalle', reporte_id=reporte_id)
+    return _render_detalle(request, reporte, evidencia_form=form)
 
 
 @never_cache

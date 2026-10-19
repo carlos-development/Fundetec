@@ -11,7 +11,7 @@ from django.conf import settings
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.files.base import ContentFile
 from django.db import IntegrityError, transaction
-from django.db.models import Max
+from django.db.models import F, OuterRef, Subquery
 from django.utils import timezone
 from PIL import Image
 from pypdf import PdfReader
@@ -33,6 +33,31 @@ PERMISO_CONFIGURAR = 'financiacion_educativa.configurar_receptor_breb'
 PERMISO_CONSULTAR = 'financiacion_educativa.consultar_recaudos_educativos'
 PERMISO_CONCILIAR = 'financiacion_educativa.conciliar_recaudos_educativos'
 PERMISO_ESCANEAR = 'financiacion_educativa.escanear_comprobantes_educativos'
+OBSERVACION_SIN_ADICIONAL = 'Sin observacion adicional registrada.'
+
+
+def evidencias_bancarias_elegibles(actor):
+    if not actor or not actor.is_active or not actor.has_perm(PERMISO_CONCILIAR):
+        return ArchivoRecaudoEducativo.objects.none()
+    ultimo = IntentoEscaneoRecaudo.objects.filter(archivo_id=OuterRef('pk')).order_by('-numero')
+    return ArchivoRecaudoEducativo.objects.filter(
+        creado_por=actor, finalidad='BANK_EVIDENCE',
+    ).annotate(
+        ultimo_estado=Subquery(ultimo.values('estado')[:1]),
+        ultimo_hash=Subquery(ultimo.values('sha256')[:1]),
+    ).filter(ultimo_estado='CLEAN', ultimo_hash=F('sha256')).order_by('-creado_en', 'pk')
+
+
+def _verificar_integridad_soporte(archivo, campo=None):
+    try:
+        with archivo.archivo.open('rb') as stream:
+            contenido = stream.read(settings.FINANCIACION_EDUCATIVA_RECAUDO_MAX_BYTES + 1)
+    except (OSError, ValueError):
+        mensaje = 'El soporte no esta disponible. Recargue y consulte su estado.'
+        raise ValidationError({campo: mensaje} if campo else mensaje) from None
+    if len(contenido) != archivo.tamano_bytes or hashlib.sha256(contenido).hexdigest() != archivo.sha256:
+        mensaje = 'La integridad del soporte no coincide con el escaneo. No se puede confirmar.'
+        raise ValidationError({campo: mensaje} if campo else mensaje)
 
 
 def habilitados():
@@ -177,7 +202,10 @@ def reportar_pago(*, solicitud_id, actor, receptor_id, clave, proposito, monto, 
     if proposito not in ReporteRecaudoEducativo.Proposito.values:
         raise ValidationError('El proposito del reporte no es valido.')
     referencia = (referencia or '').strip()
-    datos = validar_archivo(archivo)
+    try:
+        datos = validar_archivo(archivo)
+    except ValidationError as error:
+        raise ValidationError({'archivo': error.messages}) from None
     payload = hashlib.sha256(json.dumps({
         'receptor': str(receptor_id), 'proposito': proposito, 'monto': str(monto),
         'fecha': fecha.isoformat(), 'referencia': referencia, 'sha256': datos[2],
@@ -196,7 +224,7 @@ def reportar_pago(*, solicitud_id, actor, receptor_id, clave, proposito, monto, 
                 return anterior, True
             receptor = receptor_vigente()
             if not receptor or str(receptor.pk) != str(receptor_id):
-                raise ValidationError('El medio de pago cambio o no esta disponible. Consulte nuevamente.')
+                raise ValidationError({'receptor_id': 'El medio de pago cambio o no esta disponible. Consulte nuevamente.'})
             guardado = _guardar_archivo(datos, actor, 'RECEIPT')
             reporte = ReporteRecaudoEducativo.objects.create(
                 solicitud_id=solicitud_id, fotografia=fotografia, receptor=receptor,
@@ -215,29 +243,55 @@ def reportar_pago(*, solicitud_id, actor, receptor_id, clave, proposito, monto, 
 def referencia_bancaria(valor):
     referencia = valor.strip().upper()
     if not re.fullmatch(r'[A-Z0-9][A-Z0-9._/-]{0,119}', referencia):
-        raise ValidationError('Ingrese la referencia unica del movimiento verificada en el banco.')
+        raise ValidationError({'referencia': 'Ingrese la referencia unica del movimiento verificada en el banco.'})
     return referencia
 
 
 @transaction.atomic
-def confirmar_recaudo(*, reporte_id, actor, cuenta_id, referencia, monto, fecha, evidencia_id, observacion, justificacion_diferencia=''):
+def confirmar_recaudo(*, reporte_id, actor, cuenta_id, referencia, monto, fecha, evidencia_id, observacion='', justificacion_diferencia=''):
     habilitados()
     exigir_permiso(actor, PERMISO_CONCILIAR)
     reporte = ReporteRecaudoEducativo.objects.select_for_update().get(pk=reporte_id)
     if hasattr(reporte, 'rechazo'):
         raise ValidationError('El reporte ya fue rechazado; registre un reporte nuevo.')
     referencia = referencia_bancaria(referencia)
-    monto = monto_cop(monto)
-    fecha = fecha_transferencia(fecha)
-    observacion = observacion.strip()
+    try:
+        monto = monto_cop(monto)
+    except ValidationError as error:
+        raise ValidationError({'monto': error.messages}) from None
+    try:
+        fecha = fecha_transferencia(fecha)
+    except ValidationError as error:
+        raise ValidationError({'fecha': error.messages}) from None
+    observacion = (observacion or '').strip() or OBSERVACION_SIN_ADICIONAL
     justificacion_diferencia = justificacion_diferencia.strip()
-    if not observacion:
-        raise ValidationError('Describa la verificacion bancaria y cualquier diferencia de monto.')
     if monto != reporte.monto_reportado and not justificacion_diferencia:
-        raise ValidationError('Explique expresamente la diferencia entre monto recibido y reportado.')
+        raise ValidationError({'justificacion_diferencia': 'Explique expresamente la diferencia entre monto recibido y reportado.'})
     # La cuenta viene de la version mostrada; el navegador no puede cambiarla.
     if str(cuenta_id) != str(reporte.receptor.cuenta_id):
         raise ValidationError('La cuenta no corresponde al receptor del reporte.')
+    try:
+        evidencia_id = uuid.UUID(str(evidencia_id))
+    except (TypeError, ValueError, AttributeError):
+        raise ValidationError({'evidencia_id': 'Seleccione una evidencia bancaria disponible.'}) from None
+    # Mismo orden para soportes compartidos; el escaner tambien bloquea la fila base.
+    soportes = {archivo.pk: archivo for archivo in ArchivoRecaudoEducativo.objects.select_for_update().filter(
+        pk__in=(evidencia_id, reporte.comprobante_id),
+    ).order_by('pk')}
+    evidencia = soportes.get(evidencia_id)
+    if not evidencia:
+        raise ValidationError({'evidencia_id': 'Evidencia no disponible. Recargue la lista.'})
+    if evidencia.creado_por_id != actor.pk or evidencia.finalidad != 'BANK_EVIDENCE':
+        raise PermissionDenied('Use la evidencia bancaria registrada por su cuenta.')
+    if evidencia.pk == reporte.comprobante_id:
+        raise ValidationError({'evidencia_id': 'La evidencia bancaria debe ser independiente del comprobante del pagador.'})
+    comprobante = soportes[reporte.comprobante_id]
+    if comprobante.estado_escaneo != 'SAFE':
+        raise ValidationError('El comprobante debe superar el escaneo antes de confirmar.')
+    if evidencia.estado_escaneo != 'SAFE':
+        raise ValidationError({'evidencia_id': 'La evidencia debe superar el escaneo antes de confirmar.'})
+    _verificar_integridad_soporte(comprobante)
+    _verificar_integridad_soporte(evidencia, 'evidencia_id')
     anterior = ConciliacionRecaudoEducativo.objects.filter(reporte=reporte).first()
     if anterior:
         if (anterior.cuenta_id, anterior.referencia_verificada, anterior.monto_recibido,
@@ -245,17 +299,10 @@ def confirmar_recaudo(*, reporte_id, actor, cuenta_id, referencia, monto, fecha,
                 cuenta_id, referencia, monto, fecha, evidencia_id, observacion, justificacion_diferencia):
             raise ValidationError('La conciliacion ya fue registrada con otros datos.')
         return anterior, True
-    evidencia = ArchivoRecaudoEducativo.objects.get(pk=evidencia_id)
-    if evidencia.creado_por_id != actor.pk or evidencia.finalidad != 'BANK_EVIDENCE':
-        raise PermissionDenied('Use la evidencia bancaria registrada por su cuenta.')
-    if evidencia.pk == reporte.comprobante_id:
-        raise ValidationError('La evidencia bancaria debe ser independiente del comprobante del pagador.')
-    if reporte.comprobante.estado_escaneo != 'SAFE' or evidencia.estado_escaneo != 'SAFE':
-        raise ValidationError('Los soportes deben superar el escaneo antes de confirmar.')
     # Cuenta + referencia verificada identifica un movimiento global, no por tenant.
     CuentaRecaudoEducativa.objects.select_for_update().get(pk=cuenta_id)
     if ConciliacionRecaudoEducativo.objects.filter(cuenta_id=cuenta_id, referencia_verificada=referencia).exists():
-        raise ValidationError('El movimiento bancario ya esta conciliado. Revise la referencia.')
+        raise ValidationError({'referencia': 'El movimiento bancario ya esta conciliado. Revise la referencia.'})
     try:
         with transaction.atomic():
             conciliacion = ConciliacionRecaudoEducativo.objects.create(
@@ -265,7 +312,7 @@ def confirmar_recaudo(*, reporte_id, actor, cuenta_id, referencia, monto, fecha,
                 justificacion_diferencia=justificacion_diferencia,
             )
     except IntegrityError:
-        raise ValidationError('El movimiento bancario ya esta conciliado. Revise la referencia.') from None
+        raise ValidationError({'referencia': 'El movimiento bancario ya esta conciliado. Revise la referencia.'}) from None
     return conciliacion, False
 
 

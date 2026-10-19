@@ -2,6 +2,13 @@
 
 ## 1. Objetivo
 
+> Actualizacion 2026-10-19: las referencias de esta guia a soporte de ingresos
+> obligatorio se aplican cuando `Institucion.requiere_soporte_ingresos=True`
+> (valor predeterminado). Si se configura como opcional, no se exige un archivo
+> ausente; uno aportado siempre debe superar seguridad y revision. Identidad,
+> tutor y consentimientos siguen obligatorios. Configuracion y reversion:
+> [Soporte por institucion](../../SOPORTE_INGRESOS_POR_INSTITUCION.md).
+
 Esta guía describe el procedimiento excepcional para revisar un expediente
 educativo, solicitar correcciones, aprobar la revisión documental, enviar el
 pagaré a ZapSign y verificar el cierre del proceso. No representa el recorrido

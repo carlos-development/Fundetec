@@ -40,6 +40,7 @@ from financiacion_educativa.services.firma_zapsign import (
     marcar_envio_inconcluso_para_conciliacion,
 )
 from financiacion_educativa.services.politica_documental import (
+    resumir_politica_documental,
     construir_politica_documental,
     documento_requiere_validacion_visual,
     validar_expediente_para_aprobacion,
@@ -419,6 +420,7 @@ def _aprobar_expediente_concluyente(solicitud):
         metadata={
             'automatic': True,
             'financial_snapshot_id': str(fotografia.pk),
+            'politica_documental': resumir_politica_documental(solicitud, requisitos=politica),
             'course_authorized': False,
         },
     )

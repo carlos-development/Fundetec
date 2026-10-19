@@ -86,6 +86,7 @@ from financiacion_educativa.services.participantes import (
 )
 from financiacion_educativa.services.politica_documental import (
     caras_identificacion_requeridas,
+    requisito_ausente_opcional,
 )
 from financiacion_educativa.services.requisitos_documentales import (
     calcular_requisitos_documentales,
@@ -756,6 +757,11 @@ def documentacion_view(request, solicitud_id):
             ],
             'documental_editable': _estado_documental_editable(solicitud),
             'ultima_decision': ultima_decision,
+            'correccion_ingresos_omitible': bool(
+                ultima_decision
+                and 'INCOME_CERTIFICATE' in ultima_decision.requisitos_pendientes
+                and requisito_ausente_opcional(solicitud, 'INCOME_CERTIFICATE')
+            ),
             'artefactos_contractuales': (
                 solicitud.artefactos_contractuales.filter(
                     vigente=True,

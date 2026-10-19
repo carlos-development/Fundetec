@@ -8,13 +8,14 @@ test('BRE-B movil: QR, llave, reporte, estado y bandeja', async t => {
     const browser = await chromium.launch({ headless: true, channel: 'msedge' });
     t.after(() => browser.close());
     const base = process.env.EDU_BREB_BASE;
-    const context = await browser.newContext({ permissions: ['clipboard-read', 'clipboard-write'] });
+    const context = await browser.newContext({ locale: 'es-CO', reducedMotion: 'reduce', permissions: ['clipboard-read', 'clipboard-write'] });
     await context.route('**/*', route => new URL(route.request().url()).origin === base ? route.continue() : route.abort());
     await context.addCookies([{ name: 'sessionid', value: process.env.EDU_BREB_SESSION, url: base }]);
     const page = await context.newPage();
     const errors = [];
     page.on('pageerror', err => errors.push(err.message));
-    for (const viewport of [{ width: 375, height: 667 }, { width: 390, height: 844 }]) {
+    const viewports = [{ width: 375, height: 667 }, { width: 390, height: 844 }, { width: 1280, height: 900 }];
+    for (const viewport of viewports) {
         await page.setViewportSize(viewport);
         for (const [name, url] of [['reportar', process.env.EDU_BREB_FORM], ['estado', process.env.EDU_BREB_STATE]]) {
             assert.equal((await page.goto(base + url)).status(), 200);
@@ -26,19 +27,23 @@ test('BRE-B movil: QR, llave, reporte, estado y bandeja', async t => {
                 assert.equal(await page.evaluate(() => navigator.clipboard.readText()), 'LLAVE-SINTETICA');
                 assert.ok(await page.getByRole('link', { name: 'Descargar QR' }).getAttribute('href'));
             }
+            await page.evaluate(() => scrollTo(0, 0));
             await page.screenshot({ path: path.join(process.env.EDU_BREB_SCREENSHOTS, `${name}-${viewport.width}.png`), fullPage: true });
         }
     }
     await page.goto(base + process.env.EDU_BREB_FORM);
     await page.locator('[name="proposito"]').selectOption('INSTALLMENT');
-    await page.locator('[name="monto"]').fill('125000');
+    await page.locator('[name="monto"]').fill('125000.25');
     await page.locator('[name="archivo"]').setInputFiles(process.env.EDU_BREB_RECEIPT);
     assert.match(await page.locator('[name="fecha"]').inputValue(), /^\d{4}-\d{2}-\d{2}$/);
-    await Promise.all([page.waitForURL('**/pagos/*/'), page.getByRole('button', { name: 'Enviar reporte' }).click()]);
+    const [posted] = await Promise.all([page.waitForRequest(request => request.method() === 'POST'), page.getByRole('button', { name: 'Enviar reporte' }).click()]);
+    assert.match(posted.postData(), /name="monto"\r?\n\r?\n125000\.25/);
+    await page.waitForURL('**/pagos/*/');
     assert.equal(await page.getByRole('heading', { name: 'Revision pendiente' }).count(), 1);
     await page.screenshot({ path: path.join(process.env.EDU_BREB_SCREENSHOTS, 'enviado-390.png'), fullPage: true });
     // Evita que el scroll suave desplace el toque automatizado con JS deshabilitado.
-    const nojs = await browser.newContext({ javaScriptEnabled: false, reducedMotion: 'reduce', isMobile: true, hasTouch: true, viewport: { width: 375, height: 667 } });
+    const nojs = await browser.newContext({ locale: 'es-CO', javaScriptEnabled: false, reducedMotion: 'reduce', isMobile: true, hasTouch: true, viewport: { width: 375, height: 667 } });
+    t.after(() => nojs.close());
     await nojs.route('**/*', route => new URL(route.request().url()).origin === base ? route.continue() : route.abort());
     await nojs.addCookies([{ name: 'sessionid', value: process.env.EDU_BREB_SESSION, url: base }]);
     const basic = await nojs.newPage();
@@ -58,13 +63,47 @@ test('BRE-B movil: QR, llave, reporte, estado y bandeja', async t => {
     assert.equal(await basic.getByRole('heading', { name: 'Revision pendiente' }).count(), 1);
     await basic.screenshot({ path: path.join(process.env.EDU_BREB_SCREENSHOTS, 'sin-js-375.png'), fullPage: true });
     await context.addCookies([{ name: 'sessionid', value: process.env.EDU_BREB_OPERATOR_SESSION, url: base }]);
-    for (const viewport of [{ width: 375, height: 667 }, { width: 390, height: 844 }]) {
+    for (const viewport of viewports) {
         await page.setViewportSize(viewport);
         for (const [name, url] of [['bandeja', '/financiacion-educativa/operaciones/recaudos/'], ['detalle', process.env.EDU_BREB_DETAIL]]) {
             assert.equal((await page.goto(base + url)).status(), 200);
             assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, name);
+            if (name === 'bandeja') {
+                assert.equal(await page.locator('.edu-recaudos-table td').first().evaluate(td => getComputedStyle(td).display), 'table-cell');
+                assert.equal(await page.locator('.edu-recaudos-table thead').evaluate(head => getComputedStyle(head).position), 'static');
+            }
+            await page.evaluate(() => scrollTo(0, 0));
             await page.screenshot({ path: path.join(process.env.EDU_BREB_SCREENSHOTS, `${name}-${viewport.width}.png`), fullPage: true });
         }
     }
+    await nojs.addCookies([{ name: 'sessionid', value: process.env.EDU_BREB_OPERATOR_SESSION, url: base }]);
+    await basic.goto(base + process.env.EDU_BREB_DETAIL);
+    const confirmation = basic.locator('form[action$="/confirmar/"]');
+    await confirmation.locator('[name="referencia"]').fill('REFERENCIA CON ESPACIO');
+    await confirmation.locator('[name="evidencia_id"]').selectOption(process.env.EDU_BREB_EVIDENCE);
+    await confirmation.locator('[name="observacion"]').fill('Verificacion sintetica para probar errores.');
+    const [invalidPost] = await Promise.all([
+        basic.waitForResponse(response => response.request().method() === 'POST'),
+        confirmation.getByRole('button', { name: 'Confirmar ingreso bancario' }).tap(),
+    ]);
+    assert.equal(invalidPost.status(), 200);
+    await basic.getByRole('alert').waitFor();
+    assert.equal(await basic.locator('[name="referencia"]').inputValue(), 'REFERENCIA CON ESPACIO');
+    assert.equal(await basic.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+    await basic.screenshot({ path: path.join(process.env.EDU_BREB_SCREENSHOTS, 'error-operador-sin-js-375.png'), fullPage: true });
+    const retry = basic.locator('form[action$="/confirmar/"]');
+    assert.equal(await retry.locator('[name="evidencia_id"]').inputValue(), process.env.EDU_BREB_EVIDENCE);
+    assert.equal(await retry.locator('[name="observacion"]').getAttribute('required'), null);
+    await retry.locator('[name="referencia"]').fill('BANCO-BROWSER-UX');
+    await retry.locator('[name="observacion"]').fill('');
+    const [confirmed] = await Promise.all([
+        basic.waitForResponse(response => response.request().method() === 'POST'),
+        retry.getByRole('button', { name: 'Confirmar ingreso bancario' }).tap(),
+    ]);
+    assert.equal(confirmed.status(), 302);
+    await basic.waitForURL(base + process.env.EDU_BREB_DETAIL);
+    await basic.getByRole('heading', { name: /Ingreso confirmado pendiente/ }).waitFor();
+    await basic.getByText('Sin observacion adicional registrada.', { exact: true }).waitFor();
+    await basic.screenshot({ path: path.join(process.env.EDU_BREB_SCREENSHOTS, 'confirmado-sin-js-375.png'), fullPage: true });
     assert.deepEqual(errors, []);
 });

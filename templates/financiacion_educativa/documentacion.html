@@ -21,7 +21,9 @@
                 {% elif solicitud.estado == "CORRECTION_REQUIRED" %}
                     <div class="edu-error-summary" role="status">
                         <strong>Necesitamos una correcci&oacute;n.</strong>
-                        {{ ultima_decision.mensaje_solicitante }}
+                        {% if correccion_ingresos_omitible %}
+                            Revisa los requisitos pendientes indicados abajo. Puedes continuar sin aportar soporte de ingresos.
+                        {% else %}{{ ultima_decision.mensaje_solicitante }}{% endif %}
                     </div>
                 {% elif solicitud.estado == "APPROVED" %}
                     <div class="alert-info" role="status">
@@ -43,7 +45,13 @@
                         {% for requisito in requisitos %}
                             <li class="edu-requirement {% if requisito.cumplido %}is-complete{% endif %}">
                                 <span>
-                                    {{ requisito.descripcion }}
+                                    {% if requisito.codigo == "INCOME_CERTIFICATE" and not requisito.obligatorio %}
+                                        Soporte de ingresos &mdash; opcional
+                                        <small>Puedes continuar sin cargarlo. Si lo aportas, debe superar sus validaciones.</small>
+                                        {% if documental_editable and deudor and not requisito.aportado %}
+                                            <a href="{% url 'financiacion_educativa_web:documento-cargar' solicitud.id %}?tipo=INCOME_CERTIFICATE&amp;participante={{ deudor.id }}">Aportar soporte opcional</a>
+                                        {% endif %}
+                                    {% else %}{{ requisito.descripcion }}{% endif %}
                                     {% if not requisito.cumplido %}
                                         {% if requisito.codigo == "STUDENT" %}
                                             <a href="{% url 'financiacion_educativa_web:participante-nuevo' solicitud.id %}?tipo=estudiante">Completar</a>
@@ -62,7 +70,9 @@
                                         {% endif %}
                                     {% endif %}
                                 </span>
-                                {% if requisito.cumplido %}
+                                {% if not requisito.obligatorio and not requisito.aportado %}
+                                    <span class="edu-badge">No requerido</span>
+                                {% elif requisito.cumplido %}
                                     <span class="edu-badge edu-badge-success"><i class="bi bi-check-circle" aria-hidden="true"></i> Completo</span>
                                 {% else %}
                                     <span class="edu-badge edu-badge-warning"><i class="bi bi-clock" aria-hidden="true"></i> Pendiente</span>

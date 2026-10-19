@@ -1,12 +1,16 @@
 from django import forms
 from decimal import Decimal
+from django.utils import timezone
 
-from financiacion_educativa.models_recaudos import ReporteRecaudoEducativo
-from financiacion_educativa.services.recaudos import monto_cop, fecha_transferencia
+from instituciones.models import Institucion
+from financiacion_educativa.models_recaudos import ArchivoRecaudoEducativo, ReporteRecaudoEducativo
+from financiacion_educativa.services.recaudos import monto_cop, fecha_transferencia, evidencias_bancarias_elegibles
 
 
 class DatosTransferenciaForm(forms.Form):
-    monto = forms.DecimalField(label='Monto en COP', max_digits=16, decimal_places=2, min_value=Decimal('0.01'))
+    monto = forms.DecimalField(label='Monto en COP', max_digits=16, decimal_places=2, min_value=Decimal('0.01'),
+        widget=forms.NumberInput(attrs={'inputmode': 'decimal', 'step': '0.01'}),
+        help_text='Pesos colombianos, sin separadores de miles y con hasta dos decimales.')
     fecha = forms.DateField(label='Fecha de transferencia', widget=forms.DateInput(format='%Y-%m-%d', attrs={'type': 'date'}))
 
     def clean_monto(self):
@@ -24,12 +28,29 @@ class ReportarPagoForm(DatosTransferenciaForm):
     archivo = forms.FileField(label='Comprobante obligatorio', widget=forms.ClearableFileInput(attrs={'accept': 'image/jpeg,image/png,application/pdf'}))
 
 
+class EvidenciaBancariaChoiceField(forms.ModelChoiceField):
+    def label_from_instance(self, obj):
+        fecha = timezone.localtime(obj.creado_en).strftime('%d/%m/%Y %H:%M')
+        return f'{fecha} / {str(obj.pk)[:8]} / Sin hallazgos de seguridad'
+
+
 class ConfirmarRecaudoForm(DatosTransferenciaForm):
     fecha = forms.DateField(label='Fecha efectiva bancaria', widget=forms.DateInput(format='%Y-%m-%d', attrs={'type': 'date'}))
     referencia = forms.CharField(label='Referencia unica verificada en el banco', max_length=120)
-    evidencia_id = forms.UUIDField(label='UUID de evidencia bancaria escaneada')
-    observacion = forms.CharField(label='Verificacion bancaria / explicacion de diferencia de monto', max_length=1000, widget=forms.Textarea(attrs={'rows': 3}))
+    evidencia_id = EvidenciaBancariaChoiceField(label='Evidencia bancaria segura',
+        queryset=ArchivoRecaudoEducativo.objects.none(), empty_label='Selecciona una evidencia bancaria',
+        error_messages={'invalid_choice': 'La evidencia no esta disponible para tu cuenta o no tiene un escaneo vigente limpio.'},
+        help_text='Solo evidencia propia y bancaria. Reutilizar un soporte no acredita por si solo este movimiento.')
+    observacion = forms.CharField(label='Observacion adicional (opcional)', required=False,
+        max_length=1000, widget=forms.Textarea(attrs={'rows': 3}))
     justificacion_diferencia = forms.CharField(label='Si el monto difiere: explicacion obligatoria', required=False, max_length=500, widget=forms.Textarea(attrs={'rows': 2}))
+
+    def __init__(self, *args, actor=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['evidencia_id'].queryset = evidencias_bancarias_elegibles(actor)
+
+    def clean_evidencia_id(self):
+        return self.cleaned_data['evidencia_id'].pk
 
 
 class EvidenciaBancariaForm(forms.Form):
@@ -42,9 +63,19 @@ class RechazarReporteForm(forms.Form):
 
 class FiltrosRecaudosForm(forms.Form):
     estado = forms.ChoiceField(required=False, choices=[('', 'Todos'), ('PENDING', 'Revision pendiente'), ('CONFIRMED', 'Ingreso confirmado'), ('REJECTED', 'No conciliado')])
-    institucion = forms.UUIDField(required=False, label='Institucion (UUID)')
+    institucion = forms.ModelChoiceField(required=False, label='Institucion',
+        queryset=Institucion.objects.none(), empty_label='Todas las instituciones')
     desde = forms.DateField(required=False, widget=forms.DateInput(format='%Y-%m-%d', attrs={'type': 'date'}))
     hasta = forms.DateField(required=False, widget=forms.DateInput(format='%Y-%m-%d', attrs={'type': 'date'}))
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # El dashboard operativo existente tiene alcance global por permiso.
+        self.fields['institucion'].queryset = Institucion.objects.order_by('nombre_comercial', 'pk')
+
+    def clean_institucion(self):
+        institucion = self.cleaned_data['institucion']
+        return institucion.pk if institucion else None
 
     def clean(self):
         datos = super().clean()
