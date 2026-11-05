@@ -1,4 +1,5 @@
 import uuid
+from io import BytesIO
 from decimal import Decimal
 
 from django.conf import settings
@@ -56,7 +57,7 @@ def _reportes():
 def pagos_view(request, solicitud_id):
     fotografia = _propiedad(request, solicitud_id)
     receptor = servicios.receptor_vigente()
-    form = ReportarPagoForm(request.POST or None, request.FILES or None, initial={
+    form = ReportarPagoForm(request.POST if request.method == 'POST' else None, request.FILES if request.method == 'POST' else None, initial={
         'clave': uuid.uuid4(), 'receptor_id': receptor.pk if receptor else None,
         'monto': fotografia.proxima_cuota, 'fecha': timezone.localdate(),
     })
@@ -68,9 +69,17 @@ def pagos_view(request, solicitud_id):
         else:
             messages.success(request, 'Reporte recibido. La confirmacion requiere verificar el ingreso en el banco.' if not replay else 'Este reporte ya fue recibido; no se creo otro.')
             return redirect('financiacion_educativa_web:reporte-pago', solicitud_id=solicitud_id, reporte_id=reporte.pk)
+    try:
+        receptor_enviado = uuid.UUID(request.POST.get('receptor_id', ''))
+    except (ValueError, TypeError, AttributeError):
+        receptor_enviado = None
+    receptor_cambio = request.method == 'POST' and receptor_enviado is not None and receptor_enviado != (receptor.pk if receptor else None)
+    if receptor_cambio:
+        receptor = None
     return render(request, 'financiacion_educativa/recaudos/reportar.html', {
         'fotografia': fotografia, 'solicitud': fotografia.solicitud, 'receptor': receptor, 'form': form,
         'reportes': _reportes().filter(solicitud_id=solicitud_id),
+        'receptor_cambio': receptor_cambio,
     })
 
 
@@ -88,9 +97,11 @@ def _archivo_response(archivo, descargar=False):
         raise Http404('El soporte todavia no esta disponible para consulta.')
     extension = {'image/jpeg': 'jpg', 'image/png': 'png', 'application/pdf': 'pdf'}[archivo.content_type]
     try:
-        stream = archivo.archivo.open('rb')
-    except (OSError, ValueError):
+        contenido = servicios.leer_soporte_seguro(archivo)
+    except ValidationError:
         raise Http404('Soporte no disponible.') from None
+    # Se sirve el mismo contenido verificado, sin reabrir un archivo mutable.
+    stream = BytesIO(contenido)
     respuesta = FileResponse(stream, content_type=archivo.content_type, filename=f'soporte.{extension}', as_attachment=descargar)
     respuesta['Cache-Control'] = 'private, no-store'
     respuesta['X-Content-Type-Options'] = 'nosniff'

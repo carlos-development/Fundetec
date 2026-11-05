@@ -1,6 +1,6 @@
 # Roadmap de financiacion educativa
 
-Actualizado: 2026-10-19. Producto independiente de libranza y gestion_creditos.
+Actualizado: 2026-11-04. Producto independiente de libranza y gestion_creditos.
 El backlog legado se conserva en `archivo/legacy/` y no gobierna este roadmap.
 
 ## Estado y criterios de cierre
@@ -9,9 +9,14 @@ El backlog legado se conserva en `archivo/legacy/` y no gobierna este roadmap.
 | --- | --- | --- |
 | Firma, webhook y API | Cierre verificado en produccion para los dos casos Jowalth | JOW-4FE29332-PROD y JOW-88C00418-PROD devuelven APPROVED, course_authorized=true, fecha de autorizacion y financial_terms. Las fechas de firma del proceso y del artefacto coinciden. Verificacion operativa confirmada por Carlos; no constituye certificacion de otros casos. |
 | Dashboard financiero inicial | Desplegado y comprobado en produccion por Carlos | Indicadores y listado reconcilian, solo cuentan contratos realmente autorizados, excluyen simulaciones y muestran el calendario firmado. |
-| Fase 2A: reportes BRE-B y conciliacion | Desplegada en staging 317c2c8; ciclo sintetico verificado por Carlos; produccion pendiente | Reporte movil, comprobante y evidencia bancaria SAFE con ClamAV real, confirmacion ficticia COP 157738. No acredita transferencia real ni aplicacion al contrato. |
-| Experiencia de recaudos y conciliacion | Implementada y validada localmente; pendiente revision y certificacion staging | Errores por campo sin perder datos, seleccion de evidencia propia SAFE sin UUID manual, revalidacion e integridad al confirmar, observacion opcional sin diferencia y replay. No aplica pagos. |
+| Fase 2A: reportes BRE-B y conciliacion | Carlos confirma despliegue 300bf42 e infraestructura instalada; canal productivo deshabilitado | Base local coincide con ese SHA. Activacion pendiente de datos bancarios oficiales, permisos, diagnostico y certificacion del ambiente; no se accedio al servidor. El ciclo sintetico anterior no acredita una transferencia real. |
+| Soporte de ingresos configurable | Carlos confirma soporte opcional activo en Jowalth | Confirmacion operativa recibida; no se modifico configuracion ni se consulto el servidor en esta revision. Las demas instituciones conservan su politica. |
+| Experiencia de recaudos y conciliacion | Incorporada en 300bf42; cierre local adicional en revision | Acceso desde finanzas, QR/soportes SAFE e integridad verificada antes de servir/activar; rotacion exige recarga sin cambiar QR silenciosamente. Confirmacion bancaria pendiente de aplicacion, no cuota pagada. |
 | Fase 2B: libro de aplicaciones | Siguiente prioridad; reglas pendientes deben explicitarse | Confirmar y aplicar ingreso una sola vez, con cuotas pagadas/parciales, capital e intereses aplicados, saldos/cortes y cierre reproducibles, sin alterar la fotografia firmada. |
+| Distribucion financiera | Pendiente de libro 2B y convenio confirmado | Originacion 10% del monto solicitado ya calculada por motor/fotografia. Reparto propuesto de intereses 80% APROBADO y 20% Jowalth sin confirmar ni implementar. Capital, IVA, garantia y seguro separados; no repartir el ingreso bruto ni inventar reglas. |
+| Dashboard de recaudos y aplicaciones | Consulta bancaria implementada; contabilidad pendiente | Ingresos confirmados por fecha bancaria, sin duplicados. Saldos reales, capital pagado, intereses cobrados y cuotas pagadas/parciales dependen del libro 2B, no del reporte ni del calendario firmado. |
+| Notificaciones de pagos | Pendiente de eventos/plantillas y aprobacion operativa | No existen nuevos correos BRE-B. Diferenciar reporte recibido, ingreso confirmado y aplicacion realizada; reutilizar outbox/idempotencia y matriz institucional sin reenviar invitaciones. |
+| Envio del plan PDF | Pendiente de generacion privada y evento de envio aprobado | Existe plan contractual HTML desde fotografia; no endpoint/artefacto PDF independiente del plan ni su envio implementados. Definir destinatario/momento, version contractual vs proyeccion y entrega idempotente por outbox. No prometer un plan actualizado sin libro. |
 | Fase 2C: ePayco | Pendiente, sin adaptadores ni integracion activados | Comercio y credenciales sandbox autorizados; confirmacion servidor a servidor autenticada, importe/moneda/orden, idempotencia, ambiente y reversos. Nunca confirmar por la redireccion del navegador. |
 | Saldos y causacion de intereses | Pendiente de pagos | Saldo real y capital/intereses aplicados derivan del libro de pagos conciliados; calculos reproducibles a fecha de corte y separados del calendario programado. |
 | Mora | Pendiente de politica aprobada | Aprobar regla, tasas, base y fechas; implementar y probar sobre pagos conciliados. El dashboard inicial no calcula cargos por mora. |
@@ -42,7 +47,7 @@ webhook simulado. Check, comprobacion de migraciones y diff --check correctos.
 
 ### Parametros financieros
 
-COP, metodo frances, tasa mensual 1%, originacion 10%, IVA de originacion 19%,
+COP, metodo frances, tasa mensual 1%, originacion 10% del monto solicitado, IVA de originacion 19%,
 garantia 2%, seguro de vida 0,3711%. Los cargos y el calendario de cada contrato
 se consultan desde su fotografia versionada, no se recalculan en el dashboard.
 Pagos anticipados: intereses a la fecha y reduccion de plazo manteniendo cuota.
@@ -50,6 +55,13 @@ Para 2B se conserva causacion diaria base comercial 30 y vencimientos sin
 desplazamiento por festivos. Antes de automatizar aplicaciones deben aprobarse
 pagos tardios/parciales, excedentes, fechas retroactivas, correcciones y cierre.
 No existe una politica de cargos por mora aprobada para este incremento.
+
+El reparto 80% APROBADO / 20% Jowalth de intereses es una propuesta pendiente
+de confirmar en el convenio. No modifica tasas, contratos ni calculos actuales.
+Debe definirse su base (intereses efectivamente aplicados/recaudados o la que
+apruebe el convenio), corte, participantes, redondeo y efecto de compensaciones.
+No mezclarlo con originacion, capital, IVA, garantia o seguro ni implementarlo
+como reparto del dinero bruto recibido.
 
 ## Dashboard inicial y verificacion
 
@@ -71,9 +83,9 @@ con fechas diferentes requieren comprobacion operativa y no se reparan al consul
 Cada fotografia elegible se cuenta una vez, independientemente de relaciones
 historicas. Las cifras se pueden abrir para consultar todos sus componentes.
 
-En produccion, el dashboard inicial no acredita pagos: capital pagado, intereses
-recaudados, mora efectiva y saldo real figuran como no disponibles. Fase 2A agrega
-en staging ingresos confirmados pendientes de aplicacion; tampoco son cuotas
+El dashboard inicial no acredita pagos: capital pagado, intereses
+recaudados, mora efectiva y saldo real figuran como no disponibles. Fase 2A agrega,
+cuando se habilita, ingresos confirmados pendientes de aplicacion; tampoco son cuotas
 pagadas ni capital amortizado. Una suma vacia de contratos elegibles si es cero;
 eso no significa una cartera conciliada.
 
@@ -213,3 +225,100 @@ ingreso historico no cambia. Check sin incidencias, makemigrations sin cambios,
 diff --check y node --check del test modificado correctos. No se ejecuto la
 suite educativa completa ni se implementaron aplicaciones contables, saldos
 reales, politicas pendientes, migraciones nuevas o cambios de la API contractual.
+
+## Cierre del canal BRE-B: 2026-11-04
+
+Base local main 300bf42bef117c85a1d31be6fa993736371c59d8, inicialmente limpia.
+El ultimo despliegue informado por el usuario coincide con el codigo. Infraestructura
+instalada y flag productiva false son antecedentes aportados, no verificados aqui.
+No se consultaron servidores ni se activo el canal.
+
+Faltantes concretos corregidos: enlace de pagos desde finanzas (destino real de
+reanudacion de APPROVED); validacion de bytes/hash/tamano antes de servir QR o
+soportes y antes de activar receptor; receptor inutilizable si falta o cambia
+su QR; POST de version sustituida exige recarga sin mostrar el QR nuevo; POST
+vacio conserva errores. Se muestran banco y cuenta enmascarada. Replay, permisos,
+propiedad, SAFE, referencia unica global e inmutabilidad conservados. Una respuesta
+privada entrega los mismos bytes verificados, no reabre un archivo modificable.
+
+Procedimiento y datos operativos: `docs/ACTIVACION_CANAL_BREB.md`, con diagnostico
+sin secretos, permisos exactos, staging conocido, produccion parametrizada con
+identidades verificadas y rollback sin borrar evidencia. La plantilla productiva
+parametrizada se agrega en el cierre UX posterior; exige contrastar la unidad
+instalada, sin inventar nombre ni rutas.
+
+### Cierre UX movil posterior (2026-11-04, pendiente de versionar)
+
+Se conserva el despliegue confirmado por Carlos como antecedente, no como prueba
+del codigo local sin commit. Pagos separa cuota/capital contractuales de saldos,
+presenta llave, titular, cuenta enmascarada y QR privado versionado; instrucciones
+secundarias en details. Reporte corto, errores con datos conservados y seguimiento
+visual hasta ingreso confirmado pendiente de aplicacion. Funciona sin JavaScript.
+Conciliacion agrupa evidencia propia SAFE y confirmacion bancaria, conserva la
+justificacion obligatoria de diferencias. No altera contratos ni aplica dinero.
+
+Plantilla productiva: `deploy/systemd/fundetec-production-receipts-scan.service.template`,
+no es copia instalable de staging: identidades/rutas requieren contraste, condicion
+production + canal habilitado, escritura limitada al almacenamiento privado y
+SIGTERM. Instalacion y rollback en `docs/ACTIVACION_CANAL_BREB.md`.
+No se instala nada en servidores. Validacion actual: 79 pruebas seleccionadas
+(test_recaudos_ux, test_recaudos_breb, test_recaudos_production_unit), 108.852 s:
+74 aprobadas y cinco concurrencias PostgreSQL SKIPPED. Nueva comprobacion Docker:
+pipe dockerDesktopLinuxEngine ausente; no se creo contenedor ni base compartida.
+Browser final: una prueba OK en 12.993 s, Edge 375x667, 390x844, 1280x900,
+copia de llave, QR, formulario, seguimiento, conciliacion y errores sin JS;
+ingreso confirmado consultado por estudiante sin marcar aplicacion completada.
+Capturas sinteticas fuera del repositorio:
+`C:/Users/User/AppData/Local/Temp/fundetec-breb-movil-52u6xf77`.
+Inspeccion visual movil/escritorio sin desbordamiento; no sustituye certificacion
+fisica Safari/iPhone ni Chrome/Android con banco real. Check sin incidencias,
+makemigrations sin cambios; node --check de ambos scripts y Bash -n de once
+bloques operativos correctos. systemd-analyze no disponible en Windows: verificar
+la unidad renderizada en Linux antes de instalar. Pruebas automaticas de plantilla
+verifican comando continuo, identidades, rutas, protecciones y condicion cerrada.
+Las cifras de la seccion anterior son evidencia historica, no repeticion actual.
+
+Validacion propia: seleccion inicial de 90 pruebas (test_recaudos_ux,
+test_recaudos_breb y test_dashboard_obligaciones), 171.894 segundos: 85 OK y
+5 concurrencias PostgreSQL SKIPPED. Docker Desktop no tiene motor disponible;
+no se instalo ni se inicio, ni se consultaron bases compartidas. No presentar
+la validacion PostgreSQL de octubre como una ejecucion actual.
+Tras el ajuste final: tres pruebas OK en 14.382 segundos, incluida no reapertura
+del soporte, version sustituida y browser con enlace finanzas -> pagos.
+Browser: Edge headless, 375x667, 390x844, 1280x900, es-CO y confirmacion sin JS;
+capturas sinteticas en `C:/Users/User/AppData/Local/Temp/fundetec-breb-movil-d_0ejvh9`.
+Un intento previo no arranco por una instalacion temporal incompleta de Playwright;
+se uso despues la cache local ya disponible, sin instalar dependencias.
+Check: cero incidencias. Makemigrations --check --dry-run: sin cambios.
+Diff --check, node --check del test modificado y sintaxis Bash de los siete
+bloques del runbook: OK. No se ejecuto la suite educativa completa.
+
+Pendientes antes de activar dinero real: receptor/QR/llave oficiales cotejados,
+permisos del conciliador y verificacion bancaria, salud y ambiente de web/scanner,
+certificacion staging/iPhone/Android y concurrencias en PostgreSQL aislado.
+Orden siguiente: confirmar politica 2B -> libro atomico e idempotente ->
+dashboard contable desde aplicaciones -> distribucion versionada con convenio
+confirmado -> notificaciones de cada evento por outbox -> envio privado/idempotente
+del plan PDF con version y momento aprobados. Una notificacion de reporte puede
+definirse antes del libro, pero nunca anunciar aplicacion ni cuota pagada.
+No hay commit, push, despliegue, cambios de servidor o llamadas a proveedores reales.
+
+### Ajustes finales BRE-B (2026-11-05)
+
+QR visible desde el inicio, enlace Ya transferi hacia formulario enfocable con y
+sin JavaScript. Estado del estudiante: Transferencia confirmada, con una unica
+explicacion de aplicacion pendiente. Verificacion de seguridad completada no
+equivale a validacion bancaria. Justificacion desplegable: abre al cambiar monto,
+conserva datos/errores y el servidor sigue exigiendola sin JavaScript.
+Runbook distingue primera instalacion y actualizacion del scanner, con reversion
+para cada caso y sin duplicar procesos. Las cinco concurrencias siguen pendientes;
+comando y condiciones de PostgreSQL aislado de pruebas en ACTIVACION_CANAL_BREB.md.
+
+Regresiones de este cierre: 36 pruebas UX y dos de plantilla aprobadas. El browser
+inicial fallo por no admitir el fragmento del enlace conservado en un redirect;
+se ajusto solo esa expectativa y se repitio el browser: OK, 11.896 s.
+Son 39 pruebas distintas cubiertas; no se repitio la suite completa ni PostgreSQL.
+Capturas finales sinteticas fuera del repositorio:
+`C:/Users/User/AppData/Local/Temp/fundetec-breb-movil-22a_66nj`.
+Sintaxis de ambos scripts, doce bloques Bash y diff --check correctos.
+Sin commit, push, despliegue, cambios de servidor ni llamadas reales.

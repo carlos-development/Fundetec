@@ -58,6 +58,13 @@ def _verificar_integridad_soporte(archivo, campo=None):
     if len(contenido) != archivo.tamano_bytes or hashlib.sha256(contenido).hexdigest() != archivo.sha256:
         mensaje = 'La integridad del soporte no coincide con el escaneo. No se puede confirmar.'
         raise ValidationError({campo: mensaje} if campo else mensaje)
+    return contenido
+
+
+def leer_soporte_seguro(archivo):
+    if archivo.estado_escaneo != 'SAFE':
+        raise ValidationError('El soporte debe superar el escaneo antes de consultarlo.')
+    return _verificar_integridad_soporte(archivo)
 
 
 def habilitados():
@@ -166,6 +173,10 @@ def crear_receptor(*, entidad, identificador_cuenta, titular, llave, qr, actor):
 def receptor_vigente():
     evento = EventoReceptorBrebEducativo.objects.select_related('receptor__cuenta', 'receptor__qr').order_by('-pk').first()
     if evento and evento.habilitado and evento.receptor.qr.estado_escaneo == 'SAFE':
+        try:
+            _verificar_integridad_soporte(evento.receptor.qr)
+        except ValidationError:
+            return None
         return evento.receptor
     return None
 
@@ -178,6 +189,8 @@ def activar_receptor(*, receptor_id, actor, motivo, habilitado=True):
     receptor = ReceptorBrebEducativo.objects.select_for_update().get(pk=receptor_id)
     if habilitado and receptor.qr.estado_escaneo != 'SAFE':
         raise ValidationError('El QR debe tener un escaneo limpio antes de activarlo.')
+    if habilitado:
+        leer_soporte_seguro(receptor.qr)
     return EventoReceptorBrebEducativo.objects.create(
         receptor=receptor, habilitado=habilitado, actor=actor, motivo=motivo.strip(),
     )

@@ -3,23 +3,36 @@
 {% block extra_head %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/financiacion_educativa_recaudos.css' %}">{% endblock %}
 {% block title %}Reportar un pago | Aprobado{% endblock %}
 {% block content %}<section class="edu-page-band"><div class="edu-page-shell edu-recaudos-shell">
-<header class="edu-page-heading"><h1>Reportar un pago</h1><p>{{ solicitud.referencia_externa }} &middot; {{ solicitud.nombre_curso }}</p></header>
+<header class="edu-page-heading"><h1>Pagos y transferencias</h1><p>{{ solicitud.nombre_curso }}</p></header>
+<dl class="edu-recaudos-summary edu-recaudos-contract"><div><dt>Cuota pactada en el contrato</dt><dd class="edu-recaudos-amount">{{ fotografia.valor_cuota_estimada|cop }}</dd></div><div><dt>Capital financiado contractual</dt><dd>{{ fotografia.capital_financiado|cop }}</dd></div></dl>
+<p class="edu-recaudos-caption">Importes del contrato, no saldos reales. El reporte no actualiza tu deuda.</p>
 {% if receptor %}<div class="edu-recaudos-layout">
 <section class="edu-recaudos-band">
     <header class="edu-recaudos-step"><span aria-hidden="true">1</span><h2>Pagar con BRE-B</h2></header>
-    <dl class="edu-recaudos-summary"><div><dt>Titular</dt><dd>{{ receptor.titular }}</dd></div><div><dt>Cuota contractual sugerida</dt><dd class="edu-recaudos-amount">{{ fotografia.proxima_cuota|cop|default:"Consulte el calendario contractual" }}</dd></div></dl>
+    <label for="breb-key">Llave BRE-B</label><div class="edu-recaudos-copy"><input id="breb-key" type="text" value="{{ receptor.llave }}" readonly><button type="button" id="copy-breb" hidden title="Copiar llave" aria-label="Copiar llave"><i class="bi bi-copy" aria-hidden="true"></i> Copiar</button></div><p id="copy-result" role="status"></p>
+    <dl class="edu-recaudos-summary"><div><dt>Titular</dt><dd>{{ receptor.titular }}</dd></div><div><dt>Entidad y cuenta de destino</dt><dd>{{ receptor.cuenta }}</dd></div></dl>
+    <p>Copia la llave y abre tu banco. Verifica el titular antes de transferir.</p>
+    <p><a class="edu-recaudos-button is-secondary" href="{% url 'financiacion_educativa_web:pago-qr' solicitud.pk receptor.pk %}?download=1"><i class="bi bi-download" aria-hidden="true"></i> Descargar QR</a></p>
     {% if receptor.qr.content_type == 'application/pdf' %}<a class="edu-inline-link" target="_blank" rel="noopener" href="{% url 'financiacion_educativa_web:pago-qr' solicitud.pk receptor.pk %}">Ver QR oficial en PDF</a>
     {% else %}<img class="edu-recaudos-qr" src="{% url 'financiacion_educativa_web:pago-qr' solicitud.pk receptor.pk %}" alt="QR oficial del receptor BRE-B">{% endif %}
-    <p><a href="{% url 'financiacion_educativa_web:pago-qr' solicitud.pk receptor.pk %}?download=1"><i class="bi bi-download" aria-hidden="true"></i> Descargar QR</a></p>
-    <label for="breb-key">Llave BRE-B</label><div class="edu-recaudos-copy"><input id="breb-key" type="text" value="{{ receptor.llave }}" readonly><button type="button" id="copy-breb" hidden title="Copiar llave BRE-B"><i class="bi bi-copy" aria-hidden="true"></i><span>Copiar llave</span></button></div><p id="copy-result" role="status"></p>
-    <p>Puedes usar la llave desde el mismo celular. Leer un QR desde la galer&iacute;a depende de tu aplicaci&oacute;n bancaria.</p>
-    <p class="edu-recaudos-notice">No es un saldo pendiente real ni una liquidaci&oacute;n de pago total. Un QR est&aacute;tico no acredita el monto transferido.</p>
+    <details class="edu-recaudos-disclosure"><summary>Instrucciones para pagar desde tu celular</summary>
+    <p>Desde el mismo celular, descarga el QR y &aacute;brelo desde tu banco si admite im&aacute;genes de la galer&iacute;a. Tambi&eacute;n puedes mantener pulsada la llave para copiarla.</p>
+    <p>El QR no fija el monto ni confirma el ingreso. Verifica los datos de destino y conserva el comprobante.</p></details>
+    <a class="edu-recaudos-button" href="#formulario-reporte">Ya transfer&iacute;: reportar <i class="bi bi-arrow-down" aria-hidden="true"></i></a>
 </section>
-<section class="edu-recaudos-band">
+<section class="edu-recaudos-band" id="reportar-transferencia">
     <header class="edu-recaudos-step"><span aria-hidden="true">2</span><h2>Registrar transferencia</h2></header>
-    <p>El comprobante no confirma por s&iacute; solo el ingreso. Revisaremos el movimiento bancario.</p>
-    <form method="post" enctype="multipart/form-data" class="edu-recaudos-form">{% csrf_token %}{% include "financiacion_educativa/recaudos/_campos.html" %}<button type="submit"><i class="bi bi-send" aria-hidden="true"></i> Enviar reporte</button></form>
+    <p>Indica lo que transferiste y adjunta el comprobante. Revisaremos el ingreso en el banco.</p>
+    <form method="post" enctype="multipart/form-data" class="edu-recaudos-form" id="formulario-reporte" tabindex="-1" aria-label="Reportar transferencia">{% csrf_token %}
+        {% include "financiacion_educativa/recaudos/_errores.html" %}
+        {{ form.clave }}{{ form.receptor_id }}
+        <div class="edu-recaudos-form-row">{% include "financiacion_educativa/recaudos/_campo.html" with field=form.monto %}{% include "financiacion_educativa/recaudos/_campo.html" with field=form.fecha %}</div>
+        {% include "financiacion_educativa/recaudos/_campo.html" with field=form.archivo %}
+        <details class="edu-recaudos-disclosure" id="datos-adicionales"{% if form.errors or form.referencia.value or form.proposito.value != 'INSTALLMENT' %} open{% endif %}><summary>Prop&oacute;sito y referencia</summary>{% include "financiacion_educativa/recaudos/_campo.html" with field=form.proposito %}{% include "financiacion_educativa/recaudos/_campo.html" with field=form.referencia %}</details>
+        {% if form.is_bound and form.errors %}<p class="edu-recaudos-notice">Por seguridad, el navegador no conserva el archivo adjunto. Selecci&oacute;nalo nuevamente; los dem&aacute;s datos se conservan.</p>{% endif %}
+        <button type="submit"><i class="bi bi-send" aria-hidden="true"></i> Enviar reporte</button></form>
 </section></div>
+{% elif receptor_cambio %}<section class="edu-recaudos-band" role="alert"><h2>El medio de pago cambi&oacute;</h2><p>Recarga la p&aacute;gina de pagos y verifica el receptor antes de continuar. No se ha creado un reporte nuevo. Si ya transferiste al receptor anterior, contacta a soporte antes de volver a transferir.</p><dl class="edu-recaudos-summary"><div><dt>Monto ingresado (COP)</dt><dd>{{ form.monto.value|default_if_none:"" }}</dd></div><div><dt>Fecha ingresada</dt><dd>{{ form.fecha.value|default_if_none:"" }}</dd></div><div><dt>Referencia declarada</dt><dd>{{ form.referencia.value|default_if_none:"" }}</dd></div></dl><p>Conserva estos datos antes de recargar. El comprobante debe seleccionarse nuevamente.</p><a href="{% url 'financiacion_educativa_web:pagos' solicitud.pk %}">Recargar datos de pago</a></section>
 {% else %}<section class="edu-recaudos-band"><h2>Canal de pago no disponible</h2><p>El receptor a&uacute;n no est&aacute; configurado o est&aacute; inactivo. Contacta a soporte antes de transferir. No se pueden registrar pagos por este canal todav&iacute;a.</p></section>{% endif %}
 <section class="edu-recaudos-band"><h2>Tus reportes</h2>{% for reporte in reportes %}<div class="edu-recaudos-list-item"><a href="{% url 'financiacion_educativa_web:reporte-pago' solicitud.pk reporte.pk %}">{{ reporte.monto_reportado|cop_recaudo }}</a><p>{{ reporte.creado_en|date:"d/m/Y H:i" }} &middot; {{ reporte.estado_publico }}</p></div>{% empty %}<p>No has reportado transferencias.</p>{% endfor %}</section>
 <p><a href="{% url 'financiacion_educativa_web:estado-solicitud' solicitud.pk %}">Volver a tu solicitud</a></p>

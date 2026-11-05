@@ -1589,6 +1589,7 @@ def _contexto_financiero(solicitud, **extra):
         'fotografia': fotografia,
         'abono_form': ProyeccionAbonoForm(),
         'pago_total_form': ProyeccionPagoTotalForm(solicitud=solicitud),
+        'recaudos_disponibles': settings.FINANCIACION_EDUCATIVA_RECAUDOS_ENABLED and obligaciones_autorizadas().filter(solicitud_id=solicitud.pk).exists(),
         **extra,
     }
 

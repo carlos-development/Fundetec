@@ -23,7 +23,7 @@ class DatosTransferenciaForm(forms.Form):
 class ReportarPagoForm(DatosTransferenciaForm):
     clave = forms.UUIDField(widget=forms.HiddenInput)
     receptor_id = forms.UUIDField(widget=forms.HiddenInput)
-    proposito = forms.ChoiceField(label='Proposito declarado', choices=ReporteRecaudoEducativo.Proposito.choices)
+    proposito = forms.ChoiceField(label='Proposito declarado', choices=ReporteRecaudoEducativo.Proposito.choices, initial='INSTALLMENT')
     referencia = forms.CharField(label='Referencia bancaria (si esta disponible)', required=False, max_length=120)
     archivo = forms.FileField(label='Comprobante obligatorio', widget=forms.ClearableFileInput(attrs={'accept': 'image/jpeg,image/png,application/pdf'}))
 

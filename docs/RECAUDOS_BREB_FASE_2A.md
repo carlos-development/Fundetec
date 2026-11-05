@@ -1,5 +1,11 @@
 # Recaudos educativos BRE-B: Fase 2A
 
+Guia actual de configuracion, permisos, activacion staging/produccion y reversion:
+`docs/ACTIVACION_CANAL_BREB.md` (2026-11-04). El ultimo despliegue informado es
+300bf42, con infraestructura instalada y canal productivo false; no se verifico
+el servidor en esta revision. Las validaciones y secuencia iniciales conservadas
+abajo describen su fecha historica, no una activacion productiva actual.
+
 ## Alcance e identidad bancaria
 
 Reporte, comprobante privado, escaneo, conciliacion manual y cifras de ingresos.
@@ -47,7 +53,9 @@ No se garantiza lectura desde galeria por aplicaciones bancarias.
 JPG/PNG/PDF validos (Pillow/PdfReader), hasta 10 MiB y 20 paginas PDF, sin PDF
 cifrado. Soportes almacenados en storage privado, UUID sin nombre original,
 hash/tamano y finalidad QR/recibo/evidencia bancaria. No se envian a IA.
-Lectura solo SAFE, con no-store, nosniff, no-referrer y CSP sandbox.
+Lectura solo SAFE y de los bytes cuyo hash/tamano se verifican antes de servir,
+con no-store, nosniff, no-referrer y CSP sandbox. Un QR alterado o ausente cierra
+el receptor vigente; no se activa por conservar un veredicto historico CLEAN.
 El escaneo utiliza el adaptador ClamAV existente; no basta el MIME declarado.
 
 ## Configuracion y permisos
@@ -115,8 +123,12 @@ sudo journalctl -u fundetec-staging-receipts-scan.service --since '10 minutes ag
 La bandeja `/financiacion-educativa/operaciones/recaudos/` separa reportados
 pendientes por creacion e ingresos confirmados por fecha efectiva del banco.
 La evidencia bancaria independiente se carga desde el detalle del reporte,
-se escanea y su UUID se selecciona para confirmar; no basta el recibo del pagador.
-Cuenta, referencia verificada, monto, fecha, evidencia y observacion obligatorios.
+se escanea y se selecciona por fecha/identificador corto entre soportes propios
+SAFE; no se copia un UUID ni basta el recibo del pagador. El servicio revalida
+propiedad, finalidad, escaneo e integridad al confirmar.
+Cuenta se resuelve desde el reporte. Referencia verificada, monto, fecha y
+evidencia son obligatorios. La observacion adicional es opcional; vacia se
+registra como "Sin observacion adicional registrada.", sin inventar una nota.
 Si difiere el monto, es obligatoria la justificacion separada y se conservan ambos.
 Rechazo requiere motivo publico/siguiente paso y no rechaza la financiacion.
 El ingreso confirmado se cuenta una vez, sin reducir capital ni saldo de deuda.

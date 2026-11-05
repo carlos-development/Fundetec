@@ -5,7 +5,7 @@ from unittest.mock import PropertyMock, patch
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import TestCase, override_settings
+from django.test import RequestFactory, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -26,6 +26,46 @@ class RecaudosUXTests(DatosRecaudosMixin, TestCase):
 
     def accion_url(self, accion):
         return reverse(f'financiacion_educativa_web:operaciones:recaudo-{accion}', args=[self.reporte.pk])
+
+    def test_pagos_compacto_sin_identificadores_y_detalles_nativos(self):
+        self.client.force_login(self.pagador)
+        respuesta = self.client.get(reverse('financiacion_educativa_web:pagos', args=[self.solicitud.pk]))
+        self.assertContains(respuesta, 'Cuota pactada en el contrato')
+        self.assertContains(respuesta, 'no saldos reales')
+        self.assertContains(respuesta, 'id="datos-adicionales"><summary>')
+        self.assertContains(respuesta, 'id="reportar-transferencia"')
+        self.assertContains(respuesta, 'href="#formulario-reporte"')
+        self.assertContains(respuesta, 'id="formulario-reporte" tabindex="-1"')
+        self.assertEqual(respuesta.context['form']['proposito'].value(), 'INSTALLMENT')
+        from django.utils.html import strip_tags
+        texto = strip_tags(respuesta.content.decode())
+        self.assertNotIn(str(self.solicitud.pk), texto)
+        self.assertNotIn(self.solicitud.referencia_externa, texto)
+        self.assertNotIn(str(self.reporte.pk), texto)
+
+    def test_error_abre_datos_adicionales_y_conserva_proposito_referencia(self):
+        self.client.force_login(self.pagador)
+        respuesta = self.client.post(reverse('financiacion_educativa_web:pagos', args=[self.solicitud.pk]), {
+            'clave': str(uuid4()), 'receptor_id': str(self.receptor.pk), 'monto': '-1',
+            'fecha': timezone.localdate().isoformat(), 'proposito': 'PRINCIPAL', 'referencia': 'CONSERVADA',
+        })
+        self.assertContains(respuesta, 'id="datos-adicionales" open')
+        self.assertEqual(respuesta.context['form']['referencia'].value(), 'CONSERVADA')
+        self.assertEqual(respuesta.context['form']['proposito'].value(), 'PRINCIPAL')
+
+    def test_seguimiento_no_presenta_aplicacion_como_completada(self):
+        self.client.force_login(self.pagador)
+        respuesta = self.client.get(reverse('financiacion_educativa_web:reporte-pago', args=[self.solicitud.pk, self.reporte.pk]))
+        self.assertContains(respuesta, 'aria-label="Seguimiento del reporte"')
+        self.assertContains(respuesta, '<li><strong>Aplicaci&oacute;n financiera pendiente</strong>', html=False)
+        self.assertContains(respuesta, 'no vuelvas a transferir')
+
+    def test_conciliacion_justificacion_desplegable_sin_js_y_observacion_secundaria(self):
+        respuesta = self.client.get(self.accion_url('detalle'))
+        self.assertContains(respuesta, 'id="observacion-adicional"><summary>')
+        self.assertContains(respuesta, 'name="justificacion_diferencia"')
+        self.assertContains(respuesta, 'data-monto-reportado="100000.00"><summary>')
+        self.assertContains(respuesta, 'Confirma un ingreso bancario, no una cuota pagada')
 
     def datos(self, **cambios):
         datos = dict(monto='100000.00', fecha=timezone.localdate().isoformat(), referencia='BANCO-UX-001',
@@ -54,7 +94,30 @@ class RecaudosUXTests(DatosRecaudosMixin, TestCase):
         self.assertEqual(respuesta.context['confirmar_form']['monto'].value(), '50000.00')
         self.assertIn('justificacion_diferencia', respuesta.context['confirmar_form'].errors)
         self.assertContains(respuesta, 'Explique expresamente la diferencia')
+        self.assertContains(respuesta, 'data-monto-reportado="100000.00" open')
         self.assertFalse(ConciliacionRecaudoEducativo.objects.exists())
+
+    def test_diferencia_con_error_conserva_justificacion_abierta_y_datos(self):
+        respuesta = self.client.post(self.accion_url('confirmar'), self.datos(
+            monto='50000.00', referencia='REFERENCIA INVALIDA',
+            justificacion_diferencia='Ingreso menor al declarado, verificado en extracto.',
+        ))
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertContains(respuesta, 'data-monto-reportado="100000.00" open')
+        form = respuesta.context['confirmar_form']
+        self.assertEqual(form['monto'].value(), '50000.00')
+        self.assertEqual(form['justificacion_diferencia'].value(), 'Ingreso menor al declarado, verificado en extracto.')
+        self.assertFalse(ConciliacionRecaudoEducativo.objects.exists())
+
+    def test_transferencia_confirmada_muestra_condicion_pendiente_una_vez(self):
+        servicios.confirmar_recaudo(**self.datos_confirmacion(self.reporte))
+        self.client.force_login(self.pagador)
+        respuesta = self.client.get(reverse('financiacion_educativa_web:reporte-pago', args=[self.solicitud.pk, self.reporte.pk]))
+        self.assertContains(respuesta, '<h1>Transferencia confirmada</h1>', html=True)
+        self.assertContains(respuesta, 'La aplicaci&oacute;n a tu cuota est&aacute; pendiente', count=1)
+        self.assertContains(respuesta, 'Verificaci&oacute;n de seguridad completada')
+        self.assertNotContains(respuesta, 'Archivo verificado')
+        self.assertNotContains(respuesta, 'paz y salvo')
 
     def test_evidencia_invalida_exige_reseleccionar_sin_fingir_carga(self):
         respuesta = self.client.post(self.accion_url('evidencia'), {
@@ -264,3 +327,112 @@ class RecaudosUXTests(DatosRecaudosMixin, TestCase):
         actualizada = self.client.get(self.accion_url('detalle'))
         self.assertTrue(actualizada.context['confirmar_form'].fields['evidencia_id'].queryset.filter(pk=pendiente.pk).exists())
         self.assertEqual(ArchivoRecaudoEducativo.objects.count(), total)
+
+    def test_finanzas_enlaza_pagos_solo_para_obligacion_real_y_flag_activo(self):
+        self.client.force_login(self.pagador)
+        url = reverse('financiacion_educativa_web:finanzas', args=[self.solicitud.pk])
+        pagos = reverse('financiacion_educativa_web:pagos', args=[self.solicitud.pk])
+        self.assertContains(self.client.get(url), f'href="{pagos}"')
+        with override_settings(FINANCIACION_EDUCATIVA_RECAUDOS_ENABLED=False):
+            self.assertNotContains(self.client.get(url), f'href="{pagos}"')
+            self.assertEqual(self.client.get(pagos).status_code, 404)
+        from financiacion_educativa.models import ProcesoFirmaEducativa
+
+        ProcesoFirmaEducativa.objects.filter(solicitud=self.solicitud).update(estado='SENT')
+        self.assertNotContains(self.client.get(url), f'href="{pagos}"')
+        self.assertEqual(self.client.get(pagos).status_code, 404)
+
+    def test_finanzas_y_pagos_no_acceden_por_ser_operador_sin_propiedad(self):
+        for nombre in ('finanzas', 'pagos'):
+            self.assertEqual(self.client.get(reverse(f'financiacion_educativa_web:{nombre}', args=[self.solicitud.pk])).status_code, 404)
+
+    def test_qr_alterado_no_se_consulta_ni_permite_nuevos_reportes(self):
+        qr = self.receptor.qr
+        with qr.archivo.storage.open(qr.archivo.name, 'wb') as stream:
+            stream.write(b'qr-sintetico-alterado')
+        self.assertEqual(qr.estado_escaneo, 'SAFE')
+        self.assertIsNone(servicios.receptor_vigente())
+        self.client.force_login(self.pagador)
+        url = reverse('financiacion_educativa_web:pago-qr', args=[self.solicitud.pk, self.receptor.pk])
+        respuesta = self.client.get(url)
+        self.assertEqual(respuesta.status_code, 409)
+        self.assertNotContains(respuesta, qr.archivo.name, status_code=409)
+        with self.assertRaises(ValidationError):
+            self.reportar()
+        self.assertEqual(ReporteRecaudoEducativo.objects.count(), 1)
+
+    def test_activacion_revalida_qr_limpio_y_no_anexa_evento_si_falta_archivo(self):
+        qr = self.receptor.qr
+        anteriores = self.receptor.eventos.count()
+        qr.archivo.storage.delete(qr.archivo.name)
+        with self.assertRaisesMessage(ValidationError, 'soporte no esta disponible'):
+            servicios.activar_receptor(receptor_id=self.receptor.pk, actor=self.actor, motivo='Verificacion sintetica')
+        self.assertEqual(self.receptor.eventos.count(), anteriores)
+        self.assertIsNone(servicios.receptor_vigente())
+
+    def test_descarga_comprobante_revalida_bytes_y_no_filtra_ruta(self):
+        archivo = self.reporte.comprobante
+        with archivo.archivo.storage.open(archivo.archivo.name, 'wb') as stream:
+            stream.write(b'comprobante-sintetico-alterado')
+        self.client.force_login(self.pagador)
+        respuesta = self.client.get(reverse('financiacion_educativa_web:pago-comprobante', args=[self.solicitud.pk, self.reporte.pk]))
+        self.assertEqual(respuesta.status_code, 404)
+        self.assertNotContains(respuesta, archivo.archivo.name, status_code=404)
+        self.assertNotContains(respuesta, self.temporal.name, status_code=404)
+        self.client.force_login(self.actor)
+        self.assertEqual(self.client.get(self.accion_url('soporte')).status_code, 404)
+
+    def test_post_receptor_reemplazado_exige_recarga_sin_ofrecer_qr_nuevo(self):
+        from financiacion_educativa.tests.test_recaudos_breb import pdf_sintetico
+
+        nuevo = servicios.crear_receptor(entidad='OTRO-BANCO', identificador_cuenta='OTRA-CUENTA',
+            titular='RECEPTOR NUEVO SINTETICO', llave='LLAVE-NUEVA-SINTETICA', qr=pdf_sintetico(), actor=self.actor)
+        self.escanear(nuevo.qr_id)
+        servicios.activar_receptor(receptor_id=nuevo.pk, actor=self.actor, motivo='Cambio sintetico')
+        self.client.force_login(self.pagador)
+        url = reverse('financiacion_educativa_web:pagos', args=[self.solicitud.pk])
+        datos = dict(clave=str(uuid4()), receptor_id=str(self.receptor.pk), proposito='INSTALLMENT',
+            monto='100000.00', fecha=timezone.localdate().isoformat(), referencia='CAMBIO-RECEPTOR')
+        respuesta = self.client.post(url, {**datos, 'archivo': imagen_jpeg_prueba()})
+        self.assertContains(respuesta, 'Recargar datos de pago')
+        self.assertContains(respuesta, 'CAMBIO-RECEPTOR')
+        self.assertContains(respuesta, '100000.00')
+        self.assertNotContains(respuesta, 'LLAVE-NUEVA-SINTETICA')
+        self.assertNotContains(respuesta, reverse('financiacion_educativa_web:pago-qr', args=[self.solicitud.pk, nuevo.pk]))
+        self.assertEqual(ReporteRecaudoEducativo.objects.count(), 1)
+        self.assertContains(self.client.get(url), 'LLAVE-NUEVA-SINTETICA')
+
+    def test_replay_previo_al_cambio_receptor_sigue_reutilizando_reporte(self):
+        clave = uuid4()
+        original, _ = self.reportar(clave=clave, referencia='REPLAY-ROTACION')
+        servicios.activar_receptor(receptor_id=self.receptor.pk, actor=self.actor, motivo='Pausa sintetica', habilitado=False)
+        self.client.force_login(self.pagador)
+        datos = dict(clave=str(clave), receptor_id=str(self.receptor.pk), proposito='INSTALLMENT',
+            monto='100000.00', fecha=timezone.localdate().isoformat(), referencia='REPLAY-ROTACION')
+        respuesta = self.client.post(reverse('financiacion_educativa_web:pagos', args=[self.solicitud.pk]), {**datos, 'archivo': imagen_jpeg_prueba()})
+        self.assertEqual(respuesta.status_code, 302)
+        self.assertEqual(respuesta['Location'], reverse('financiacion_educativa_web:reporte-pago', args=[self.solicitud.pk, original.pk]))
+        self.assertEqual(ReporteRecaudoEducativo.objects.count(), 2)
+
+    def test_post_vacio_muestra_errores_de_formulario_no_rotacion(self):
+        self.client.force_login(self.pagador)
+        respuesta = self.client.post(reverse('financiacion_educativa_web:pagos', args=[self.solicitud.pk]), {})
+        self.assertTrue(respuesta.context['form'].is_bound)
+        self.assertContains(respuesta, 'Revisa los datos antes de continuar')
+        self.assertFalse(respuesta.context['receptor_cambio'])
+
+    def test_respuesta_sirve_los_bytes_verificados_no_un_archivo_reabierto(self):
+        from financiacion_educativa.web.recaudos import comprobante_view
+
+        archivo = self.reporte.comprobante
+        with archivo.archivo.open('rb') as stream:
+            originales = stream.read()
+        request = RequestFactory().get('/')
+        request.user = self.pagador
+        respuesta = comprobante_view(request, self.solicitud.pk, self.reporte.pk)
+        try:
+            with archivo.archivo.storage.open(archivo.archivo.name, 'wb') as stream:
+                stream.write(b'contenido-alterado-despues-de-verificar')
+            self.assertEqual(b''.join(respuesta.streaming_content), originales)
+        finally:
+            respuesta.file_to_stream.close()

@@ -1,0 +1,30 @@
+# Plantilla: sustituir todos los marcadores tras contrastar el servidor real.
+# Nunca instalar directamente ni ejecutar junto a otro scanner del mismo canal.
+[Unit]
+Description=Escaneo privado de evidencias BRE-B Fundetec (production)
+After=network.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=@@SERVICE_USER@@
+Group=@@SERVICE_GROUP@@
+WorkingDirectory=@@APP_DIR@@
+EnvironmentFile=@@ENV_FILE@@
+Environment=PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
+# Sin importar Django, conectar a BD ni invocar proveedores. False no reinicia.
+ExecCondition=@@VENV_PYTHON@@ -c "import os,sys; sys.exit(0 if os.environ.get('DEPLOYMENT_ENVIRONMENT') == 'production' and os.environ.get('FINANCIACION_EDUCATIVA_RECAUDOS_ENABLED', '').strip().lower() in ('1','true','yes','on','si','s\u00ed') else 1)"
+ExecStart=@@VENV_PYTHON@@ manage.py procesar_comprobantes_educativos
+Restart=on-failure
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=90
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=@@PRIVATE_ROOT@@
+
+[Install]
+WantedBy=multi-user.target

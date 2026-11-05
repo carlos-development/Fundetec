@@ -15,6 +15,13 @@
                     <p>Valores informativos en COP. Las proyecciones de esta pantalla no registran pagos ni emiten comprobantes.</p>
                 </div>
                 {% if error %}<div class="edu-error-summary" role="alert">{{ error }}</div>{% endif %}
+                {% if recaudos_disponibles %}
+                    <section class="edu-section-block" aria-labelledby="payments-title">
+                        <h2 id="payments-title">Pagos de tu obligaci&oacute;n</h2>
+                        <p>Consulta el receptor BRE-B y reporta una transferencia. Un reporte no acredita una cuota pagada; el ingreso debe verificarse en el banco y queda pendiente de aplicaci&oacute;n financiera.</p>
+                        <a class="edu-button" href="{% url 'financiacion_educativa_web:pagos' solicitud.pk %}">Pagar y reportar transferencia</a>
+                    </section>
+                {% endif %}
 
                 {% if fotografia %}
                     <dl class="edu-finance-compact edu-finance-compact-primary">

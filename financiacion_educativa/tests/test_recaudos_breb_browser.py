@@ -32,6 +32,7 @@ class RecaudosBrowserTests(DatosRecaudosMixin, StaticLiveServerTestCase):
             'EDU_BREB_SESSION': estudiante.cookies['sessionid'].value,
             'EDU_BREB_OPERATOR_SESSION': operador.cookies['sessionid'].value,
             'EDU_BREB_FORM': reverse('financiacion_educativa_web:pagos', args=[self.solicitud.pk]),
+            'EDU_BREB_FINANCE': reverse('financiacion_educativa_web:finanzas', args=[self.solicitud.pk]),
             'EDU_BREB_STATE': reverse('financiacion_educativa_web:reporte-pago', args=[self.solicitud.pk, reporte.pk]),
             'EDU_BREB_DETAIL': reverse('financiacion_educativa_web:operaciones:recaudo-detalle', args=[reporte.pk]),
             'EDU_BREB_EVIDENCE': str(evidencia.pk),
