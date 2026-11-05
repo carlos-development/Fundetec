@@ -3,9 +3,24 @@
     const button = document.getElementById('copy-breb');
     const key = document.getElementById('breb-key');
     const result = document.getElementById('copy-result');
-    const reportLink = document.querySelector('a[href="#formulario-reporte"]');
+    const reportDetails = document.getElementById('reportar-transferencia');
     const reportForm = document.getElementById('formulario-reporte');
-    if (reportLink && reportForm) reportLink.addEventListener('click', () => reportForm.focus());
+    const paymentLink = document.querySelector('a[href="#pagar-breb"]');
+    const payment = document.getElementById('pagar-breb');
+    if (paymentLink && payment) paymentLink.addEventListener('click', () => payment.focus());
+    if (reportDetails && reportForm) {
+        reportDetails.addEventListener('toggle', () => {
+            if (reportDetails.open) reportForm.focus();
+        });
+        const openFromHash = () => {
+            if (location.hash === '#formulario-reporte' || location.hash === '#reportar-transferencia') {
+                reportDetails.open = true;
+                reportForm.focus();
+            }
+        };
+        window.addEventListener('hashchange', openFromHash);
+        openFromHash();
+    }
 
     const difference = document.getElementById('diferencia-monto');
     if (difference) {

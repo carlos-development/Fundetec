@@ -76,3 +76,59 @@
     .edu-recaudos-form input, .edu-recaudos-form select, .edu-recaudos-form textarea, .edu-recaudos-copy input { font-size: 16px; }
     .edu-recaudos-button { width: 100%; }
 }
+
+/* Student payment steps; operator forms keep their existing layout. */
+.edu-breb-student { max-width: 860px; }
+.edu-breb-student .edu-page-heading { margin-bottom: 24px; }
+.edu-breb-student h1 { font-size: 26px; line-height: 1.25; }
+.edu-breb-student h2 { font-size: 21px; margin: 6px 0 12px; }
+.edu-breb-student h3 { font-size: 17px; margin: 0 0 8px; }
+.edu-breb-contract { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 24px; padding: 24px; background: #fff; border: 1px solid var(--edu-line); border-top: 4px solid var(--edu-cyan); border-radius: 8px; }
+.edu-breb-contract dl { margin: 0; }
+.edu-breb-contract dt { font-size: 14px; color: #4f6579; }
+.edu-breb-contract dd { margin: 8px 0 0; font-size: 36px; line-height: 1.1; font-weight: 700; color: var(--edu-ink); }
+.edu-breb-contract > p { grid-column: 1; font-size: 13px; margin: 10px 0 0; color: #4f6579; }
+.edu-breb-contract > .edu-recaudos-button { grid-column: 2; grid-row: 1 / 3; align-self: center; }
+.edu-breb-contract details { grid-column: 1 / -1; padding-top: 16px; margin-top: 16px; border-top: 1px solid var(--edu-line); font-size: 13px; }
+.edu-breb-contract summary { cursor: pointer; color: #34526b; }
+.edu-breb-contract details p { margin: 12px 0 0; }
+.edu-breb-eyebrow { color: #4f6579; font-size: 13px; font-weight: 600; }
+.edu-breb-payment { padding: 28px 0 20px; }
+.edu-breb-payment header > p { margin: 0 0 20px; color: #34526b; font-size: 15px; }
+.edu-breb-payment-grid { display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: 32px; align-items: start; }
+.edu-breb-qr-area { text-align: center; min-width: 0; }
+.edu-breb-qr-area .edu-recaudos-qr { width: 320px; box-sizing: border-box; padding: 16px; background: #fff; border: 1px solid var(--edu-line); border-radius: 8px; margin: 0 auto; }
+.edu-breb-destination { min-width: 0; }
+.edu-breb-destination > p { font-size: 14px; color: #34526b; line-height: 1.5; margin: 0 0 16px; }
+.edu-breb-destination .edu-recaudos-summary { grid-template-columns: minmax(0, 1fr); gap: 14px; margin: 16px 0; }
+.edu-breb-destination .edu-recaudos-summary dd { font-size: 14px; }
+.edu-breb-destination #copy-result { min-height: 20px; margin: 4px 0 0; font-size: 13px; color: #176845; }
+.edu-breb-report { padding: 20px 0; border-bottom: 1px solid var(--edu-line); }
+.edu-breb-report > summary { display: flex; align-items: center; justify-content: center; gap: 12px; list-style: none; min-height: 48px; padding: 12px 18px; box-sizing: border-box; color: #fff; background: #086e9e; font-weight: 600; border-radius: 4px; cursor: pointer; }
+.edu-breb-report > summary::-webkit-details-marker { display: none; }
+.edu-breb-report > summary:hover { background: #075778; }
+.edu-breb-report > summary:focus-visible, .edu-breb-contract summary:focus-visible { outline: 3px solid #e0b000; outline-offset: 3px; }
+.edu-breb-report-heading { padding-top: 24px; }
+.edu-breb-report-heading p { font-size: 14px; color: #34526b; }
+.edu-breb-report .edu-recaudos-form { max-width: 600px; }
+.edu-breb-report .edu-recaudos-form:focus-visible { outline: 2px solid var(--edu-cyan); outline-offset: 6px; }
+.edu-breb-course { color: #4f6579; margin: 0 0 16px; font-size: 14px; }
+.edu-breb-status { padding: 28px; background: #fff; border: 1px solid var(--edu-line); border-top: 4px solid #c38b11; border-radius: 8px; }
+.edu-breb-status.is-confirmed { border-top-color: #18845d; }
+.edu-breb-status.is-warning { border-top-color: #b94f39; }
+.edu-breb-status h1 { margin: 12px 0; }
+.edu-breb-status > p { color: #34526b; line-height: 1.6; max-width: 560px; }
+.edu-breb-status-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 24px 0; }
+.edu-breb-status-summary dd { font-size: 16px; }
+.edu-breb-status-summary .edu-recaudos-amount { font-size: 24px; }
+.edu-breb-report-details { margin: 24px 0; }
+@media (max-width: 700px) {
+    .edu-breb-contract { padding: 20px; grid-template-columns: minmax(0, 1fr); }
+    .edu-breb-contract > .edu-recaudos-button { grid-column: 1; grid-row: auto; margin-top: 18px; width: 100%; }
+    .edu-breb-payment-grid { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+    .edu-breb-qr-area .edu-recaudos-qr { width: 320px; }
+    .edu-breb-desktop-download { display: none; }
+    .edu-breb-status { padding: 20px; }
+    .edu-breb-status-summary { gap: 12px; }
+    .edu-breb-status-summary .edu-recaudos-amount { font-size: 22px; }
+}

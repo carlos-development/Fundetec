@@ -31,10 +31,11 @@ class RecaudosUXTests(DatosRecaudosMixin, TestCase):
         self.client.force_login(self.pagador)
         respuesta = self.client.get(reverse('financiacion_educativa_web:pagos', args=[self.solicitud.pk]))
         self.assertContains(respuesta, 'Cuota pactada en el contrato')
-        self.assertContains(respuesta, 'no saldos reales')
-        self.assertContains(respuesta, 'id="datos-adicionales"><summary>')
-        self.assertContains(respuesta, 'id="reportar-transferencia"')
-        self.assertContains(respuesta, 'href="#formulario-reporte"')
+        self.assertContains(respuesta, 'no un saldo real')
+        self.assertContains(respuesta, 'id="reportar-transferencia">')
+        self.assertContains(respuesta, 'href="#pagar-breb"')
+        self.assertContains(respuesta, 'Ya realic&eacute; la transferencia')
+        self.assertNotContains(respuesta, 'galer&iacute;a')
         self.assertContains(respuesta, 'id="formulario-reporte" tabindex="-1"')
         self.assertEqual(respuesta.context['form']['proposito'].value(), 'INSTALLMENT')
         from django.utils.html import strip_tags
@@ -49,16 +50,17 @@ class RecaudosUXTests(DatosRecaudosMixin, TestCase):
             'clave': str(uuid4()), 'receptor_id': str(self.receptor.pk), 'monto': '-1',
             'fecha': timezone.localdate().isoformat(), 'proposito': 'PRINCIPAL', 'referencia': 'CONSERVADA',
         })
-        self.assertContains(respuesta, 'id="datos-adicionales" open')
+        self.assertContains(respuesta, 'id="reportar-transferencia" open')
         self.assertEqual(respuesta.context['form']['referencia'].value(), 'CONSERVADA')
         self.assertEqual(respuesta.context['form']['proposito'].value(), 'PRINCIPAL')
 
     def test_seguimiento_no_presenta_aplicacion_como_completada(self):
         self.client.force_login(self.pagador)
         respuesta = self.client.get(reverse('financiacion_educativa_web:reporte-pago', args=[self.solicitud.pk, self.reporte.pk]))
-        self.assertContains(respuesta, 'aria-label="Seguimiento del reporte"')
-        self.assertContains(respuesta, '<li><strong>Aplicaci&oacute;n financiera pendiente</strong>', html=False)
-        self.assertContains(respuesta, 'no vuelvas a transferir')
+        self.assertContains(respuesta, 'aria-labelledby="estado-reporte"')
+        self.assertContains(respuesta, 'El reporte no acredita cuota pagada ni saldo actualizado')
+        self.assertContains(respuesta, 'No necesitas volver a transferir')
+        self.assertNotContains(respuesta, 'edu-recaudos-progress')
 
     def test_conciliacion_justificacion_desplegable_sin_js_y_observacion_secundaria(self):
         respuesta = self.client.get(self.accion_url('detalle'))
@@ -113,11 +115,35 @@ class RecaudosUXTests(DatosRecaudosMixin, TestCase):
         servicios.confirmar_recaudo(**self.datos_confirmacion(self.reporte))
         self.client.force_login(self.pagador)
         respuesta = self.client.get(reverse('financiacion_educativa_web:reporte-pago', args=[self.solicitud.pk, self.reporte.pk]))
-        self.assertContains(respuesta, '<h1>Transferencia confirmada</h1>', html=True)
+        self.assertContains(respuesta, '<h1 id="estado-reporte">Transferencia confirmada</h1>', html=True)
         self.assertContains(respuesta, 'La aplicaci&oacute;n a tu cuota est&aacute; pendiente', count=1)
         self.assertContains(respuesta, 'Verificaci&oacute;n de seguridad completada')
         self.assertNotContains(respuesta, 'Archivo verificado')
         self.assertNotContains(respuesta, 'paz y salvo')
+
+    def test_estado_de_seguridad_no_ofrece_descarga_insegura(self):
+        self.client.force_login(self.pagador)
+        url = reverse('financiacion_educativa_web:reporte-pago', args=[self.solicitud.pk, self.reporte.pk])
+        for estado, mensaje in [('PENDING', 'pendiente de verificaci'),
+                                ('ERROR', 'reintentar la verificaci'),
+                                ('BLOCKED', 'bloqueado por seguridad')]:
+            with self.subTest(estado=estado), patch.object(ArchivoRecaudoEducativo, 'estado_escaneo',
+                    new_callable=PropertyMock, return_value=estado):
+                respuesta = self.client.get(url)
+                self.assertContains(respuesta, mensaje)
+                self.assertNotContains(respuesta, 'Descargar comprobante')
+                self.assertNotContains(respuesta, 'Transferencia confirmada')
+
+    def test_reporte_rechazado_muestra_motivo_y_retorno_seguro_sin_rechazar_contrato(self):
+        servicios.rechazar_reporte(reporte_id=self.reporte.pk, actor=self.actor,
+            motivo='No se encontro el movimiento. Verifica la referencia con tu banco.')
+        self.client.force_login(self.pagador)
+        respuesta = self.client.get(reverse('financiacion_educativa_web:reporte-pago', args=[self.solicitud.pk, self.reporte.pk]))
+        self.assertContains(respuesta, 'No se encontro el movimiento')
+        self.assertContains(respuesta, 'Corregir con un nuevo reporte')
+        self.assertContains(respuesta, '#formulario-reporte')
+        self.solicitud.refresh_from_db()
+        self.assertEqual(self.solicitud.estado, 'APPROVED')
 
     def test_evidencia_invalida_exige_reseleccionar_sin_fingir_carga(self):
         respuesta = self.client.post(self.accion_url('evidencia'), {

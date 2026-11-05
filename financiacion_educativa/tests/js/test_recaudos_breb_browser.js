@@ -29,19 +29,44 @@ test('BRE-B movil: QR, llave, reporte, estado y bandeja', async t => {
                 await page.getByRole('button', { name: 'Copiar llave' }).click();
                 await page.getByRole('status').filter({ hasText: 'Llave copiada.' }).waitFor();
                 assert.equal(await page.evaluate(() => navigator.clipboard.readText()), 'LLAVE-SINTETICA');
-                assert.ok(await page.getByRole('link', { name: 'Descargar QR' }).getAttribute('href'));
+                assert.equal(await page.getByRole('link', { name: 'Descargar QR' }).isVisible(), viewport.width > 700);
                 await page.screenshot({ path: path.join(process.env.EDU_BREB_SCREENSHOTS, `qr-${viewport.width}.png`), fullPage: true });
-                const cta = page.getByRole('link', { name: 'Ya transferí: reportar' });
+                const cta = page.getByRole('link', { name: 'Pagar con BRE-B', exact: true });
                 assert.equal(await cta.evaluate(el => getComputedStyle(el).color), 'rgb(255, 255, 255)');
                 await cta.click();
-                assert.equal(await page.evaluate(() => document.activeElement.id), 'formulario-reporte');
+                assert.equal(await page.evaluate(() => document.activeElement.id), 'pagar-breb');
+                assert.equal(await page.locator('[name="monto"]').isVisible(), false);
             }
             await page.evaluate(() => scrollTo(0, 0));
             await page.screenshot({ path: path.join(process.env.EDU_BREB_SCREENSHOTS, `${name}-${viewport.width}.png`), fullPage: true });
+            if (name === 'reportar') {
+                await page.locator('#reportar-transferencia > summary').click();
+                await page.waitForFunction(() => document.activeElement.id === 'formulario-reporte');
+                assert.equal(await page.locator('[name="proposito"]').isVisible(), true);
+                assert.equal(await page.locator('[name="referencia"]').isVisible(), true);
+                await page.evaluate(() => scrollTo(0, 0));
+                await page.screenshot({ path: path.join(process.env.EDU_BREB_SCREENSHOTS, `formulario-${viewport.width}.png`), fullPage: true });
+            }
         }
     }
     await page.goto(base + process.env.EDU_BREB_FORM);
+    await page.locator('#reportar-transferencia > summary').click();
     assert.equal(await page.locator('[name="proposito"]').inputValue(), 'INSTALLMENT');
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.locator('[name="monto"]').fill('-1');
+    await page.locator('[name="archivo"]').setInputFiles(process.env.EDU_BREB_RECEIPT);
+    // Exercise server errors independently of the browser's native negative-amount guard.
+    await page.locator('#formulario-reporte').evaluate(form => { form.noValidate = true; });
+    const [invalidStudent] = await Promise.all([
+        page.waitForResponse(response => response.request().method() === 'POST'),
+        page.getByRole('button', { name: 'Enviar reporte' }).click(),
+    ]);
+    assert.equal(invalidStudent.status(), 200);
+    assert.equal(await page.locator('#reportar-transferencia').evaluate(el => el.open), true);
+    assert.equal(await page.locator('[name="monto"]').inputValue(), '-1');
+    await page.getByRole('alert').waitFor();
+    await page.evaluate(() => scrollTo(0, 0));
+    await page.screenshot({ path: path.join(process.env.EDU_BREB_SCREENSHOTS, 'error-estudiante-390.png'), fullPage: true });
     await page.locator('[name="monto"]').fill('125000.25');
     await page.locator('[name="archivo"]').setInputFiles(process.env.EDU_BREB_RECEIPT);
     assert.match(await page.locator('[name="fecha"]').inputValue(), /^\d{4}-\d{2}-\d{2}$/);
@@ -58,11 +83,9 @@ test('BRE-B movil: QR, llave, reporte, estado y bandeja', async t => {
     const basic = await nojs.newPage();
     assert.equal((await basic.goto(base + process.env.EDU_BREB_FORM)).status(), 200);
     assert.equal(await basic.locator('#breb-key').inputValue(), 'LLAVE-SINTETICA');
-    await basic.locator('a[href="#formulario-reporte"]').tap();
-    assert.match(basic.url(), /#formulario-reporte$/);
-    assert.equal(await basic.evaluate(() => document.activeElement.id), 'formulario-reporte');
+    await basic.locator('#reportar-transferencia > summary').tap();
+    assert.equal(await basic.locator('[name="monto"]').isVisible(), true);
     await basic.locator('[name="monto"]').fill('90000');
-    await basic.locator('#datos-adicionales summary').click();
     await basic.locator('[name="proposito"]').selectOption('PRINCIPAL');
     await basic.locator('[name="archivo"]').setInputFiles(process.env.EDU_BREB_RECEIPT);
     assert.deepEqual(await basic.locator('.edu-recaudos-form').evaluate(form => Array.from(form.elements)
