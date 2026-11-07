@@ -380,6 +380,7 @@ def enviar_pagare_educativo(
     permitir_reintento_permanente=False,
 ):
     from financiacion_educativa.services.pausa_firma import firma_pausada
+    from .anexos_matricula import validar_anexo_artefacto, AnexoMatriculaError
 
     if firma_pausada():
         raise ValidationError('Envio de firma pausado por configuracion staging/test.',
@@ -452,8 +453,12 @@ def enviar_pagare_educativo(
         firmante = _responsable_contractual(proceso.solicitud)
 
     try:
+        validar_anexo_artefacto(artefacto)
         with artefacto.archivo.open('rb') as archivo:
             pdf = archivo.read(MAX_UNSIGNED_PDF_BYTES + 1)
+        if len(pdf) != artefacto.tamano_bytes or hashlib.sha256(pdf).hexdigest() != artefacto.hash_sha256:
+            raise FirmaEducativaError('El paquete contractual no conserva su integridad.',
+                                      codigo='CONTRACT_FILE_INTEGRITY_FAILED')
         resultado = backend.enviar(
             pdf=pdf,
             nombre_documento=(
@@ -462,6 +467,9 @@ def enviar_pagare_educativo(
             external_id=proceso.external_id,
             firmante=firmante,
         )
+    except AnexoMatriculaError as exc:
+        _marcar_fallo_envio(proceso.pk, exc.codigo)
+        raise
     except FirmaEducativaError as exc:
         _marcar_fallo_envio(proceso.pk, exc.codigo)
         raise

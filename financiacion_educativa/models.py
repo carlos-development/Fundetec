@@ -11,7 +11,7 @@ from django.core.validators import (
     MinValueValidator,
     RegexValidator,
 )
-from django.db import models
+from django.db import models, transaction
 from django.db.models.functions import Lower
 from django.utils import timezone
 
@@ -2225,6 +2225,7 @@ class ArtefactoContractualEducativo(models.Model):
     )
     numero_documento = models.CharField(max_length=80)
     version_plantilla = models.CharField(max_length=40)
+    anexo_matricula_snapshot = models.JSONField(default=dict, blank=True, editable=False)
     archivo = models.FileField(
         upload_to=ruta_artefacto_contractual_privado,
         storage=private_document_storage,
@@ -3210,3 +3211,37 @@ from .models_recaudos import (  # noqa: E402,F401
     ReceptorBrebEducativo, EventoReceptorBrebEducativo, ReporteRecaudoEducativo,
     ConciliacionRecaudoEducativo, RechazoReporteRecaudoEducativo,
 )
+
+
+class ConfiguracionAnexoMatriculaEducativa(models.Model):
+    institucion = models.OneToOneField(Institucion, primary_key=True, on_delete=models.PROTECT,
+                                      related_name='configuracion_anexo_matricula')
+    perfil = models.CharField(max_length=32, choices=[
+        ('FUNDETEC_FO_AD_005', 'Fundetec FO-AD-005 V2'),
+        ('JOWALTH_ACADEMY', 'Jowalth Academy'),
+    ])
+    activa = models.BooleanField(default=False)
+    actualizada_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True, editable=False)
+    actualizada_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        permissions = [('gestionar_anexos_matricula', 'Puede configurar anexos contractuales por institucion')]
+
+    def clean(self):
+        super().clean()
+        anterior = type(self).objects.filter(pk=self.pk).values_list('perfil', flat=True).first()
+        if anterior and anterior != self.perfil and ArtefactoContractualEducativo.objects.filter(
+            solicitud__institucion_id=self.pk,
+        ).exclude(anexo_matricula_snapshot={}).exists():
+            raise ValidationError('El perfil ya tiene artefactos versionados; requiere revision y una nueva version de implementacion.')
+
+    def save(self, *args, **kwargs):
+        with transaction.atomic():
+            # Serialize configuration edits with contract persistence.
+            type(self).objects.select_for_update().filter(pk=self.pk).first()
+            self.full_clean()
+            return super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f'{self.institucion} / {self.get_perfil_display()}'
