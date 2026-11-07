@@ -21,11 +21,16 @@ from instituciones.models import Institucion
 
 
 def crear_institucion(sufijo='1'):
-    return Institucion.objects.create(
+    institucion = Institucion.objects.create(
         nombre_comercial=f'Institucion {sufijo}',
         razon_social=f'Institucion {sufijo} SAS',
         numero_identificacion_tributaria=f'90000000{sufijo}',
     )
+    # Explicit legacy profile for existing test fixtures, never a production default.
+    from financiacion_educativa.models import ConfiguracionAnexoMatriculaEducativa
+    ConfiguracionAnexoMatriculaEducativa.objects.create(institucion=institucion,
+        perfil='FUNDETEC_FO_AD_005', activa=True)
+    return institucion
 
 
 def crear_solicitud(

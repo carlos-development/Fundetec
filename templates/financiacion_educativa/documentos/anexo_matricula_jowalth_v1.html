@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><title>Ficha de matr&iacute;cula Jowalth Academy</title>
+<style>
+@page { size: Letter; margin: 15mm 18mm 17mm; @bottom-left { content: "JOWALTH ACADEMY / {{ anexo_version }}"; font: 8pt Arial; color: #586675; } @bottom-right { content: "Pagina " counter(page) " de 4"; font: 8pt Arial; color: #586675; } }
+* { box-sizing: border-box; }
+body { font: 10pt Arial, Helvetica, sans-serif; color: #172634; margin: 0; }
+.jow-page { break-after: page; }
+.jow-page:last-child { break-after: auto; }
+header { border-bottom: 2pt solid #1178a8; margin-bottom: 5mm; padding-bottom: 3mm; }
+header strong { display: block; font-size: 17pt; color: #0b2639; }
+header span { display: block; font-size: 11pt; margin-top: 2mm; }
+h2 { font-size: 11pt; margin: 5mm 0 2mm; color: #0b2639; }
+p { margin: 2mm 0; line-height: 1.4; }
+.note { font-size: 8.5pt; color: #4b5c6c; }
+table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+th, td { border: .5pt solid #b6c3cd; padding: 2mm; vertical-align: top; overflow-wrap: anywhere; }
+th { background: #f0f5f8; font-weight: 600; text-align: left; }
+.fields th { width: 57%; font-weight: 400; background: transparent; }
+.fields td { width: 43%; min-height: 5mm; }
+.checklist { margin: 2mm 0 4mm; padding-left: 0; list-style: none; }
+.checklist li { padding: 1.5mm 0; }
+.box { display: inline-block; border: .6pt solid #172634; height: 3mm; width: 3mm; margin-right: 2mm; vertical-align: middle; }
+.signatures { margin-top: 6mm; font-size: 8pt; }
+.signatures td { height: 10mm; }
+.signatures th { font-size: 8pt; }
+.watermark { position: fixed; top: 95mm; left: 5mm; color: rgba(170,30,30,.14); font: bold 30pt Arial; transform: rotate(-35deg); }
+</style></head><body>
+{% if ambiente_no_productivo %}<div class="watermark">{{ etiqueta_ambiente }} / SIN VALIDEZ CONTRACTUAL</div>{% endif %}
+<section class="jow-page">
+<header><strong>JOWALTH ACADEMY</strong><span>Ficha de matr&iacute;cula</span></header>
+<p class="note">Datos disponibles del expediente. Los campos vac&iacute;os requieren diligenciamiento o confirmaci&oacute;n institucional.</p>
+<h2>1. Datos de la matr&iacute;cula</h2>
+<table class="fields">
+<tr><th>No. de matr&iacute;cula</th><td>{{ jowalth.codigo_matricula }}</td></tr>
+<tr><th>Fecha de matr&iacute;cula</th><td>{{ jowalth.fecha_matricula|date:"d/m/Y" }}</td></tr>
+<tr><th>Sede / ciudad</th><td>{{ jowalth.sede }}</td></tr>
+<tr><th>Periodo acad&eacute;mico de inicio</th><td>{{ jowalth.periodo }}</td></tr>
+<tr><th>Asesor comercial</th><td></td></tr>
+<tr><th>Tipo de ingreso (nuevo / reintegro / transferencia)</th><td></td></tr>
+</table>
+<h2>2. Datos personales del estudiante</h2>
+<table class="fields">
+<tr><th>Nombres (*)</th><td>{{ jowalth.nombres }}</td></tr>
+<tr><th>Apellidos (*)</th><td>{{ jowalth.apellidos }}</td></tr>
+<tr><th>Tipo de documento (*)</th><td>{{ jowalth.tipo_documento }}</td></tr>
+<tr><th>No. de documento (*)</th><td>{{ jowalth.numero_documento }}</td></tr>
+<tr><th>Lugar y fecha de expedici&oacute;n</th><td></td></tr>
+<tr><th>Fecha de nacimiento (*)</th><td>{{ jowalth.fecha_nacimiento|date:"d/m/Y" }}</td></tr>
+<tr><th>Lugar de nacimiento</th><td></td></tr>
+<tr><th>Edad</th><td></td></tr>
+<tr><th>Sexo</th><td></td></tr>
+<tr><th>Estado civil</th><td></td></tr>
+<tr><th>Grupo sangu&iacute;neo y RH</th><td></td></tr>
+</table>
+</section>
+<section class="jow-page">
+<header><strong>JOWALTH ACADEMY</strong><span>Datos de contacto y formaci&oacute;n</span></header>
+<table class="fields">
+<tr><th>EPS</th><td></td></tr><tr><th>Estrato</th><td></td></tr>
+<tr><th>Ocupaci&oacute;n actual</th><td></td></tr><tr><th>Empresa donde labora (si aplica)</th><td></td></tr>
+</table>
+<h2>3. Contacto y acudiente</h2>
+<table class="fields">
+<tr><th>Direcci&oacute;n de residencia (*)</th><td>{{ jowalth.direccion }}</td></tr>
+<tr><th>Barrio</th><td></td></tr><tr><th>Municipio / departamento (*)</th><td></td></tr>
+<tr><th>Celular / WhatsApp (*)</th><td>{{ jowalth.celular }}</td></tr>
+<tr><th>Tel&eacute;fono fijo</th><td></td></tr><tr><th>Correo electr&oacute;nico (*)</th><td>{{ jowalth.correo }}</td></tr>
+</table>
+<h2>Acudiente o contacto de emergencia</h2>
+<table class="fields">
+<tr><th>Nombre completo</th><td>{{ jowalth.tutor.nombre_completo }}</td></tr>
+<tr><th>Parentesco declarado</th><td>{{ jowalth.tutor.get_relacion_estudiante_display }}</td></tr>
+<tr><th>No. de documento</th><td>{{ jowalth.tutor.numero_documento }}</td></tr>
+<tr><th>Celular</th><td>{{ jowalth.tutor.telefono }}</td></tr>
+<tr><th>Correo electr&oacute;nico</th><td>{{ jowalth.tutor.correo }}</td></tr>
+</table>
+<h2>4. Formaci&oacute;n acad&eacute;mica previa</h2>
+<table class="fields">
+<tr><th>&Uacute;ltimo nivel cursado (*)</th><td></td></tr><tr><th>Instituci&oacute;n</th><td></td></tr>
+<tr><th>A&ntilde;o de grado</th><td></td></tr><tr><th>Ciudad</th><td></td></tr>
+<tr><th>&iquest;Ha realizado estudios t&eacute;cnicos antes? &iquest;Cu&aacute;les?</th><td></td></tr>
+</table>
+</section>
+<section class="jow-page">
+<header><strong>JOWALTH ACADEMY</strong><span>Curso e informaci&oacute;n econ&oacute;mica</span></header>
+<h2>5. Programa en el que se matricula</h2>
+<p>Curso informado: <strong>{{ jowalth.curso }}</strong></p>
+<ul class="checklist">
+<li><span class="box"></span>T&eacute;cnico Laboral en Cocina</li>
+<li><span class="box"></span>T&eacute;cnico Laboral en Auxiliar Veterinario</li>
+<li><span class="box"></span>T&eacute;cnico Laboral en Mec&aacute;nica de Motos y Di&eacute;sel</li>
+<li><span class="box"></span>T&eacute;cnico Laboral en Belleza</li>
+<li><span class="box"></span>T&eacute;cnico Laboral en Dise&ntilde;o de Modas</li>
+<li><span class="box"></span>Ingl&eacute;s</li>
+<li><span class="box"></span>T&eacute;cnico Laboral en Auxiliar de Sonido</li>
+<li><span class="box"></span>T&eacute;cnico Laboral en Auxiliar Administrativo</li>
+<li><span class="box"></span>T&eacute;cnico Laboral en Inteligencia Artificial</li>
+</ul>
+<table class="fields">
+<tr><th>Jornada / horario preferido</th><td>{{ jowalth.jornada }}</td></tr>
+<tr><th>&iquest;C&oacute;mo conoci&oacute; Jowalth Academy?</th><td></td></tr>
+</table>
+<h2>6. Inversi&oacute;n y forma de pago</h2>
+<table class="fields">
+<tr><th>Valor de inscripci&oacute;n (COP)</th><td></td></tr>
+<tr><th>Valor de matr&iacute;cula (COP)</th><td></td></tr>
+<tr><th>Valor mensualidad / semestre (COP)</th><td></td></tr>
+<tr><th>Descuento o beca aplicada</th><td></td></tr><tr><th>Total a pagar</th><td></td></tr>
+</table>
+<p class="note">La distribuci&oacute;n acad&eacute;mica de estos importes requiere confirmaci&oacute;n de Jowalth. No se sustituye por el total financiado del pagar&eacute;.</p>
+<p>Forma de pago: <span class="box"></span>Contado &nbsp; <span class="box"></span>Cuotas mensuales</p>
+<p>No. de cuotas: __________ &nbsp; <span class="box"></span>Cr&eacute;dito educativo</p>
+<p>Entidad: ____________________ &nbsp; <span class="box"></span>Beca / convenio</p>
+<p>Cu&aacute;l: ____________________</p>
+<p>Medio: <span class="box"></span>Efectivo &nbsp; <span class="box"></span>Transferencia &nbsp; <span class="box"></span>Tarjeta &nbsp; <span class="box"></span>Otro</p>
+</section>
+<section class="jow-page">
+<header><strong>JOWALTH ACADEMY</strong><span>Documentos y espacios institucionales</span></header>
+<h2>7. Documentos, autorizaciones y firmas</h2>
+<p>Documentos que se adjuntan:</p>
+<ul class="checklist">
+<li><span class="box"></span>Copia del documento de identidad (ampliada al 150 %)</li>
+<li><span class="box"></span>Copia del diploma o acta de grado del &uacute;ltimo nivel cursado</li>
+<li><span class="box"></span>Certificado de afiliaci&oacute;n a EPS</li>
+<li><span class="box"></span>Foto tipo documento, fondo blanco</li>
+<li><span class="box"></span>Copia del documento del acudiente (menores de edad)</li>
+<li><span class="box"></span>Soporte de pago de inscripci&oacute;n / matr&iacute;cula</li>
+</ul>
+<h2>Autorizaciones institucionales</h2>
+<p>Espacios reservados a Jowalth, sin diligenciar. Esta ficha no incorpora nuevas autorizaciones ni presume su aceptaci&oacute;n.</p>
+<ul class="checklist">
+<li><span class="box"></span>Acepto la autorizaci&oacute;n de tratamiento de datos personales</li>
+<li><span class="box"></span>Autorizo el uso de mi imagen en material institucional</li>
+</ul>
+<p class="note">Casillas sin marcar. El texto y mecanismo institucional de estas autorizaciones requieren confirmaci&oacute;n previa de Jowalth; no se agregan al pagar&eacute; ni sustituyen los consentimientos existentes.</p>
+<table class="signatures">
+<tr><th>Firma del estudiante</th><th>Firma del acudiente (si aplica)</th><th>Firma y sello de Jowalth Academy</th></tr>
+<tr><td></td><td></td><td></td></tr>
+<tr><td>Nombre:</td><td>Nombre:</td><td>Nombre:</td></tr>
+<tr><td>C.C.:</td><td>C.C.:</td><td>Cargo:</td></tr>
+<tr><td>Fecha:</td><td>Fecha:</td><td>Fecha:</td></tr>
+</table>
+<p class="note">Los espacios de firma permanecen vac&iacute;os. No se certifica la entrega de documentos ni se presume la firma o aceptaci&oacute;n individual de esta ficha.</p>
+</section>
+</body></html>

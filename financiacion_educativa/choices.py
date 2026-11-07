@@ -468,6 +468,9 @@ class EtapaAutomatizacionEducativa(models.TextChoices):
 
 
 class CodigoRazonAutomatizacionEducativa(models.TextChoices):
+    ENROLLMENT_ANNEX_NOT_READY = 'ENROLLMENT_ANNEX_NOT_READY', 'Anexo institucional no configurado o pendiente de revision'
+    ENROLLMENT_ANNEX_GENERATION_FAILED = 'ENROLLMENT_ANNEX_GENERATION_FAILED', 'Fallo generando el anexo institucional'
+    CONTRACT_FILE_INTEGRITY_FAILED = 'CONTRACT_FILE_INTEGRITY_FAILED', 'Integridad del paquete contractual no verificada'
     SECURITY_SCAN_COMPLETED = 'SECURITY_SCAN_COMPLETED', 'Escaneo completado'
     MALWARE_DETECTED = 'MALWARE_DETECTED', 'Amenaza detectada'
     SECURITY_SCAN_TEMPORARY_ERROR = (

@@ -199,8 +199,8 @@
     </div>
   </section>
 
-  <section class="ficha-page">
+  {% if not omitir_anexo_matricula %}<section class="ficha-page">
     {% include "financiacion_educativa/documentos/_ficha_matricula_contenido.html" %}
-  </section>
+  </section>{% endif %}
 </body>
 </html>

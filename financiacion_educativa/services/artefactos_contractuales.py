@@ -1,5 +1,5 @@
 import hashlib
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from django.conf import settings
@@ -30,6 +30,10 @@ from financiacion_educativa.services.formato_contractual import (
 from financiacion_educativa.services.terminos import (
     validar_terminos_obligatorios_vigentes,
 )
+from .anexos_matricula import (
+    AnexoMatriculaError, resolver_anexo, snapshot_anexo, validar_anexo_artefacto,
+    datos_jowalth, validar_pdf_anexo, unir_paquete_y_anexo,
+)
 
 
 VERSION_PLANTILLA_PAQUETE = 'PAQUETE-EDU-3.0'
@@ -49,6 +53,7 @@ class ArtefactoContractualPreparado:
     numero_documento: str
     version_plantilla: str
     pdf: bytes
+    anexo_snapshot: dict | None = None
 
 
 def _responsable_contractual(solicitud):
@@ -225,6 +230,7 @@ def _preparar_artefacto(
     version_plantilla,
     plantilla,
     contexto,
+    anexo_snapshot=None,
 ):
     version = (
         ArtefactoContractualEducativo.objects.filter(
@@ -234,20 +240,29 @@ def _preparar_artefacto(
         or 0
     ) + 1
     numero = _numero_documento(solicitud, tipo, version)
-    pdf = _renderizar_pdf(
-        plantilla,
-        {
-            **contexto,
-            'numero_documento': numero,
-            'numero_pagare': numero,
-        },
-    )
+    try:
+        pdf = _renderizar_pdf(
+            plantilla,
+            {
+                **contexto,
+                'numero_documento': numero,
+                'numero_pagare': numero,
+            },
+        )
+    except Exception as error:
+        if anexo_snapshot and anexo_snapshot['profile'] == 'JOWALTH_ACADEMY':
+            raise AnexoMatriculaError(
+                'No fue posible generar el paquete con su anexo institucional.',
+                'ENROLLMENT_ANNEX_GENERATION_FAILED',
+            ) from error
+        raise
     return ArtefactoContractualPreparado(
         tipo=tipo,
         numero_version=version,
         numero_documento=numero,
         version_plantilla=version_plantilla,
         pdf=pdf,
+        anexo_snapshot=anexo_snapshot,
     )
 
 
@@ -265,6 +280,7 @@ def _persistir_artefacto(
         vigente=True,
     ).first()
     if existente:
+        validar_anexo_artefacto(existente, bloquear=True)
         if existente.fotografia_financiera_id != fotografia.pk:
             raise ValidationError(
                 'Existe un artefacto vigente asociado a otras condiciones.'
@@ -278,6 +294,7 @@ def _persistir_artefacto(
         numero_version=preparado.numero_version,
         numero_documento=preparado.numero_documento,
         version_plantilla=preparado.version_plantilla,
+        anexo_matricula_snapshot=preparado.anexo_snapshot or {},
         hash_sha256=hashlib.sha256(preparado.pdf).hexdigest(),
         tamano_bytes=len(preparado.pdf),
         generado_por=actor,
@@ -300,6 +317,8 @@ def generar_artefactos_contractuales(*, solicitud, actor=None):
             'Los documentos contractuales solo se generan despues de la aprobacion.'
         )
     validar_terminos_obligatorios_vigentes(solicitud=solicitud)
+    perfil = resolver_anexo(solicitud)
+    snapshot = snapshot_anexo(solicitud, perfil)
     fotografia = solicitud.fotografias_financieras.filter(
         activa=True,
         bloqueada=True,
@@ -327,6 +346,8 @@ def generar_artefactos_contractuales(*, solicitud, actor=None):
         TipoArtefactoContractualEducativo.ENROLLMENT_FORM
     )
     if pagare_existente and ficha_existente:
+        validar_anexo_artefacto(pagare_existente)
+        validar_anexo_artefacto(ficha_existente)
         if any(
             artefacto.fotografia_financiera_id != fotografia.pk
             for artefacto in (pagare_existente, ficha_existente)
@@ -347,6 +368,9 @@ def generar_artefactos_contractuales(*, solicitud, actor=None):
     contexto_ficha = {
         'mapeo_ficha': construir_mapeo_ficha_matricula(solicitud),
         'ficha': construir_datos_ficha_matricula(solicitud),
+        'jowalth': datos_jowalth(solicitud) if perfil.codigo == 'JOWALTH_ACADEMY' else None,
+        'anexo_version': perfil.version,
+        'omitir_anexo_matricula': perfil.codigo == 'JOWALTH_ACADEMY',
     }
     preparados = {
         TipoArtefactoContractualEducativo.PROMISSORY_NOTE: _preparar_artefacto(
@@ -361,15 +385,29 @@ def generar_artefactos_contractuales(*, solicitud, actor=None):
                 'paquete_contractual_v3.html'
             ),
             contexto={**contexto, **contexto_ficha},
+            anexo_snapshot=snapshot,
         ),
         TipoArtefactoContractualEducativo.ENROLLMENT_FORM: _preparar_artefacto(
             solicitud=solicitud,
             tipo=TipoArtefactoContractualEducativo.ENROLLMENT_FORM,
-            version_plantilla=VERSION_PLANTILLA_FICHA,
-            plantilla='financiacion_educativa/documentos/ficha_matricula_pdf.html',
+            version_plantilla=perfil.version,
+            plantilla=perfil.plantilla,
             contexto={**contexto, **contexto_ficha},
+            anexo_snapshot=snapshot,
         ),
     }
+    if perfil.codigo == 'JOWALTH_ACADEMY':
+        try:
+            ficha_pdf = preparados[TipoArtefactoContractualEducativo.ENROLLMENT_FORM].pdf
+            validar_pdf_anexo(ficha_pdf, perfil)
+            pagare = preparados[TipoArtefactoContractualEducativo.PROMISSORY_NOTE]
+            preparados[TipoArtefactoContractualEducativo.PROMISSORY_NOTE] = replace(
+                pagare, pdf=unir_paquete_y_anexo(pagare.pdf, ficha_pdf))
+        except AnexoMatriculaError:
+            raise
+        except Exception as error:
+            raise AnexoMatriculaError('Fallo generando el anexo institucional.',
+                'ENROLLMENT_ANNEX_GENERATION_FAILED') from error
     archivos_creados = []
     try:
         with transaction.atomic():
@@ -386,6 +424,8 @@ def generar_artefactos_contractuales(*, solicitud, actor=None):
                     'Los documentos contractuales solo se generan despues de la aprobacion.'
                 )
             validar_terminos_obligatorios_vigentes(solicitud=solicitud)
+            if snapshot_anexo(solicitud, resolver_anexo(solicitud, bloquear=True)) != snapshot:
+                raise AnexoMatriculaError('La configuracion del anexo cambio durante la generacion.')
             fotografia = solicitud.fotografias_financieras.select_for_update().get(
                 pk=fotografia.pk,
                 activa=True,

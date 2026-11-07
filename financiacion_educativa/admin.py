@@ -8,6 +8,7 @@ from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils import timezone
 from . import admin_recaudos  # noqa: F401
+from . import admin_anexos  # noqa: F401
 
 
 from .models import (
