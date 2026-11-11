@@ -23,6 +23,7 @@ from financiacion_educativa.dashboards.operaciones.permissions import requiere_p
 from .forms_recaudos import (
     ReportarPagoForm, ConfirmarRecaudoForm, EvidenciaBancariaForm, RechazarReporteForm, FiltrosRecaudosForm,
     AplicarCuotaForm,
+    RegistrarPagoRecibidoForm,
 )
 
 
@@ -49,7 +50,8 @@ def _error(form, error):
 
 def _reportes():
     return ReporteRecaudoEducativo.objects.select_related(
-        'solicitud__institucion', 'receptor__cuenta', 'comprobante', 'conciliacion__aplicacion__cuota', 'rechazo',
+        'solicitud__institucion', 'receptor__cuenta', 'comprobante', 'conciliacion__aplicacion__cuota',
+        'conciliacion__cuenta', 'reportado_por', 'rechazo',
     ).order_by('-creado_en', 'pk')
 
 
@@ -95,7 +97,7 @@ def reporte_view(request, solicitud_id, reporte_id):
 
 
 def _archivo_response(archivo, descargar=False):
-    if archivo.estado_escaneo != 'SAFE':
+    if not archivo or archivo.estado_escaneo != 'SAFE':
         raise Http404('El soporte todavia no esta disponible para consulta.')
     extension = {'image/jpeg': 'jpg', 'image/png': 'png', 'application/pdf': 'pdf'}[archivo.content_type]
     try:
@@ -138,6 +140,42 @@ def comprobante_view(request, solicitud_id, reporte_id):
 
 def _contexto(request, **extra):
     return {'seccion_operativa': 'recaudos', 'capacidades_operativas': capacidades_operativas(request.user), **extra}
+
+
+@never_cache
+@requiere_permisos_operativos(servicios.PERMISO_CONSULTAR, servicios.PERMISO_REGISTRAR)
+@require_http_methods(['GET', 'POST'])
+def registrar_pago_recibido_view(request, application_id):
+    from financiacion_educativa.dashboards.operaciones.cartera import obtener_obligacion
+
+    _habilitado()
+    fotografia = obtener_obligacion(application_id)
+    form = RegistrarPagoRecibidoForm(
+        request.POST if request.method == 'POST' and request.POST.get('accion') != 'evidencia' else None,
+        actor=request.user, initial={'clave': uuid.uuid4(), 'fecha': timezone.localdate()},
+    )
+    evidencia_form = EvidenciaBancariaForm()
+    if request.method == 'POST' and request.POST.get('accion') == 'evidencia':
+        evidencia_form = EvidenciaBancariaForm(request.POST, request.FILES)
+        if evidencia_form.is_valid():
+            try:
+                servicios.registrar_evidencia_bancaria(archivo=evidencia_form.cleaned_data['archivo'], actor=request.user)
+            except ValidationError as error:
+                evidencia_form.add_error('archivo', error)
+            else:
+                messages.success(request, 'Evidencia registrada; debe superar el escaneo antes de registrar el ingreso.')
+                return redirect('financiacion_educativa_web:operaciones:registrar-pago-recibido', application_id=application_id)
+    elif request.method == 'POST' and form.is_valid():
+        try:
+            ingreso, existente = servicios.registrar_pago_recibido(solicitud_id=application_id, actor=request.user, **form.cleaned_data)
+        except ValidationError as error:
+            _error(form, error)
+        else:
+            messages.info(request, 'El movimiento ya estaba registrado. Revise el recaudo existente; no se crearon registros nuevos.'
+                if existente else 'Ingreso registrado por Operaciones. Pendiente de aplicacion a cuota.')
+            return redirect('financiacion_educativa_web:operaciones:recaudo-detalle', reporte_id=ingreso.reporte_id)
+    return render(request, 'financiacion_educativa/recaudos/registrar_recibido.html',
+        _contexto(request, fotografia=fotografia, form=form, evidencia_form=evidencia_form))
 
 
 @never_cache
@@ -202,7 +240,7 @@ def _render_detalle(request, reporte, *, confirmar_form=None, evidencia_form=Non
         evidencia_form=evidencia_form if evidencia_form is not None else EvidenciaBancariaForm(),
         rechazar_form=rechazar_form if rechazar_form is not None else RechazarReporteForm(),
         puede_conciliar=request.user.is_active and request.user.has_perm(servicios.PERMISO_CONCILIAR),
-        ultimo_escaneo=reporte.comprobante.escaneos.order_by('-numero').first(),
+        ultimo_escaneo=reporte.comprobante.escaneos.order_by('-numero').first() if reporte.comprobante_id else None,
         evidencias=evidencias, cuota_aplicable=cuota_aplicable, error_aplicacion=error_aplicacion,
         aplicar_form=aplicar_form,
     ))
@@ -236,10 +274,15 @@ def aplicar_cuota_view(request, reporte_id):
 def confirmar_view(request, reporte_id):
     _habilitado()
     reporte = get_object_or_404(_reportes(), pk=reporte_id)
+    if reporte.origen == 'OPERATIONS':
+        return redirect('financiacion_educativa_web:operaciones:recaudo-detalle', reporte_id=reporte.pk)
     form = ConfirmarRecaudoForm(request.POST, actor=request.user)
     if form.is_valid():
         try:
             servicios.confirmar_recaudo(reporte_id=reporte_id, actor=request.user, cuenta_id=reporte.receptor.cuenta_id, **form.cleaned_data)
+        except servicios.MovimientoBancarioRegistrado as error:
+            messages.info(request, 'El movimiento ya estaba registrado. Consulte el recaudo existente; este reporte no se concilio de nuevo.')
+            return redirect('financiacion_educativa_web:operaciones:recaudo-detalle', reporte_id=error.reporte_id)
         except (ValidationError, ArchivoRecaudoEducativo.DoesNotExist) as error:
             _error(form, error if isinstance(error, ValidationError) else ValidationError({'evidencia_id': 'Evidencia no disponible.'}))
         else:

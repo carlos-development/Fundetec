@@ -20,6 +20,7 @@ urlpatterns = [
     path('instituciones/', views.instituciones_view, name='instituciones'),
     path('obligaciones/', views.obligaciones_view, name='obligaciones'),
     path('obligaciones/<uuid:application_id>/', views.obligacion_detalle_view, name='obligacion-detalle'),
+    path('obligaciones/<uuid:application_id>/registrar-pago-recibido/', recaudos.registrar_pago_recibido_view, name='registrar-pago-recibido'),
     path(
         'revision-documental/',
         views.revision_documental_view,

@@ -56,7 +56,7 @@ def previsualizar_cuota(reporte):
     ingreso = getattr(reporte, 'conciliacion', None)
     if ingreso is None or hasattr(reporte, 'rechazo'):
         raise ValidationError('Se requiere un ingreso conciliado.')
-    if reporte.proposito != ReporteRecaudoEducativo.Proposito.INSTALLMENT:
+    if not reporte.admite_aplicacion_cuota:
         raise ValidationError('Esta operación solo admite pagos de cuota.')
     if not obligaciones_autorizadas().filter(
         pk=reporte.fotografia_id, solicitud_id=reporte.solicitud_id,
@@ -66,16 +66,18 @@ def previsualizar_cuota(reporte):
         raise ValidationError('La fecha efectiva bancaria no puede ser futura.')
     if ingreso.monto_recibido != reporte.monto_reportado:
         raise ValidationError('Existe una diferencia con el monto reportado. Requiere revision operativa antes de aplicar.')
-    if ingreso.cuenta_id != reporte.receptor.cuenta_id:
+    if reporte.origen == 'PAYER' and ingreso.cuenta_id != reporte.receptor.cuenta_id:
         raise ValidationError('La cuenta conciliada no corresponde a este reporte.')
-    comprobante, evidencia = reporte.comprobante, ingreso.evidencia_movimiento
-    if (comprobante.finalidad != 'RECEIPT'
+    evidencia = ingreso.evidencia_movimiento
+    if evidencia.finalidad != 'BANK_EVIDENCE' or evidencia.creado_por_id != ingreso.actor_id:
+        raise ValidationError('La evidencia bancaria no corresponde al ingreso.')
+    if reporte.origen == 'PAYER':
+        comprobante = reporte.comprobante
+        if (comprobante.finalidad != 'RECEIPT'
             or comprobante.creado_por_id != reporte.reportado_por_id
-            or evidencia.finalidad != 'BANK_EVIDENCE'
-            or evidencia.creado_por_id != ingreso.actor_id
             or comprobante.pk == evidencia.pk):
-        raise ValidationError('La evidencia bancaria o el comprobante no corresponden al ingreso.')
-    leer_soporte_seguro(comprobante)
+            raise ValidationError('El comprobante no corresponde al ingreso.')
+        leer_soporte_seguro(comprobante)
     leer_soporte_seguro(evidencia)
 
     cuota = _primera_cuota_pendiente(reporte)
@@ -121,7 +123,7 @@ def aplicar_cuota(*, reporte_id, cuota_id, actor, vista_previa, confirmar_cuota)
         raise ValidationError('La cuota cambio. Recarga el reporte antes de confirmar.')
     # Same file-lock order as reconciliation and antivirus; no nullable joins.
     list(ArchivoRecaudoEducativo.objects.select_for_update().filter(
-        pk__in=(reporte.comprobante_id, ingreso.evidencia_movimiento_id),
+        pk__in=tuple(pk for pk in (reporte.comprobante_id, ingreso.evidencia_movimiento_id) if pk),
     ).order_by('pk'))
     cuota = previsualizar_cuota(reporte)
     cuota = CuotaAmortizacionEducativa.objects.select_for_update().get(pk=cuota.pk)

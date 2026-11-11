@@ -3,8 +3,8 @@ from decimal import Decimal
 from django.utils import timezone
 
 from instituciones.models import Institucion
-from financiacion_educativa.models_recaudos import ArchivoRecaudoEducativo, ReporteRecaudoEducativo
-from financiacion_educativa.services.recaudos import monto_cop, fecha_transferencia, evidencias_bancarias_elegibles
+from financiacion_educativa.models_recaudos import ArchivoRecaudoEducativo, ReporteRecaudoEducativo, CuentaRecaudoEducativa
+from financiacion_educativa.services.recaudos import monto_cop, fecha_transferencia, evidencias_bancarias_elegibles, referencia_bancaria, PERMISO_REGISTRAR
 
 
 class DatosTransferenciaForm(forms.Form):
@@ -23,7 +23,7 @@ class DatosTransferenciaForm(forms.Form):
 class ReportarPagoForm(DatosTransferenciaForm):
     clave = forms.UUIDField(widget=forms.HiddenInput)
     receptor_id = forms.UUIDField(widget=forms.HiddenInput)
-    proposito = forms.ChoiceField(label='Proposito declarado', choices=ReporteRecaudoEducativo.Proposito.choices, initial='INSTALLMENT')
+    proposito = forms.ChoiceField(label='Proposito declarado', choices=[c for c in ReporteRecaudoEducativo.Proposito.choices if c[0] != 'UNSPECIFIED'], initial='INSTALLMENT')
     referencia = forms.CharField(label='Referencia bancaria (si esta disponible)', required=False, max_length=120)
     archivo = forms.FileField(label='Comprobante obligatorio', widget=forms.ClearableFileInput(attrs={'accept': 'image/jpeg,image/png,application/pdf'}))
 
@@ -55,6 +55,31 @@ class ConfirmarRecaudoForm(DatosTransferenciaForm):
 
 class EvidenciaBancariaForm(forms.Form):
     archivo = forms.FileField(label='Evidencia del movimiento bancario', widget=forms.ClearableFileInput(attrs={'accept': 'image/jpeg,image/png,application/pdf'}))
+
+
+class RegistrarPagoRecibidoForm(DatosTransferenciaForm):
+    clave = forms.UUIDField(widget=forms.HiddenInput)
+    cuenta_id = forms.ModelChoiceField(label='Cuenta receptora', queryset=CuentaRecaudoEducativa.objects.none())
+    fecha = forms.DateField(label='Fecha efectiva bancaria', widget=forms.DateInput(format='%Y-%m-%d', attrs={'type': 'date'}))
+    referencia = forms.CharField(label='Referencia bancaria verificada', max_length=120)
+    evidencia_id = EvidenciaBancariaChoiceField(label='Evidencia bancaria verificada',
+        queryset=ArchivoRecaudoEducativo.objects.none(), empty_label='Selecciona evidencia propia y segura')
+    proposito = forms.ChoiceField(label='Finalidad conocida', choices=ReporteRecaudoEducativo.Proposito.choices,
+        initial='UNSPECIFIED', help_text='Si aun no se conoce, conserva Pendiente de identificar. Registrar no aplica el ingreso.')
+
+    def __init__(self, *args, actor=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['cuenta_id'].queryset = CuentaRecaudoEducativa.objects.order_by('entidad', 'pk')
+        self.fields['evidencia_id'].queryset = evidencias_bancarias_elegibles(actor, permiso=PERMISO_REGISTRAR)
+
+    def clean_cuenta_id(self):
+        return self.cleaned_data['cuenta_id'].pk
+
+    def clean_evidencia_id(self):
+        return self.cleaned_data['evidencia_id'].pk
+
+    def clean_referencia(self):
+        return referencia_bancaria(self.cleaned_data['referencia'])
 
 
 class AplicarCuotaForm(forms.Form):

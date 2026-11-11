@@ -4,6 +4,7 @@
 {% block operations_content %}
 <header class="edu-dashboard-heading"><a class="edu-dashboard-text-link" href="{% url 'financiacion_educativa_web:operaciones:obligaciones' %}"><i class="bi bi-arrow-left" aria-hidden="true"></i> Obligaciones</a><h1>{{ obligacion.referencia }}</h1><p>{{ obligacion.solicitante }} &middot; {{ obligacion.documento }}</p></header>
 <section class="edu-dashboard-panel"><h2>Contrato autorizado</h2><dl class="edu-dashboard-data-list">
+    {% if capacidades_operativas.registrar_pagos %}<div><dt>Ingreso recibido en el banco</dt><dd><a class="edu-button" href="{% url 'financiacion_educativa_web:operaciones:registrar-pago-recibido' fotografia.solicitud_id %}"><i class="bi bi-plus-circle" aria-hidden="true"></i> Registrar pago recibido</a></dd></div>{% endif %}
     <div><dt>Instituci&oacute;n</dt><dd>{{ obligacion.institucion }}</dd></div><div><dt>Curso financiado</dt><dd>{{ obligacion.curso }}</dd></div>
     <div><dt>Autorizaci&oacute;n efectiva</dt><dd>{{ obligacion.autorizada_en|date:"d/m/Y H:i" }}</dd></div><div><dt>Fotograf&iacute;a contractual</dt><dd>Versi&oacute;n {{ fotografia.numero_version }} &middot; {{ fotografia.version_regla }}</dd></div>
     <div><dt>Inicio del plan</dt><dd>{{ fotografia.fecha_inicio_plan|date:"d/m/Y"|default:"No registrado" }}</dd></div><div><dt>Primer vencimiento</dt><dd>{{ fotografia.fecha_primer_vencimiento|date:"d/m/Y"|default:"No registrado" }}</dd></div>

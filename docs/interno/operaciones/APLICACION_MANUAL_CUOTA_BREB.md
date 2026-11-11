@@ -170,3 +170,113 @@ Cerrar acceso y preparar correccion revisada: no hay reverso automatico.
 - diff --check y sintaxis del prechequeo documentado: correctos. Sin JavaScript nuevo.
 - Caso real no consultado ni aplicado. Pendiente conocer UUID exacto, validar
   elegibilidad e intencion humana, revisar entrega y autorizar liberacion en staging.
+
+## Extension: ingreso recibido sin reporte del estudiante
+
+En el detalle de Obligaciones, la accion **Registrar pago recibido** permite al
+responsable autorizado registrar directamente el movimiento bancario. Requiere
+acceso a Operaciones, consulta de recaudos y el nuevo permiso independiente
+`financiacion_educativa.registrar_pagos_recibidos_educativos`. No concede permiso
+de aplicar ni de conciliar reportes del pagador. Asignarlo explicitamente en Admin.
+
+El modelo de registros de recaudo se reutiliza con `origen=OPERATIONS`, usuario
+real en `reportado_por` y en la conciliacion, fecha de registro, importe, fecha
+efectiva, referencia normalizada, cuenta y evidencia bancaria propia SAFE con
+integridad verificada. No se crea un comprobante del estudiante ni se simula una
+captura: `comprobante` y `receptor` quedan nulos. No se exige un QR activo para
+contabilizar que el banco ya recibio el ingreso. La cuenta debe existir en la
+configuracion bancaria; no se permite crear cuentas desde este formulario.
+
+La evidencia bancaria puede subirse desde la misma pantalla y debe esperar al
+escaneo existente. No se sustituye por el QR o un comprobante del pagador. En el
+registro se puede mantener la finalidad Pendiente de identificar (UNSPECIFIED).
+Solo la posterior confirmacion explicita de **Aplicar a cuota** acredita que se
+identifico la cuota; no modifica retroactivamente esa declaracion inicial. Abonos
+o pago total explicitos permanecen fuera de la aplicacion de cuotas.
+
+Registrar y aplicar son transacciones distintas. Un monto diferente, una finalidad
+no soportada o la falta de certeza humana dejan el ingreso conservado y sin aplicar.
+La aplicacion reutiliza la vista firmada y la confirmacion de este procedimiento,
+sin escribir en el calendario, firma, autorizacion o financial_terms.
+
+Ambos origenes comparten Cuenta + referencia bancaria unica y el mismo bloqueo de
+cuenta. Primero se bloquea la obligacion, luego evidencia, luego cuenta; nunca se
+toma el bloqueo de cuenta antes del archivo compartido con el flujo anterior.
+Si existe el movimiento, registrar redirige al recaudo original sin crear otro.
+Conciliar un reporte posterior tambien redirige al original; el reporte posterior
+se conserva sin conciliar, no se borra ni se reasigna silenciosamente. Una clave
+idempotente repetida con datos distintos falla. No se fusionan expedientes.
+
+Los listados y el detalle identifican el origen. Operaciones ve el usuario real;
+el estudiante solo ve el ingreso de su propia obligacion, sin evidencia bancaria
+privada ni identidad interna del operador. Descargar un comprobante inexistente
+devuelve 404. Las filas y referencias anteriores permanecen inmutables.
+
+### Migracion y staging de la extension
+
+La `0031_aplicacion_manual_cuota` publicada NO se modifica. La nueva
+`0032_ingreso_operaciones` depende de ella: agrega origen y permiso, admite nulos
+solo para el origen administrativo mediante un CHECK y agrega la finalidad neutral.
+Los registros anteriores reciben PAYER para conservar el flujo previo; no se
+cambia su usuario, evidencia, importe, referencia, conciliacion ni aplicacion.
+
+Antes de desplegar: respaldo PostgreSQL y archivos privados, revisar plan/SQL,
+confirmar 0031 aplicada y que 0032 no colisiona con otra migracion. Tras autorizacion:
+
+```bash
+staging_manage showmigrations financiacion_educativa
+staging_manage migrate --plan
+staging_manage sqlmigrate financiacion_educativa 0032_ingreso_operaciones
+staging_manage migrate financiacion_educativa 0032_ingreso_operaciones
+staging_manage check
+systemctl restart fundetec-staging.service
+```
+
+No asignar el permiso real durante la instalacion. Validar en PostgreSQL aislado:
+`test_ingreso_operaciones`, `test_aplicacion_cuotas`, `test_recaudos_breb`,
+`test_recaudos_ux` y `test_dashboard_obligaciones`, con proveedores simulados.
+Probar entrada sin reporte/comprobante, tres carreras del nuevo registro, doble
+origen del mismo movimiento, permisos separados y aplicacion posterior. Despues,
+probar interfaz con datos sinteticos. El caso real requiere otra autorizacion.
+
+Para frenar la funcion, retirar el nuevo permiso. No revertir 0032 ni codigo que
+asuma comprobante/receptor obligatorios si ya hay ingresos OPERATIONS. No borrar
+ingresos, conciliaciones o aplicaciones para permitir una reversa de esquema.
+
+### Consulta previa sin reporte
+
+Solo con autorizacion de lectura, en el shell del ambiente correspondiente,
+puede verificarse la unicidad antes de registrar. No ejecutar registrar_pago_recibido
+desde shell ni confundir este diagnostico con permiso para aplicar el dinero.
+La referencia se introduce sin eco y no se imprime. El resultado solo contiene UUIDs:
+
+```python
+from getpass import getpass
+from uuid import UUID
+from django.db import connection, transaction
+from financiacion_educativa.models_recaudos import ConciliacionRecaudoEducativo
+from financiacion_educativa.services.recaudos import referencia_bancaria
+
+cuenta_id = UUID(input('UUID de cuenta receptora verificada: ').strip())
+referencia = referencia_bancaria(getpass('Referencia bancaria (no se imprime): '))
+assert connection.vendor == 'postgresql'
+with transaction.atomic():
+    with connection.cursor() as cursor:
+        cursor.execute('SET TRANSACTION READ ONLY')
+    existentes = list(ConciliacionRecaudoEducativo.objects.filter(
+        cuenta_id=cuenta_id, referencia_verificada=referencia,
+    ).values_list('reporte_id', flat=True))
+    print('MOVIMIENTOS_EXISTENTES=', len(existentes), 'RECAUDOS_UUID=', existentes)
+```
+
+Si existe movimiento, abrirlo desde Recaudos; no crear otro ni volver a conciliar.
+Si no existe, aun se requiere verificar obligacion, banco, evidencia y permisos.
+
+Validacion de esta extension: PostgreSQL 16.13 temporal aislado, 133 pruebas de
+regresion OK (195.968 s) incluyendo tres carreras nuevas y las siete anteriores.
+Tras completar pruebas de atribucion, CSRF y presentacion, 20 pruebas focalizadas
+OK (42.961 s), con las tres carreras nuevas repetidas y sin omisiones. Selecciones
+solapadas; no es una ejecucion de toda la suite. Check sin incidencias y
+makemigrations sin cambios pendientes; 0032 aplicada solo en la base temporal y
+SQL revisado. 0031 conserva el hash Git `8d91a1221b6ca435861262a609f945f1d781d457`.
+No hubo registros reales, llamadas a proveedores, commit, push o despliegue.
