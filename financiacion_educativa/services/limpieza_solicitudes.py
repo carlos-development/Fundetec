@@ -168,6 +168,7 @@ MODELOS_CON_ARCHIVOS = (
 DEPENDENCIAS_PRESERVADAS = (
     EspecificacionDependencia('ReporteRecaudoEducativo', 'solicitud_id__in'),
     EspecificacionDependencia('ConciliacionRecaudoEducativo', 'reporte__solicitud_id__in'),
+    EspecificacionDependencia('AplicacionCuotaEducativa', 'conciliacion__reporte__solicitud_id__in'),
     EspecificacionDependencia('RechazoReporteRecaudoEducativo', 'reporte__solicitud_id__in'),
     EspecificacionDependencia('ResultadoPublicoSandboxSolicitud', 'solicitud_id__in'),
 )

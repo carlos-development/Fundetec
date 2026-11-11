@@ -23,8 +23,16 @@
 </dl></section>
 <section class="edu-dashboard-panel"><h2>Calendario de amortizaci&oacute;n programado</h2><p class="edu-dashboard-muted">Saldos y cuotas pactados de la fotograf&iacute;a que respalda la firma. No son saldos efectivos de cartera.</p>
 <div class="edu-dashboard-table-wrap edu-contract-table-wrap" tabindex="0" role="region" aria-label="Calendario programado desplazable"><table class="edu-dashboard-table edu-contract-table">
-    <thead><tr><th>Cuota</th><th>Vencimiento</th><th>Saldo inicial programado</th><th>Capital</th><th>Inter&eacute;s</th><th>Cuota programada</th><th>Saldo final programado</th></tr></thead>
-    <tbody>{% for cuota in cuotas %}<tr><td>{{ cuota.numero }}</td><td>{{ cuota.fecha_vencimiento|date:"d/m/Y" }}</td><td>{{ cuota.saldo_inicial|cop }}</td><td>{{ cuota.capital|cop }}</td><td>{{ cuota.interes|cop }}</td><td>{{ cuota.valor_cuota|cop }}</td><td>{{ cuota.saldo_final|cop }}</td></tr>{% empty %}<tr><td colspan="7">Calendario no disponible en esta fotograf&iacute;a. Requiere verificaci&oacute;n operativa.</td></tr>{% endfor %}</tbody>
+    <thead><tr><th>Cuota</th><th>Aplicaci&oacute;n</th><th>Vencimiento</th><th>Saldo inicial programado</th><th>Capital</th><th>Inter&eacute;s</th><th>Cuota programada</th><th>Saldo final programado</th></tr></thead>
+    <tbody>{% for cuota in cuotas %}<tr><td>{{ cuota.numero }}</td><td>{% if cuota.aplicacion_recaudo %}Pagada{% else %}Sin pago aplicado{% endif %}</td><td>{{ cuota.fecha_vencimiento|date:"d/m/Y" }}</td><td>{{ cuota.saldo_inicial|cop }}</td><td>{{ cuota.capital|cop }}</td><td>{{ cuota.interes|cop }}</td><td>{{ cuota.valor_cuota|cop }}</td><td>{{ cuota.saldo_final|cop }}</td></tr>{% empty %}<tr><td colspan="8">Calendario no disponible en esta fotograf&iacute;a. Requiere verificaci&oacute;n operativa.</td></tr>{% endfor %}</tbody>
 </table></div></section>
+{% if capital_pendiente != None %}
+<section class="edu-dashboard-panel"><h2>Pagos aplicados</h2><dl class="edu-dashboard-data-list">
+    <div><dt>Capital aplicado</dt><dd>{{ pagos_aplicados.capital|cop }}</dd></div>
+    <div><dt>Inter&eacute;s aplicado</dt><dd>{{ pagos_aplicados.interes|cop }}</dd></div>
+    <div><dt>Capital pendiente seg&uacute;n pagos aplicados</dt><dd>{{ capital_pendiente|cop }}</dd></div>
+</dl><p class="edu-dashboard-muted">No incluye ingresos sin aplicar ni corresponde a una liquidaci&oacute;n de pago total.</p></section>
+{% else %}
 {% include "financiacion_educativa/dashboards/operaciones/_pagos_no_disponibles.html" %}
+{% endif %}
 {% endblock %}

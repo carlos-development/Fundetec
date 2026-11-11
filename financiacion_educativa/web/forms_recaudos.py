@@ -57,6 +57,15 @@ class EvidenciaBancariaForm(forms.Form):
     archivo = forms.FileField(label='Evidencia del movimiento bancario', widget=forms.ClearableFileInput(attrs={'accept': 'image/jpeg,image/png,application/pdf'}))
 
 
+class AplicarCuotaForm(forms.Form):
+    cuota = forms.UUIDField(widget=forms.HiddenInput)
+    vista_previa = forms.CharField(max_length=4096, widget=forms.HiddenInput)
+    confirmar_cuota = forms.BooleanField(
+        label='Verifique que esta es la cuota que el estudiante quiso pagar y que el monto recibido coincide exactamente.',
+        error_messages={'required': 'Debes verificar la intencion del estudiante antes de aplicar el ingreso.'},
+    )
+
+
 class RechazarReporteForm(forms.Form):
     motivo = forms.CharField(label='Motivo para el pagador y siguiente paso', max_length=500, widget=forms.Textarea(attrs={'rows': 3}))
 

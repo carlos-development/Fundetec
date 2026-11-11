@@ -193,6 +193,8 @@ class ReporteRecaudoEducativo(EvidenciaInmutable):
     @property
     def estado_publico(self):
         if hasattr(self, 'conciliacion'):
+            if hasattr(self.conciliacion, 'aplicacion'):
+                return 'Pago aplicado a cuota'
             return 'Ingreso confirmado pendiente de aplicacion'
         if hasattr(self, 'rechazo'):
             return 'Reporte no conciliado'
@@ -224,3 +226,47 @@ class RechazoReporteRecaudoEducativo(EvidenciaInmutable):
     motivo_publico = models.CharField(max_length=500)
     actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
     creado_en = models.DateTimeField(auto_now_add=True)
+
+
+class AplicacionCuotaEducativa(EvidenciaInmutable):
+    """Aplicación íntegra a una cuota del calendario firmado."""
+
+    conciliacion = models.OneToOneField(
+        ConciliacionRecaudoEducativo, on_delete=models.PROTECT, related_name='aplicacion',
+    )
+    cuota = models.OneToOneField(
+        'financiacion_educativa.CuotaAmortizacionEducativa',
+        on_delete=models.PROTECT, related_name='aplicacion_recaudo',
+    )
+    capital_aplicado = models.DecimalField(max_digits=14, decimal_places=2)
+    interes_aplicado = models.DecimalField(max_digits=14, decimal_places=2)
+    fecha_efectiva = models.DateField()
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    cuota_verificada = models.BooleanField(default=False)
+    creada_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta(EvidenciaInmutable.Meta):
+        permissions = [('aplicar_cuotas_educativas', 'Puede aplicar recaudos conciliados a cuotas educativas')]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(capital_aplicado__gt=0, interes_aplicado__gte=0, cuota_verificada=True),
+                name='aplicacion_cuota_importes_validos',
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        if not self.conciliacion_id or not self.cuota_id:
+            return
+        ingreso, cuota = self.conciliacion, self.cuota
+        if (
+            ingreso.reporte.fotografia_id != cuota.fotografia_id
+            or ingreso.reporte.proposito != ReporteRecaudoEducativo.Proposito.INSTALLMENT
+            or ingreso.monto_recibido != cuota.valor_cuota
+            or self.capital_aplicado != cuota.capital
+            or self.interes_aplicado != cuota.interes
+            or self.fecha_efectiva != ingreso.fecha_efectiva
+            or cuota.capital + cuota.interes != cuota.valor_cuota
+            or not self.cuota_verificada
+        ):
+            raise ValidationError('La aplicación no coincide con el recaudo y la cuota contractual.')

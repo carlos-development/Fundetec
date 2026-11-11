@@ -17,10 +17,12 @@ from django.views.decorators.http import require_GET, require_http_methods, requ
 from financiacion_educativa.models_recaudos import (
     ArchivoRecaudoEducativo, ReporteRecaudoEducativo, ConciliacionRecaudoEducativo, ReceptorBrebEducativo,
 )
+from financiacion_educativa.services import aplicacion_cuotas
 from financiacion_educativa.services import recaudos as servicios
 from financiacion_educativa.dashboards.operaciones.permissions import requiere_permisos_operativos, capacidades_operativas
 from .forms_recaudos import (
     ReportarPagoForm, ConfirmarRecaudoForm, EvidenciaBancariaForm, RechazarReporteForm, FiltrosRecaudosForm,
+    AplicarCuotaForm,
 )
 
 
@@ -47,7 +49,7 @@ def _error(form, error):
 
 def _reportes():
     return ReporteRecaudoEducativo.objects.select_related(
-        'solicitud__institucion', 'receptor__cuenta', 'comprobante', 'conciliacion', 'rechazo',
+        'solicitud__institucion', 'receptor__cuenta', 'comprobante', 'conciliacion__aplicacion__cuota', 'rechazo',
     ).order_by('-creado_en', 'pk')
 
 
@@ -182,7 +184,17 @@ def detalle_operativo_view(request, reporte_id):
     return _render_detalle(request, reporte)
 
 
-def _render_detalle(request, reporte, *, confirmar_form=None, evidencia_form=None, rechazar_form=None):
+def _render_detalle(request, reporte, *, confirmar_form=None, evidencia_form=None, rechazar_form=None, error_aplicacion=None, aplicar_form=None):
+    cuota_aplicable = None
+    ingreso = getattr(reporte, 'conciliacion', None)
+    puede_aplicar = request.user.has_perm(aplicacion_cuotas.PERMISO_APLICAR)
+    if puede_aplicar and ingreso and not hasattr(ingreso, 'aplicacion'):
+        try:
+            cuota_aplicable, vista_previa = aplicacion_cuotas.preparar_vista_previa(reporte=reporte, actor=request.user)
+            if aplicar_form is None:
+                aplicar_form = AplicarCuotaForm(initial={'cuota': cuota_aplicable.pk, 'vista_previa': vista_previa})
+        except ValidationError as error:
+            error_aplicacion = error_aplicacion or error.messages[0]
     # Evidencias del operador que no son QR ni comprobantes de pagadores.
     evidencias = ArchivoRecaudoEducativo.objects.filter(creado_por=request.user, finalidad='BANK_EVIDENCE').prefetch_related('escaneos').order_by('-creado_en')[:10]
     return render(request, 'financiacion_educativa/recaudos/detalle_operativo.html', _contexto(request,
@@ -191,8 +203,31 @@ def _render_detalle(request, reporte, *, confirmar_form=None, evidencia_form=Non
         rechazar_form=rechazar_form if rechazar_form is not None else RechazarReporteForm(),
         puede_conciliar=request.user.is_active and request.user.has_perm(servicios.PERMISO_CONCILIAR),
         ultimo_escaneo=reporte.comprobante.escaneos.order_by('-numero').first(),
-        evidencias=evidencias,
+        evidencias=evidencias, cuota_aplicable=cuota_aplicable, error_aplicacion=error_aplicacion,
+        aplicar_form=aplicar_form,
     ))
+
+
+@never_cache
+@requiere_permisos_operativos(servicios.PERMISO_CONSULTAR, aplicacion_cuotas.PERMISO_APLICAR)
+@require_POST
+def aplicar_cuota_view(request, reporte_id):
+    _habilitado()
+    reporte = get_object_or_404(_reportes(), pk=reporte_id)
+    form = AplicarCuotaForm(request.POST)
+    if form.is_valid():
+        try:
+            aplicacion_cuotas.aplicar_cuota(
+                reporte_id=reporte_id, cuota_id=form.cleaned_data['cuota'],
+                vista_previa=form.cleaned_data['vista_previa'],
+                confirmar_cuota=form.cleaned_data['confirmar_cuota'], actor=request.user,
+            )
+        except ValidationError as error:
+            form.add_error(None, error)
+        else:
+            messages.success(request, 'Pago aplicado a la cuota.')
+            return redirect('financiacion_educativa_web:operaciones:recaudo-detalle', reporte_id=reporte_id)
+    return _render_detalle(request, get_object_or_404(_reportes(), pk=reporte_id), aplicar_form=form)
 
 
 @never_cache

@@ -7,7 +7,8 @@
 <section class="edu-breb-status{% if reporte.conciliacion %} is-confirmed{% elif reporte.rechazo or reporte.comprobante.estado_escaneo == 'BLOCKED' %} is-warning{% endif %}" aria-labelledby="estado-reporte">
     <span class="edu-breb-eyebrow">Tu reporte de transferencia</span>
     <h1 id="estado-reporte">{% if reporte.conciliacion %}Transferencia confirmada{% else %}{{ reporte.estado_publico }}{% endif %}</h1>
-    {% if reporte.conciliacion %}<p>La aplicaci&oacute;n a tu cuota est&aacute; pendiente</p>
+    {% if reporte.conciliacion.aplicacion %}<p>Pago aplicado a la cuota {{ reporte.conciliacion.aplicacion.cuota.numero }}.</p>
+    {% elif reporte.conciliacion %}<p>La aplicaci&oacute;n a tu cuota est&aacute; pendiente</p>
     {% elif reporte.rechazo %}<p>{{ reporte.rechazo.motivo_publico }}</p><p>Corrige el reporte, no tu solicitud de financiaci&oacute;n.</p>
     {% elif reporte.comprobante.estado_escaneo == 'BLOCKED' %}<p>Tu comprobante fue bloqueado por seguridad. Contacta a soporte antes de volver a reportar.</p>
     {% elif reporte.comprobante.estado_escaneo == 'ERROR' %}<p>El equipo debe reintentar la verificaci&oacute;n de seguridad. No necesitas volver a transferir.</p>

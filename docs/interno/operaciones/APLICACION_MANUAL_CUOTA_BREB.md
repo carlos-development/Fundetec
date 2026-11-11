@@ -1,0 +1,172 @@
+# Aplicar manualmente un recaudo conciliado
+
+Primer alcance de la Fase 2B. La migración `0031_aplicacion_manual_cuota` crea
+un registro por ingreso y por cuota. No aplica movimientos existentes por lote.
+
+En Operaciones → Recaudos, abre el reporte ya conciliado. Verifica en el banco
+la referencia y la fecha efectiva, y en la vista previa la cuota que el pagador
+quiso cubrir. Confirma solo si se trata de la primera cuota pendiente del
+calendario firmado y el monto la cubre exactamente. El desglose se toma del
+calendario firmado; el operador no digita importes ni fechas. Si no hay
+coincidencia, deja el ingreso pendiente de aplicación y escala el caso.
+
+La acción requiere acceso al dashboard, consulta de recaudos y el permiso
+`financiacion_educativa.aplicar_cuotas_educativas`. Conciliar por sí solo no da
+permiso de aplicar. El reporte y el detalle de la obligación muestran el
+resultado. El capital pendiente mostrado se deriva de las aplicaciones
+registradas; no es una liquidación a una fecha de corte.
+
+No se admiten parciales, abonos a capital, pagos totales, excedentes ni reversos.
+No se modifica el calendario, la firma ni el estado de la solicitud. No
+confirmes una aplicación si no puedes verificar la cuota: esta primera entrega
+no tiene una operación de reversión. Un error se escala a Operaciones sin
+editar ni eliminar el registro.
+
+## Validación antes de activar
+
+1. Confirmar que el entorno de pruebas usa PostgreSQL y una base de pruebas
+   aislada. Ejecutar `manage.py test financiacion_educativa.tests.test_aplicacion_cuotas`
+   y exigir que pasen las dos pruebas de concurrencia sin omisiones.
+2. Revisar el plan de migración y aplicar `0031_aplicacion_manual_cuota` en
+   staging. Con un recaudo sintético, probar vista previa, confirmación,
+   reintento y consulta del resultado.
+3. Produccion requiere autorizacion independiente posterior a staging y respaldo.
+   No aplicar el caso real en esta entrega. Primero ejecutar el prechequeo de solo
+   lectura siguiente; ni el despliegue ni la migracion autorizan aplicar dinero.
+4. Comprobar que hay una aplicación, la cuota aparece pagada y el estudiante
+   ve el resultado en su reporte. No volver a conciliar ni pedir otro pago.
+
+## Controles del incremento local (2026-11-11)
+
+Base origin/main `dafe477` (incluye anexos 0030). Anulacion fuera de esta rama.
+El parche se adapto: confirmar la intencion del estudiante es una casilla requerida
+en servidor y registrada como `cuota_verificada` en la aplicacion inmutable.
+Recibido, reportado y cuota deben coincidir exactamente. Diferencias o dudas
+requieren escalamiento, aunque ya exista una justificacion de conciliacion.
+
+La vista previa firmada vincula operador, reporte, conciliacion, cuota, importes,
+vencimiento y fecha bancaria. Vence a los 30 minutos. Un cambio exige recargar;
+no permite sustituir otra cuota. Doble clic con vista valida devuelve el mismo
+registro. No compartir ni registrar el token. Confirmacion solo por POST + CSRF.
+
+Servicio y vista exigen usuario activo con estos tres permisos independientes:
+`financiacion_educativa.acceder_dashboard_operativo`,
+`financiacion_educativa.consultar_recaudos_educativos` y
+`financiacion_educativa.aplicar_cuotas_educativas`. Ni is_staff ni conciliar bastan.
+Migrate crea el permiso, pero no lo asigna a usuarios/grupos. Configurarlo desde
+Admin. Obligaciones conserva su permiso propio de consulta de solicitudes.
+Aplicador y conciliador pueden ser diferentes: no duplicar la evidencia bancaria.
+
+Transaccion y locks: solicitud, reporte, conciliacion, soportes ordenados por PK
+y cuota, solo filas base. Revalidacion SAFE e integridad de ambos soportes; no
+llama al antivirus ni a proveedores. Unicidad DB por ingreso y cuota, FK PROTECT
+y check de capital positivo, interes no negativo y verificacion verdadera.
+Las aplicaciones no admiten save/update/bulk_update/bulk_create/delete posteriores.
+
+No se modifica contrato, fotografia, calendario, conciliacion, autorizacion ni
+financial_terms. Incluso al aplicar todas las cuotas, no asigna PAID ni cierra
+deuda. No calcula ni condona mora o liquidaciones retroactivas. La fecha bancaria
+es trazabilidad, no una liquidacion a corte. Sin reparto, notificaciones ni plan
+PDF nuevo. Se mantiene el gate FINANCIACION_EDUCATIVA_RECAUDOS_ENABLED; sin variables,
+dependencias o archivos estaticos nuevos.
+
+## Prechequeo de solo lectura del caso real
+
+NO ejecutado. Falta UUID inequivoco del reporte real; copiarlo desde Operaciones,
+no buscar por nombre o importe. No confundir con JOW-D09312B0 ni con anulacion.
+Con codigo/migracion instalados, abrir `staging_manage shell` y pegar este bloque
+reemplazando solo el UUID. En produccion usar su wrapper autorizado, nunca conectar
+staging_manage a otra base. No muestra PII, referencia bancaria, ruta ni token.
+
+```python
+from uuid import UUID
+from django.db import connection, transaction
+from django.core.exceptions import ValidationError
+from financiacion_educativa.models_recaudos import ReporteRecaudoEducativo, AplicacionCuotaEducativa
+from financiacion_educativa.services.aplicacion_cuotas import previsualizar_cuota
+
+reporte_id = UUID('SUSTITUIR_POR_UUID_DEL_REPORTE_CONCILIADO')
+assert connection.vendor == 'postgresql'
+with transaction.atomic():
+    with connection.cursor() as cursor:
+        cursor.execute('SET TRANSACTION READ ONLY')
+    reporte = ReporteRecaudoEducativo.objects.get(pk=reporte_id)
+    ingreso = getattr(reporte, 'conciliacion', None)
+    print('REPORTE_UUID=', reporte.pk, 'SOLICITUD_UUID=', reporte.solicitud_id)
+    print('CONCILIADO=', ingreso is not None, 'PROPOSITO=', reporte.proposito)
+    aplicaciones = AplicacionCuotaEducativa.objects.filter(conciliacion__reporte=reporte)
+    print('APLICACIONES_PREVIAS=', aplicaciones.count())
+    if aplicaciones.exists():
+        print('ELEGIBLE_PARA_NUEVA_APLICACION=False; conservar aplicacion existente')
+    else:
+        try:
+            cuota = previsualizar_cuota(reporte)
+        except ValidationError as error:
+            print('ELEGIBLE_TECNICAMENTE=False; MOTIVO=', '; '.join(error.messages))
+        else:
+            print('ELEGIBLE_TECNICAMENTE=True; requiere verificar intencion del estudiante')
+            print('CUOTA=', cuota.numero, 'VENCIMIENTO=', cuota.fecha_vencimiento)
+            print('RECIBIDO=', ingreso.monto_recibido, 'FECHA_BANCARIA=', ingreso.fecha_efectiva)
+            print('CAPITAL=', cuota.capital, 'INTERES=', cuota.interes, 'TOTAL=', cuota.valor_cuota)
+```
+
+Elegibilidad tecnica NO autoriza aplicar el pago. Requiere verificacion humana
+de intencion, banco y autorizacion operativa expresa posterior. Usar la accion
+oficial de interfaz, no shell ni cambios manuales de estado.
+
+## Liberacion de staging (no ejecutada)
+
+1. Revisar diff/SHA aprobado. No hay commit/push de este bloque ni mezcla con WIP
+   de anulacion. Respaldar PostgreSQL/archivos privados segun runbook, verificar
+   arbol del servidor limpio e instalar solo el release autorizado. Sin otorgar
+   permiso aun, sin llamadas a proveedores ni envios reales.
+2. Revisar plan y migracion. Si existe otra 0031 incompatible, detenerse: no usar
+   --fake ni sobrescribirla. Ejecutar solo tras autorizacion de despliegue:
+
+```bash
+staging_manage showmigrations financiacion_educativa
+staging_manage migrate --plan
+staging_manage sqlmigrate financiacion_educativa 0031_aplicacion_manual_cuota
+staging_manage migrate financiacion_educativa 0031_aplicacion_manual_cuota
+staging_manage check
+systemctl restart fundetec-staging.service
+systemctl is-active fundetec-staging.service
+curl --fail --silent --show-error https://staging-api.aprobado.com.co/health/
+```
+
+3. En PostgreSQL de pruebas separado (nunca base compartida), proveedores simulados,
+   correo locmem y automatizacion/IA apagadas, ejecutar:
+
+```text
+python manage.py test financiacion_educativa.tests.test_aplicacion_cuotas financiacion_educativa.tests.test_recaudos_breb financiacion_educativa.tests.test_dashboard_obligaciones --noinput
+```
+
+4. Asignar permisos al operador de pruebas y usar contrato/reporte sinteticos.
+   Comprobar vista previa, checkbox, doble POST, operadores simultaneos, diferencia,
+   cuota ajena, caducidad y resultado en Obligaciones y cuenta del estudiante.
+5. Prechequeo real solo con permiso de consulta, conservando resultados en expediente
+   operativo privado. Si bloquea, no duplicar reporte/conciliacion. La aplicacion
+   real queda pendiente de autorizacion posterior. No se accedio al servidor.
+
+Rollback: retirar permiso de aplicacion, conservando registros. No bajar a 0030
+ni borrar tabla/aplicaciones. Sin aplicaciones puede revertirse codigo al release
+previo aprobado conservando esquema. Si existen aplicaciones, mantener codigo
+compatible que las muestre; no volver a una UI que las oculte o presente pendientes.
+Cerrar acceso y preparar correccion revisada: no hay reverso automatico.
+
+## Validacion local ejecutada
+
+- Base: `dafe477288690559d52819551531d91638ff253d`, rama separada
+  `feat/aplicacion-manual-cuota-breb-20261111`. WIP de anulacion intacto.
+- PostgreSQL 16.13 temporal aislado, sin bases/credenciales/datos de servidores.
+- Seleccion aplicacion + recaudos BRE-B + obligaciones + UX: 120 pruebas OK,
+  229.528 s, cero omisiones, incluidas dos carreras de aplicacion y cinco de recaudos.
+- Tras precisar el mensaje de vista desactualizada: modulo completo de aplicacion,
+  21 pruebas OK, 72.342 s, cero omisiones; ambas carreras repetidas correctamente.
+  Las selecciones se solapan; no son 141 pruebas distintas ni la suite completa.
+- check: 0 issues. makemigrations --check --dry-run: No changes detected.
+  migrate --plan final: No planned migration operations. 0031 aplicada solo en la
+  base temporal; SQL revisado (tabla aditiva, dos UNIQUE, check y FKs).
+- diff --check y sintaxis del prechequeo documentado: correctos. Sin JavaScript nuevo.
+- Caso real no consultado ni aplicado. Pendiente conocer UUID exacto, validar
+  elegibilidad e intencion humana, revisar entrega y autorizar liberacion en staging.

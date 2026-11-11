@@ -1,6 +1,6 @@
 # Roadmap de financiacion educativa
 
-Actualizado: 2026-11-04. Producto independiente de libranza y gestion_creditos.
+Actualizado: 2026-11-11. Producto independiente de libranza y gestion_creditos.
 El backlog legado se conserva en `archivo/legacy/` y no gobierna este roadmap.
 
 ## Estado y criterios de cierre
@@ -12,9 +12,9 @@ El backlog legado se conserva en `archivo/legacy/` y no gobierna este roadmap.
 | Fase 2A: reportes BRE-B y conciliacion | Carlos confirma despliegue 300bf42 e infraestructura instalada; canal productivo deshabilitado | Base local coincide con ese SHA. Activacion pendiente de datos bancarios oficiales, permisos, diagnostico y certificacion del ambiente; no se accedio al servidor. El ciclo sintetico anterior no acredita una transferencia real. |
 | Soporte de ingresos configurable | Carlos confirma soporte opcional activo en Jowalth | Confirmacion operativa recibida; no se modifico configuracion ni se consulto el servidor en esta revision. Las demas instituciones conservan su politica. |
 | Experiencia de recaudos y conciliacion | Incorporada en 300bf42; cierre local adicional en revision | Acceso desde finanzas, QR/soportes SAFE e integridad verificada antes de servir/activar; rotacion exige recarga sin cambiar QR silenciosamente. Confirmacion bancaria pendiente de aplicacion, no cuota pagada. |
-| Fase 2B: libro de aplicaciones | Siguiente prioridad; reglas pendientes deben explicitarse | Confirmar y aplicar ingreso una sola vez, con cuotas pagadas/parciales, capital e intereses aplicados, saldos/cortes y cierre reproducibles, sin alterar la fotografia firmada. |
+| Fase 2B: libro de aplicaciones | Primer incremento manual implementado localmente; pendiente liberacion | Reutiliza el ingreso conciliado para cubrir exactamente la primera cuota pendiente, con verificacion explicita del operador, vista previa firmada, auditoria, bloqueo y unicidad. No altera calendario firmado. Parciales, excedentes, abonos, reversos, liquidaciones y mora siguen pendientes. |
 | Distribucion financiera | Pendiente de libro 2B y convenio confirmado | Originacion 10% del monto solicitado ya calculada por motor/fotografia. Reparto propuesto de intereses 80% APROBADO y 20% Jowalth sin confirmar ni implementar. Capital, IVA, garantia y seguro separados; no repartir el ingreso bruto ni inventar reglas. |
-| Dashboard de recaudos y aplicaciones | Consulta bancaria implementada; contabilidad pendiente | Ingresos confirmados por fecha bancaria, sin duplicados. Saldos reales, capital pagado, intereses cobrados y cuotas pagadas/parciales dependen del libro 2B, no del reporte ni del calendario firmado. |
+| Dashboard de recaudos y aplicaciones | Consulta bancaria y detalle de aplicaciones integras locales; tablero global pendiente | Detalle operativo muestra cuotas pagadas solo con aplicacion persistente, capital/interes aplicados y capital restante derivado. Tablero global, parciales y saldos a corte dependen de las siguientes etapas 2B; no derivarlos del reporte o calendario sin aplicaciones. |
 | Notificaciones de pagos | Pendiente de eventos/plantillas y aprobacion operativa | No existen nuevos correos BRE-B. Diferenciar reporte recibido, ingreso confirmado y aplicacion realizada; reutilizar outbox/idempotencia y matriz institucional sin reenviar invitaciones. |
 | Envio del plan PDF | Pendiente de generacion privada y evento de envio aprobado | Existe plan contractual HTML desde fotografia; no endpoint/artefacto PDF independiente del plan ni su envio implementados. Definir destinatario/momento, version contractual vs proyeccion y entrega idempotente por outbox. No prometer un plan actualizado sin libro. |
 | Fase 2C: ePayco | Pendiente, sin adaptadores ni integracion activados | Comercio y credenciales sandbox autorizados; confirmacion servidor a servidor autenticada, importe/moneda/orden, idempotencia, ambiente y reversos. Nunca confirmar por la redireccion del navegador. |
@@ -163,13 +163,22 @@ Evidencia operativa aportada por Carlos mediante salida del servidor y capturas:
 
 ## Fase 2B: cierre funcional del pago
 
-Propuesta concreta de modelos, servicios, migracion aditiva, invariantes y
-decisiones pendientes: `docs/DISENO_RECAUDOS_FASE_2B.md`. Es diseno, no un libro
-implementado ni una aprobacion de politica financiera pendiente.
+Primer incremento: [aplicación manual de una cuota BRE-B](interno/operaciones/APLICACION_MANUAL_CUOTA_BREB.md), limitada a un ingreso conciliado que cubra íntegramente la primera cuota pendiente del calendario firmado. No incluye aplicación automática, parciales, abonos, reversos ni mora.
+
+
+Propuesta del libro completo y decisiones pendientes: `docs/DISENO_RECAUDOS_FASE_2B.md`.
+Solo esta implementado localmente este incremento de aplicaciones integras, con
+migracion 0031, sin procesar pagos reales ni historicos por lote. Dashboard global
+de saldos/cortes, reparto 80/20, notificaciones y envio de plan PDF siguen pendientes.
+El detalle operativo muestra aplicaciones persistidas y capital restante segun
+ellas; no es liquidacion a corte ni cambia financial_terms o APPROVED.
 
 El objetivo aprobado es una accion de confirmar y aplicar el ingreso con
 previsualizacion de su distribucion y resultado persistente. No basta cambiar
 el texto de exito o descontar manualmente una cuota del calendario firmado.
+
+Criterios del libro completo para fases posteriores (parciales, abonos,
+liquidaciones, reversos y cierres NO implementados en este incremento):
 
 - Una cuota cubierta completamente queda pagada; una parcialmente cubierta
   conserva el remanente. Disminuir cuotas pendientes solo al cubrirlas.

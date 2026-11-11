@@ -1,6 +1,7 @@
 from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
+from django.db.models import Sum
 from django.http import FileResponse, Http404
 from django.shortcuts import redirect, render
 from django.views.decorators.cache import never_cache
@@ -45,6 +46,7 @@ from .selectors import (
     filtrar_documentos_revision,
     obtener_documento_revision,
 )
+from financiacion_educativa.models_recaudos import AplicacionCuotaEducativa
 from financiacion_educativa.services.revision_documental_operativa import (
     ConflictoRevisionDocumental,
     aceptar_documento_operativo,
@@ -221,10 +223,18 @@ def obligaciones_view(request):
 @require_GET
 def obligacion_detalle_view(request, application_id):
     fotografia = obtener_obligacion(application_id)
+    totales = AplicacionCuotaEducativa.objects.filter(cuota__fotografia=fotografia).aggregate(
+        capital=Sum('capital_aplicado'), interes=Sum('interes_aplicado'),
+    )
+    capital_pendiente = (
+        fotografia.capital_financiado - totales['capital']
+        if totales['capital'] is not None else None
+    )
     return render(
         request, 'financiacion_educativa/dashboards/operaciones/obligacion_detalle.html',
         _contexto(request, seccion='obligaciones', obligacion=presentar_obligacion(fotografia),
-                  fotografia=fotografia, cuotas=fotografia.cuotas.all()),
+                  fotografia=fotografia, cuotas=fotografia.cuotas.select_related('aplicacion_recaudo'),
+                  pagos_aplicados=totales, capital_pendiente=capital_pendiente),
     )
 
 
