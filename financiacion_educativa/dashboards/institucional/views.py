@@ -1,7 +1,10 @@
+from datetime import date
+
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.shortcuts import redirect, render
+from django.utils import timezone
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
@@ -10,7 +13,8 @@ from .permissions import (
     requiere_contexto_institucional,
     resolver_contexto_institucional,
 )
-from .forms import FiltrosSolicitudesInstitucionalesForm
+from .forms import FiltrosReportesInstitucionalesForm, FiltrosSolicitudesInstitucionalesForm
+from .reportes import OPCIONES_INDICADOR, construir_reporte, url_reportes
 from .presenters import (
     presentar_detalle_solicitud,
     presentar_resumen_solicitud,
@@ -25,11 +29,6 @@ from .selectors import (
 
 
 SECCIONES_PROXIMAS = (
-    {
-        'titulo': 'Reportes',
-        'descripcion': 'Reportes del programa disponibles en una fase posterior.',
-        'icono': 'bi-bar-chart',
-    },
     {
         'titulo': 'Integracion',
         'descripcion': 'Gestion de integracion disponible en una fase posterior.',
@@ -135,6 +134,10 @@ def _listado_solicitudes(request, *, solo_seguimiento=False):
             pagina=pagina,
             querystring=_querystring_sin_pagina(request),
             solo_seguimiento=solo_seguimiento,
+            indicador_reporte=dict(OPCIONES_INDICADOR).get(formulario.cleaned_data.get('indicador'))
+                if formulario.is_valid() else None,
+            regreso_reportes=url_reportes(formulario.cleaned_data)
+                if formulario.is_valid() and formulario.cleaned_data.get('indicador') else None,
         ),
         status=estado_http,
     )
@@ -152,6 +155,28 @@ def solicitudes_view(request):
 @require_GET
 def seguimiento_view(request):
     return _listado_solicitudes(request, solo_seguimiento=True)
+
+
+@never_cache
+@requiere_contexto_institucional
+@require_GET
+def reportes_view(request):
+    hoy = timezone.localdate()
+    mes_inicial = hoy.year * 12 + hoy.month - 1 - 11
+    parametros = request.GET.copy()
+    parametros.setdefault('desde', date(mes_inicial // 12, mes_inicial % 12 + 1, 1).isoformat())
+    parametros.setdefault('hasta', hoy.isoformat())
+    formulario = FiltrosReportesInstitucionalesForm(parametros,
+        opciones=obtener_opciones_filtros(institucion=request.institucion_activa))
+    reporte = None
+    valido = formulario.is_valid()
+    if valido:
+        consulta = filtrar_solicitudes_institucionales(
+            institucion=request.institucion_activa, filtros=formulario.cleaned_data)
+        reporte = construir_reporte(consulta, formulario.cleaned_data)
+    return render(request, 'financiacion_educativa/dashboards/institucional/reportes.html',
+        _contexto_dashboard(request, seccion_dashboard='reportes', formulario_reportes=formulario,
+            reporte=reporte), status=200 if valido else 400)
 
 
 @never_cache

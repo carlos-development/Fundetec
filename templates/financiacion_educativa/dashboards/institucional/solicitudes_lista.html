@@ -17,6 +17,7 @@
 <a href="{% url 'financiacion_educativa_web:institucion:solicitudes' %}{% if querystring %}?{{ querystring }}{% endif %}"{% if not solo_seguimiento %} aria-current="page"{% endif %}>Todas las solicitudes</a>
 </nav>
 <p class="edu-institution-explanation">Una solicitud aprobada no implica que el curso est&eacute; autorizado. Consulta ambos resultados por separado.</p>
+{% if indicador_reporte %}<p class="edu-institution-explanation"><strong>{{ indicador_reporte }}</strong> &middot; {% if regreso_reportes %}<a href="{{ regreso_reportes }}">Volver a reportes</a>{% endif %}</p>{% endif %}
 {% include "financiacion_educativa/dashboards/institucional/_filtros_solicitudes.html" %}
 
 <section class="edu-dashboard-panel edu-institution-results" aria-labelledby="applications-result-title">

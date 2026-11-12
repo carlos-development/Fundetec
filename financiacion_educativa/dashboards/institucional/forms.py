@@ -2,6 +2,7 @@ from django import forms
 
 from financiacion_educativa.choices import EstadoPublicoSolicitud
 from .presenters import etiqueta_estado_solicitud
+from .reportes import OPCIONES_INDICADOR
 
 
 ORDENAMIENTOS_SOLICITUDES = (
@@ -21,6 +22,7 @@ FILTROS_AVANZADOS = (
     'desde',
     'hasta',
     'orden',
+    'indicador',
 )
 
 
@@ -44,6 +46,8 @@ class FiltrosSolicitudesInstitucionalesForm(forms.Form):
         ),
     )
     programa = forms.ChoiceField(required=False, label='Curso')
+    indicador = forms.ChoiceField(required=False, label='Resultado del reporte',
+        choices=(('', 'Todos los resultados'),) + OPCIONES_INDICADOR)
     periodo = forms.ChoiceField(required=False, label='Periodo academico')
     sede = forms.ChoiceField(required=False, label='Sede')
     desde = forms.DateField(
@@ -113,3 +117,12 @@ class FiltrosSolicitudesInstitucionalesForm(forms.Form):
                 'La fecha inicial no puede ser posterior a la fecha final.'
             )
         return datos
+
+
+class FiltrosReportesInstitucionalesForm(FiltrosSolicitudesInstitucionalesForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields = {nombre: self.fields[nombre] for nombre in ('desde', 'hasta', 'programa')}
+        for nombre, etiqueta in (('desde', 'Radicaci\u00f3n desde'), ('hasta', 'Radicaci\u00f3n hasta')):
+            self.fields[nombre].required = True
+            self.fields[nombre].label = etiqueta

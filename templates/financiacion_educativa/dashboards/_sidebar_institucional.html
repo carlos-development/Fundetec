@@ -12,11 +12,10 @@
             <i class="bi bi-signpost-split" aria-hidden="true"></i>
             Seguimiento
         </a>
-        <span aria-disabled="true">
+        <a{% if seccion_dashboard == 'reportes' %} class="is-active" aria-current="page"{% endif %} href="{% url 'financiacion_educativa_web:institucion:reportes' %}">
             <i class="bi bi-bar-chart" aria-hidden="true"></i>
             Reportes
-            <small>Pr&oacute;ximamente</small>
-        </span>
+        </a>
         <span aria-disabled="true">
             <i class="bi bi-braces" aria-hidden="true"></i>
             Integraci&oacute;n

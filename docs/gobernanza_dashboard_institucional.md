@@ -89,6 +89,33 @@ tokens, URLs de firma o metadatos documentales privados.
 
 Evidencia sintetica, pruebas y revision: `PORTAL_INSTITUCION.md`.
 
+## Reportes por radicacion
+
+`/financiacion-educativa/institucion/reportes/` utiliza la misma membresia
+activa y el mismo selector limitado a la institucion del portal. No admite
+seleccionar un tenant por GET ni concede permisos operativos. Todos los roles
+institucionales de consulta pueden usarlo; revocacion y enmascaramiento siguen
+vigentes en los listados de respaldo.
+
+Los cuatro indicadores comparten rango inclusivo de `creada_en` (radicacion,
+zona horaria vigente de Django) y curso `nombre_curso`. Recibidas significa
+todas las solicitudes radicadas del rango, no solo las pendientes de iniciar.
+Aprobadas usa estado APPROVED; autorizadas usa la autorizacion contractual
+efectiva existente; pendientes son APPROVED sin esa autorizacion. No se filtran
+por fecha de decision, firma o autorizacion. Son estados actuales de una cohorte,
+no conteos historicos de transiciones ni metricas financieras.
+
+La grafica mensual y los totales proceden de una sola consulta agregada. Cada
+cifra enlaza Solicitudes con curso/rango e indicador validados; los meses
+parciales mantienen el recorte del rango original. La tabla accesible y los
+enlaces funcionan sin JavaScript. No hay exportacion ni acceso a evidencia
+bancaria, identificadores privados o diagnosticos de Operaciones.
+
+Consultar un listado mas tarde vuelve a leer los estados actuales: si hay
+cambios concurrentes de negocio, actualizar ambos. No se conserva una fotografia
+historica ni se bloquean solicitudes al leer el reporte. Definiciones completas y
+validacion en staging: `REPORTES_INSTITUCIONALES.md`.
+
 ## Separacion de credenciales
 
 Las membresias representan personas. Las credenciales API representan

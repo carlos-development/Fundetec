@@ -47,6 +47,7 @@
 
     <div class="edu-mobile-menu edu-dashboard-mobile-menu" data-mobile-menu>
         <a href="{% url 'financiacion_educativa_web:institucion:inicio' %}">Inicio del programa</a>
+        <a href="{% url 'financiacion_educativa_web:institucion:reportes' %}">Reportes</a>
         {% if institucion_activa %}
             <span>{{ institucion_activa.nombre_comercial }}</span>
         {% endif %}
