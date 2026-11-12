@@ -1,0 +1,14 @@
+{% load financiacion_format %}
+<article class="edu-student-card">
+    <p class="edu-eyebrow">{{ opcion.solicitud.institucion.nombre_comercial }}</p><h2>{{ opcion.solicitud.nombre_curso }}</h2>
+    {% if opcion.autorizada %}
+        <span class="edu-student-status is-applied">Curso autorizado</span>
+        {% if opcion.primera_cuota_pendiente %}<p>Primera cuota sin aplicar &middot; Cuota {{ opcion.primera_cuota_pendiente.numero }}</p><p class="edu-student-amount">{{ opcion.primera_cuota_pendiente.valor_cuota|cop }}</p><p>Vencimiento contractual: {{ opcion.primera_cuota_pendiente.fecha_vencimiento|date:"d/m/Y" }}</p>{% else %}<p>Sin cuotas pendientes de aplicaci&oacute;n en este calendario.</p>{% endif %}
+        <div class="edu-student-card-footer"><span>{{ opcion.cuotas_aplicadas }} de {{ opcion.cuotas_portal|length }} cuotas aplicadas</span><a class="edu-button-secondary" href="{{ opcion.url }}">Ver financiaci&oacute;n</a></div>
+    {% else %}
+        <span class="edu-student-status">{% if opcion.pendiente_autorizacion %}Autorizaci&oacute;n por verificar{% else %}{{ opcion.destino.titulo }}{% endif %}</span>
+        {% if opcion.pendiente_autorizacion %}<p class="edu-student-warning">El estado aprobado no acredita a&uacute;n una autorizaci&oacute;n contractual efectiva. Tu solicitud sigue visible para consulta; no se habilitan pagos.</p>{% endif %}
+        <p>{{ opcion.solicitud.valor_plan|cop }} &middot; {{ opcion.solicitud.plazo_meses }} meses solicitados</p>
+        <div class="edu-student-card-footer"><span>Actualizada: {{ opcion.solicitud.actualizada_en|date:"d/m/Y" }}</span><a class="edu-button-secondary" href="{{ opcion.url }}">{{ opcion.accion }}</a></div>
+    {% endif %}
+</article>

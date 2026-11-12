@@ -45,7 +45,7 @@ class ReanudacionSolicitudesTests(TestCase):
         solicitud.save(update_fields=['estado'])
         return solicitud
 
-    def test_mapa_cubre_y_redirige_cada_estado_real(self):
+    def test_mapa_cubre_y_lista_cada_estado_real_sin_redireccion(self):
         self.assertEqual(set(MAPA_REANUDACION), set(Estado.values))
         self.client.force_login(self.usuario)
         for index, estado in enumerate(Estado.values):
@@ -55,10 +55,10 @@ class ReanudacionSolicitudesTests(TestCase):
                     referencia=f'REF-ESTADO-{index}',
                 )
                 response = self.client.get(self.url)
-                self.assertRedirects(
-                    response,
-                    resolver_url_reanudacion(solicitud),
-                )
+                self.assertEqual(response.status_code, 200)
+                opciones = response.context['tramites'] + response.context['financiaciones'] + response.context['cerradas']
+                self.assertEqual([o['solicitud'].pk for o in opciones], [solicitud.pk])
+                self.assertContains(response, opciones[0]['url'])
                 solicitud.delete()
 
     def test_usuario_sin_solicitudes_recibe_pantalla_informativa(self):
@@ -129,11 +129,8 @@ class ReanudacionSolicitudesTests(TestCase):
             emitida.invitacion.estado,
             EstadoInvitacionContinuacion.CONSUMED,
         )
-        self.assertRedirects(
-            response,
-            resolver_url_reanudacion(solicitud),
-            fetch_redirect_response=False,
-        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, resolver_url_reanudacion(solicitud))
 
     def test_vista_de_estado_rechaza_idor(self):
         solicitud = self._solicitud(

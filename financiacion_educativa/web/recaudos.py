@@ -25,6 +25,7 @@ from .forms_recaudos import (
     AplicarCuotaForm,
     RegistrarPagoRecibidoForm,
 )
+from .portal_estudiante import calendario_del_portal
 
 
 def _habilitado():
@@ -61,9 +62,10 @@ def _reportes():
 def pagos_view(request, solicitud_id):
     fotografia = _propiedad(request, solicitud_id)
     receptor = servicios.receptor_vigente()
+    pendiente = calendario_del_portal(fotografia)['primera_cuota_pendiente']
     form = ReportarPagoForm(request.POST if request.method == 'POST' else None, request.FILES if request.method == 'POST' else None, initial={
         'clave': uuid.uuid4(), 'receptor_id': receptor.pk if receptor else None,
-        'monto': fotografia.proxima_cuota, 'fecha': timezone.localdate(),
+        'monto': pendiente['valor_cuota'] if pendiente else None, 'fecha': timezone.localdate(),
     })
     if request.method == 'POST' and form.is_valid():
         try:

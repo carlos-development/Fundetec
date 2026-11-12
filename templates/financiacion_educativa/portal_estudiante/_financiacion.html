@@ -1,0 +1,26 @@
+{% load financiacion_format %}
+<section class="edu-page-band"><div class="edu-page-shell edu-student">
+    <a class="edu-student-back" href="{% url 'financiacion_educativa_web:reanudar-solicitudes' %}?seccion=financiaciones">Volver a mis financiaciones</a>
+    <header class="edu-page-heading"><p class="edu-eyebrow">{{ solicitud.institucion.nombre_comercial }}</p><h1>{{ solicitud.nombre_curso }}</h1><span class="edu-student-status is-applied">Curso autorizado</span></header>
+    <dl class="edu-student-metrics">
+        <div><dt>Primera cuota sin aplicar</dt><dd>{% if primera_cuota_pendiente %}{{ primera_cuota_pendiente.valor_cuota|cop }}{% else %}Ninguna{% endif %}</dd>{% if primera_cuota_pendiente %}<span>Cuota {{ primera_cuota_pendiente.numero }} de {{ cuotas_portal|length }}</span>{% endif %}</div>
+        <div><dt>Vencimiento contractual</dt><dd>{% if primera_cuota_pendiente %}<time datetime="{{ primera_cuota_pendiente.fecha_vencimiento|date:'Y-m-d' }}">{{ primera_cuota_pendiente.fecha_vencimiento|date:"d M" }}</time>{% else %}No corresponde{% endif %}</dd>{% if primera_cuota_pendiente %}<span>{{ primera_cuota_pendiente.fecha_vencimiento|date:"Y" }}</span>{% endif %}</div>
+        <div><dt>Cuotas con aplicaci&oacute;n</dt><dd>{{ cuotas_aplicadas }} de {{ cuotas_portal|length }}</dd><span>Respaldadas por aplicaciones registradas</span></div>
+    </dl>
+    {% if hay_confirmadas_por_aplicar %}<div class="edu-student-warning" role="status"><strong>Transferencia confirmada</strong><p>La aplicaci&oacute;n a tu cuota est&aacute; pendiente. No vuelvas a transferir por esta espera.</p></div>{% endif %}
+    {% if primera_cuota_pendiente and recaudos_disponibles and not hay_confirmadas_por_aplicar %}<a class="edu-button" href="{% url 'financiacion_educativa_web:pagos' solicitud.pk %}">Pagar y reportar transferencia</a>{% endif %}
+    {% if not primera_cuota_pendiente %}<div class="edu-student-information" role="status">No hay cuotas pendientes de aplicaci&oacute;n en este calendario. Esto no constituye paz y salvo ni una liquidaci&oacute;n o cierre de deuda.</div>{% endif %}
+    <p class="edu-student-caption">Importes del calendario firmado, no un saldo de liquidaci&oacute;n a la fecha. No se calculan aqu&iacute; mora, excedentes ni reversiones.</p>
+    <section class="edu-student-section" aria-labelledby="history-title"><h2 id="history-title">Historial de pagos y transferencias</h2>
+        {% if historial_portal %}<table class="edu-student-table"><thead><tr><th>Concepto</th><th>Fecha</th><th>Importe</th><th>Estado</th><th>Detalle</th></tr></thead><tbody>
+            {% for fila in historial_portal %}<tr>
+                <td data-label="Concepto">{% if fila.aplicado %}Cuota {{ fila.cuota }}{% elif fila.confirmado %}Ingreso bancario{% else %}Transferencia reportada{% endif %}</td>
+                <td data-label="Fecha">{{ fila.fecha|date:"d/m/Y" }}</td><td data-label="Importe">{{ fila.monto|cop }}</td>
+                <td data-label="Estado"><span class="edu-student-status{% if fila.aplicado %} is-applied{% elif fila.confirmado %} is-confirmed{% endif %}">{{ fila.estado }}</span></td>
+                <td data-label="Detalle">{% if recaudos_disponibles %}<a href="{{ fila.url }}">Ver detalle</a>{% else %}Consulta no disponible{% endif %}</td>
+            </tr>{% endfor %}
+        </tbody></table>{% else %}<div class="edu-empty"><h3>Todav&iacute;a no hay transferencias registradas</h3><p>Cuando exista un reporte o un ingreso registrado por Operaciones, podr&aacute;s seguirlo aqu&iacute;.</p></div>{% endif %}
+    </section>
+    <details class="edu-student-details"><summary>Qu&eacute; significa cada estado</summary><p><strong>Transferencia confirmada:</strong> el banco confirm&oacute; el ingreso, pero no existe todav&iacute;a una aplicaci&oacute;n a cuota.</p><p><strong>Pago aplicado:</strong> existe una aplicaci&oacute;n registrada a una cuota del calendario firmado.</p></details>
+    <details class="edu-student-details"><summary>Calendario y aplicaciones</summary><table class="edu-student-table"><thead><tr><th>Cuota</th><th>Vencimiento</th><th>Cuota pactada</th><th>Aplicaci&oacute;n</th></tr></thead><tbody>{% for cuota in cuotas_portal %}<tr><td data-label="Cuota">{{ cuota.numero }}</td><td data-label="Vencimiento">{{ cuota.fecha_vencimiento|date:"d/m/Y" }}</td><td data-label="Cuota pactada">{{ cuota.valor_cuota|cop }}</td><td data-label="Aplicaci&oacute;n">{% if cuota.aplicada %}Pagada{% else %}Pendiente{% endif %}</td></tr>{% endfor %}</tbody></table></details>
+</div></section>
