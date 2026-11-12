@@ -96,7 +96,9 @@ class RechazarReporteForm(forms.Form):
 
 
 class FiltrosRecaudosForm(forms.Form):
-    estado = forms.ChoiceField(required=False, choices=[('', 'Todos'), ('PENDING', 'Revision pendiente'), ('CONFIRMED', 'Ingreso confirmado'), ('REJECTED', 'No conciliado')])
+    estado = forms.ChoiceField(required=False, choices=[('', 'Todos'), ('PENDING', 'Por verificar'),
+        ('TO_APPLY', 'Por aplicar'), ('APPLIED', 'Aplicados'), ('CONFIRMED', 'Todos los confirmados en banco'),
+        ('REJECTED', 'No conciliados')])
     institucion = forms.ModelChoiceField(required=False, label='Institucion',
         queryset=Institucion.objects.none(), empty_label='Todas las instituciones')
     desde = forms.DateField(required=False, widget=forms.DateInput(format='%Y-%m-%d', attrs={'type': 'date'}))

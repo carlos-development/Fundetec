@@ -57,7 +57,7 @@ class IngresoOperacionesTests(DatosIngresoOperaciones, TestCase):
         self.assertContains(self.client.get(detalle_obligacion), 'Registrar pago recibido')
         self.assertEqual(self.client.post(self.url_registro(), {
             'accion': 'evidencia', 'archivo': imagen_jpeg_prueba(marca='e2e-bank-only'),
-        }).status_code, 302)
+        }).status_code, 200)
         banco = ArchivoRecaudoEducativo.objects.filter(finalidad='BANK_EVIDENCE').exclude(pk=self.banco.pk).get()
         self.assertEqual(banco.creado_por_id, self.actor.pk)
         self.assertEqual(banco.estado_escaneo, 'PENDING')
@@ -316,7 +316,7 @@ class IngresoOperacionesTests(DatosIngresoOperaciones, TestCase):
         user = self.operador((recaudos.PERMISO_CONSULTAR, recaudos.PERMISO_REGISTRAR, aplicacion_cuotas.PERMISO_ACCESO))
         self.client.force_login(user)
         respuesta = self.client.post(self.url_registro(), {'accion': 'evidencia', 'archivo': imagen_jpeg_prueba()})
-        self.assertEqual(respuesta.status_code, 302)
+        self.assertEqual(respuesta.status_code, 200)
         banco = ArchivoRecaudoEducativo.objects.get(creado_por=user)
         self.assertEqual(banco.finalidad, 'BANK_EVIDENCE')
         self.assertEqual(banco.estado_escaneo, 'PENDING')
