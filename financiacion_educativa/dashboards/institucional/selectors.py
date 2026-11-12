@@ -15,6 +15,7 @@ from financiacion_educativa.models import (
     SolicitudFinanciacionEducativa,
 )
 from financiacion_educativa.services.estado_publico import MAPA_ESTADO_PUBLICO, firmas_autorizadas_reales
+from .reportes import filtrar_por_indicador
 
 
 ESTADOS_INTERNOS_POR_PUBLICO = {
@@ -199,7 +200,8 @@ def filtrar_solicitudes_institucionales(
     orden = filtros.get('orden') or '-creada_en'
     if orden not in ORDENAMIENTOS_PERMITIDOS:
         orden = '-creada_en'
-    return _con_autorizacion_efectiva(consulta).only(
+    consulta = filtrar_por_indicador(_con_autorizacion_efectiva(consulta), filtros.get('indicador'))
+    return consulta.only(
         'id',
         'referencia_externa',
         'nombres',

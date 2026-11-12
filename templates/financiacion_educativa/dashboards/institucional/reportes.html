@@ -1,0 +1,29 @@
+{% extends "financiacion_educativa/dashboards/_base.html" %}
+{% load static %}
+{% block title %}Reportes | {{ education_brand.name|default:"Aprobado" }}{% endblock %}
+{% block extra_head %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/financiacion_educativa_reportes.css' %}">{% endblock %}
+{% block dashboard_content %}
+<header class="edu-dashboard-heading"><p class="edu-eyebrow">{{ institucion_activa.nombre_comercial }}</p><h1>Reportes</h1><p>Solicitudes por fecha de radicaci&oacute;n y estado actual.</p></header>
+<form method="get" class="edu-reports-filters" novalidate>
+{% if formulario_reportes.non_field_errors %}<div class="edu-dashboard-alert" role="alert">{{ formulario_reportes.non_field_errors }}</div>{% endif %}
+{% for field in formulario_reportes %}<div class="edu-dashboard-filter"><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% for error in field.errors %}<small role="alert">{{ error }}</small>{% endfor %}</div>{% endfor %}
+<div class="edu-dashboard-filter-actions"><button class="edu-button" type="submit"><i class="bi bi-search" aria-hidden="true"></i> Consultar</button><a href="{% url 'financiacion_educativa_web:institucion:reportes' %}">Limpiar</a></div>
+</form>
+{% if reporte %}
+<p class="edu-reports-caption">Radicadas del <strong>{{ reporte.desde|date:"d/m/Y" }}</strong> al <strong>{{ reporte.hasta|date:"d/m/Y" }}</strong>, ambos d&iacute;as incluidos. Recibidas cuenta todas las solicitudes del rango, sin importar su estado actual.</p>
+<section class="edu-reports-metrics" aria-label="Indicadores por radicaci&oacute;n">
+{% for cifra in reporte.indicadores %}<a class="edu-reports-metric is-{{ cifra.codigo }}" href="{{ cifra.url }}" data-indicador="{{ cifra.codigo }}"><span>{{ cifra.etiqueta }}</span><strong>{{ cifra.total }}</strong><small>Ver solicitudes <i class="bi bi-arrow-right" aria-hidden="true"></i></small></a>{% endfor %}
+</section>
+<p class="edu-reports-caption">Aprobaci&oacute;n y autorizaci&oacute;n efectiva son resultados distintos. Aprobadas = cursos autorizados + aprobadas con autorizaci&oacute;n pendiente. Todos los indicadores usan la misma fecha de radicaci&oacute;n y curso.</p>
+<section class="edu-reports-series" aria-labelledby="series-title"><header class="edu-dashboard-section-heading"><div><h2 id="series-title">Por mes de radicaci&oacute;n</h2><p class="edu-reports-caption">Estado actual de las solicitudes radicadas en cada mes. Se muestran los meses con radicaciones.</p></div></header>
+{% if reporte.periodos %}
+<figure class="edu-reports-chart"><figcaption class="edu-reports-caption">Comparaci&oacute;n mensual. Cada barra abre las solicitudes que componen su cifra.</figcaption>
+{% for periodo in reporte.periodos %}<div class="edu-reports-month"><h3><time datetime="{{ periodo.mes|date:'Y-m' }}">{{ periodo.mes|date:"F Y"|capfirst }}</time></h3>
+{% for cifra in periodo.cifras %}<a class="edu-reports-bar is-{{ cifra.codigo }}" href="{{ cifra.url }}"><span>{{ cifra.etiqueta }}</span><span class="edu-reports-track" aria-hidden="true"><span style="width: {{ cifra.ancho }}%"></span></span><strong>{{ cifra.total }}</strong></a>{% endfor %}
+</div>{% endfor %}</figure>
+<details class="edu-reports-data"><summary>Ver cifras por mes</summary><div class="edu-dashboard-table-wrap"><table class="edu-dashboard-table"><caption class="edu-visually-hidden">Cifras mensuales con enlaces al listado de respaldo</caption><thead><tr><th scope="col">Mes de radicaci&oacute;n</th>{% for cifra in reporte.indicadores %}<th scope="col">{{ cifra.etiqueta }}</th>{% endfor %}</tr></thead><tbody>{% for periodo in reporte.periodos %}<tr><th scope="row">{{ periodo.mes|date:"F Y"|capfirst }}</th>{% for cifra in periodo.cifras %}<td data-label="{{ cifra.etiqueta }}"><a href="{{ cifra.url }}" aria-label="{{ cifra.etiqueta }} en {{ periodo.mes|date:'F Y' }}: {{ cifra.total }}">{{ cifra.total }}</a></td>{% endfor %}</tr>{% endfor %}</tbody></table></div></details>
+{% else %}<div class="edu-dashboard-empty"><i class="bi bi-bar-chart" aria-hidden="true"></i><h3>Sin radicaciones en este rango</h3><p>No hay solicitudes para las fechas y el curso seleccionados. Puedes cambiar los filtros.</p></div>{% endif %}
+</section>
+<p class="edu-reports-caption">Consultado el {{ reporte.consultado_en|date:"d/m/Y H:i" }}. Los estados pueden cambiar; vuelve a consultar para actualizar las cifras. Estos reportes no representan saldos, pagos ni distribuci&oacute;n de intereses.</p>
+{% else %}<p class="edu-dashboard-alert" role="alert">Corrige los filtros para consultar el reporte. No se muestran cifras con un rango o curso inv&aacute;lido.</p>{% endif %}
+{% endblock %}

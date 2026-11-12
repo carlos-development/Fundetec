@@ -8,6 +8,7 @@
     <p class="edu-eyebrow">Financiaci&oacute;n educativa</p>
     <h1>Resumen del programa</h1>
     <p>Consulta el estado agregado y la actividad reciente del programa <strong>{{ institucion_activa.nombre_comercial }}</strong>.</p>
+    <a class="edu-dashboard-text-link" href="{% url 'financiacion_educativa_web:institucion:reportes' %}">Ver reportes por radicaci&oacute;n</a>
 </header>
 
 {% include "financiacion_educativa/dashboards/institucional/_indicadores.html" %}
