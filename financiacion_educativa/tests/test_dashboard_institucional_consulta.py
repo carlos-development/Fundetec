@@ -275,7 +275,7 @@ class DashboardInstitucionalConsultaTests(TestCase):
         detalle = self.client.get(self._detalle(solicitud))
 
         self.assertContains(inicio, '<th>Curso</th>', html=True)
-        self.assertContains(listado, '<th>Curso</th>', html=True)
+        self.assertContains(listado, '<th scope="col">Curso</th>', html=True)
         self.assertContains(listado, 'data-label="Curso"')
         self.assertContains(listado, '>Curso</label>')
         self.assertContains(listado, 'Todos los cursos')
@@ -305,7 +305,7 @@ class DashboardInstitucionalConsultaTests(TestCase):
         self.assertContains(listado, aprobada.referencia_externa)
         self.assertNotContains(listado, ajena.referencia_externa)
         self.assertContains(seguimiento, propia.referencia_externa)
-        self.assertNotContains(seguimiento, aprobada.referencia_externa)
+        self.assertContains(seguimiento, aprobada.referencia_externa)
         self.assertNotContains(seguimiento, ajena.referencia_externa)
 
     def test_filtros_principales_visibles_y_avanzados_cerrados_por_defecto(self):

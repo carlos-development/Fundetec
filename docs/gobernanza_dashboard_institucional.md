@@ -64,6 +64,31 @@ autoservicio de usuarios en esta fase.
 - Las cuentas son personales. Esta prohibido compartir usuarios, sesiones o
   contrasenas.
 
+## Consulta de aprobacion y autorizacion (2026-11-12)
+
+La bandeja y el detalle muestran dos hechos independientes:
+
+- **Solicitud aprobada**: el estado actual de la solicitud es `APPROVED`.
+- **Curso autorizado**: existe autorizacion contractual efectiva, consultada
+  mediante `firmas_autorizadas_reales()` y su fecha de firma. Exige pagare
+  vigente firmado, proceso/fotografia coherentes y evidencia de firma registrada.
+  No basta `APPROVED`, una fecha aislada ni una simulacion Sandbox.
+
+Seguimiento incluye los tramites y las solicitudes aprobadas, con o sin
+autorizacion. Las rechazadas, canceladas y finalizadas continuan accesibles en
+Todas las solicitudes. Los filtros avanzados y la paginacion se mantienen.
+La fecha de autorizacion no se deduce del historial: una transicion historica
+a `APPROVED` se describe como Solicitud aprobada, no como Curso autorizado.
+
+Son consultas de solo lectura y sin JavaScript obligatorio. No crean ni cambian
+autorizaciones, firmas, condiciones, cuotas o estados. Se conservan membresias
+activas, contexto validado en servidor, aislamiento por institucion y mascaras
+por rol. El detalle ajeno devuelve 404, igual que uno inexistente. No se cargan
+recaudos ni se exponen evidencia bancaria, referencias/actores de Operaciones,
+tokens, URLs de firma o metadatos documentales privados.
+
+Evidencia sintetica, pruebas y revision: `PORTAL_INSTITUCION.md`.
+
 ## Separacion de credenciales
 
 Las membresias representan personas. Las credenciales API representan

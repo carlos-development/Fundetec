@@ -1,30 +1,39 @@
 {% extends "financiacion_educativa/dashboards/_base.html" %}
-{% load financiacion_format %}
+{% load financiacion_format static %}
+
+{% block extra_head %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/financiacion_educativa_institucion.css' %}">{% endblock %}
 
 {% block title %}{% if solo_seguimiento %}Seguimiento{% else %}Solicitudes{% endif %} | {{ education_brand.name|default:"Aprobado" }}{% endblock %}
 
 {% block dashboard_content %}
 <header class="edu-dashboard-heading">
     <p class="edu-eyebrow">Financiaci&oacute;n educativa</p>
-    <h1>{% if solo_seguimiento %}Seguimiento activo{% else %}Solicitudes{% endif %}</h1>
-    <p>{% if solo_seguimiento %}Solicitudes que contin&uacute;an en proceso para {{ institucion_activa.nombre_comercial }}.{% else %}Consulta del programa {{ institucion_activa.nombre_comercial }}.{% endif %}</p>
+    <h1>{% if solo_seguimiento %}Seguimiento{% else %}Solicitudes{% endif %}</h1>
+    <p>Consulta del programa {{ institucion_activa.nombre_comercial }}.</p>
 </header>
 
+<nav class="edu-institution-views" aria-label="Consulta de solicitudes">
+<a href="{% url 'financiacion_educativa_web:institucion:seguimiento' %}{% if querystring %}?{{ querystring }}{% endif %}"{% if solo_seguimiento %} aria-current="page"{% endif %}>Seguimiento</a>
+<a href="{% url 'financiacion_educativa_web:institucion:solicitudes' %}{% if querystring %}?{{ querystring }}{% endif %}"{% if not solo_seguimiento %} aria-current="page"{% endif %}>Todas las solicitudes</a>
+</nav>
+<p class="edu-institution-explanation">Una solicitud aprobada no implica que el curso est&eacute; autorizado. Consulta ambos resultados por separado.</p>
 {% include "financiacion_educativa/dashboards/institucional/_filtros_solicitudes.html" %}
 
-<section class="edu-dashboard-panel" aria-labelledby="applications-result-title">
+<section class="edu-dashboard-panel edu-institution-results" aria-labelledby="applications-result-title">
     <div class="edu-dashboard-section-heading"><div><p class="edu-eyebrow">Resultado</p><h2 id="applications-result-title">{{ pagina.paginator.count }} solicitud{{ pagina.paginator.count|pluralize:"es" }}</h2></div></div>
     {% if pagina.object_list %}
     <div class="edu-dashboard-table-wrap"><table class="edu-dashboard-table">
-        <thead><tr><th>Referencia</th><th>Solicitante</th><th>Curso</th><th>Periodo / sede</th><th>Plan</th><th>Estado / seguimiento</th><th>Actualizaci&oacute;n</th><th><span class="edu-visually-hidden">Acci&oacute;n</span></th></tr></thead>
+        <thead><tr><th scope="col">Solicitud</th><th scope="col">Curso</th><th scope="col">Plan</th><th scope="col">Solicitud aprobada</th><th scope="col">Curso autorizado</th><th scope="col">Seguimiento</th><th scope="col"><span class="edu-visually-hidden">Acci&oacute;n</span></th></tr></thead>
         <tbody>{% for item in pagina.object_list %}<tr>
-            <td data-label="Referencia"><strong>{{ item.referencia }}</strong><small>{{ item.creada_en|date:"d/m/Y" }}</small></td><td data-label="Solicitante">{{ item.solicitante }}</td><td data-label="Curso">{{ item.programa }}</td>
-            <td data-label="Periodo / sede">{{ item.periodo }}<small>{{ item.sede }}</small></td><td data-label="Plan">{{ item.valor_plan|cop }}<small>{{ item.plazo_meses }} meses</small></td>
-            <td data-label="Estado / seguimiento">{% include "financiacion_educativa/dashboards/institucional/_estado_badge.html" with estado=item.estado %}<small>{{ item.seguimiento }}</small></td><td data-label="Actualizaci&oacute;n">{{ item.actualizada_en|date:"d/m/Y H:i" }}</td>
-            <td><a class="edu-dashboard-row-link" href="{% url 'financiacion_educativa_web:institucion:solicitud-detalle' item.id %}" aria-label="Ver solicitud {{ item.referencia }}"><i class="bi bi-chevron-right" aria-hidden="true"></i></a></td>
+            <td data-label="Solicitud"><strong>{{ item.referencia }}</strong><span>{{ item.solicitante }}</span><small>Creada {{ item.creada_en|date:"d/m/Y" }}</small></td><td data-label="Curso">{{ item.programa }}<small>{{ item.periodo }} &middot; {{ item.sede }}</small></td>
+            <td data-label="Plan">{{ item.valor_plan|cop }}<small>{{ item.plazo_meses }} meses</small></td>
+            <td data-label="Solicitud aprobada">{% include "financiacion_educativa/dashboards/institucional/_confirmacion_estado.html" with confirmado=item.solicitud_aprobada %}<small>{{ item.estado.etiqueta }}</small></td>
+            <td data-label="Curso autorizado">{% include "financiacion_educativa/dashboards/institucional/_confirmacion_estado.html" with confirmado=item.curso_autorizado %}{% if item.curso_autorizado %}<small>Desde {{ item.autorizacion_efectiva_en|date:"d/m/Y H:i" }}</small>{% elif item.solicitud_aprobada %}<small>Autorizaci&oacute;n efectiva pendiente</small>{% endif %}</td>
+            <td data-label="Seguimiento">{{ item.seguimiento }}<small>Actualizada {{ item.actualizada_en|date:"d/m/Y H:i" }}</small></td>
+            <td data-label="Detalle"><a class="edu-institution-detail-link" href="{% url 'financiacion_educativa_web:institucion:solicitud-detalle' item.id %}" aria-label="Ver solicitud {{ item.referencia }}">Ver detalle <i class="bi bi-arrow-right" aria-hidden="true"></i></a></td>
         </tr>{% endfor %}</tbody>
     </table></div>
     {% include "financiacion_educativa/dashboards/institucional/_paginacion.html" %}
-    {% else %}<div class="edu-dashboard-empty"><i class="bi bi-search" aria-hidden="true"></i><h3>Sin resultados</h3><p>No encontramos solicitudes con los filtros seleccionados.</p></div>{% endif %}
+    {% else %}<div class="edu-dashboard-empty"><i class="bi bi-search" aria-hidden="true"></i><h3>Sin resultados</h3><p>No encontramos solicitudes con los filtros seleccionados.</p><p>{% if solo_seguimiento %}Seguimiento incluye tr&aacute;mites y solicitudes aprobadas. Las rechazadas, canceladas y finalizadas se consultan en Todas las solicitudes.{% else %}Prueba otra b&uacute;squeda o limpia los filtros.{% endif %}</p></div>{% endif %}
 </section>
 {% endblock %}
