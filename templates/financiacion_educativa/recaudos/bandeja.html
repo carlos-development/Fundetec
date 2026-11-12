@@ -3,6 +3,7 @@
 {% block extra_head %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/financiacion_educativa_recaudos.css' %}">{% endblock %}
 {% block operations_content %}<div class="edu-recaudos-workspace edu-ops-workspace">
 <header class="edu-dashboard-heading"><h1>Recaudos educativos</h1><p>Verifica el ingreso en el banco y, cuando corresponda, apl&iacute;calo a una cuota.</p></header>
+<a href="{% url 'financiacion_educativa_web:operaciones:tablero-recaudos' %}">Ver tablero de importes y aplicaciones</a>
 <nav class="edu-ops-tabs" aria-label="Bandejas de recaudos">{% for pestana in pestanas %}<a href="?{{ pestana.querystring }}"{% if pestana.activa %} aria-current="page"{% endif %}>{{ pestana.etiqueta }} <span>{{ pestana.cantidad }}</span></a>{% endfor %}</nav>
 <details class="edu-recaudos-disclosure"{% if form.errors or request.GET.institucion or request.GET.desde or request.GET.hasta or request.GET.estado == 'REJECTED' %} open{% endif %}><summary>Filtrar ingresos y consultar no conciliados</summary>
 <form method="get" class="edu-recaudos-form edu-recaudos-filters">{% include "financiacion_educativa/recaudos/_campos.html" %}<div class="edu-recaudos-actions"><button type="submit"><i class="bi bi-search" aria-hidden="true"></i> Consultar</button><a href="{% url 'financiacion_educativa_web:operaciones:recaudos' %}">Limpiar</a></div></form><p class="edu-recaudos-caption">El rango filtra los reportes por fecha de creaci&oacute;n. El total confirmado usa la fecha efectiva bancaria.</p></details>

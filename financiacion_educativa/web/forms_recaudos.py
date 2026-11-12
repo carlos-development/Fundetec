@@ -3,6 +3,7 @@ from decimal import Decimal
 from django.utils import timezone
 
 from instituciones.models import Institucion
+from financiacion_educativa.dashboards.operaciones.reporte_recaudos import OPCIONES_SEGMENTO
 from financiacion_educativa.models_recaudos import ArchivoRecaudoEducativo, ReporteRecaudoEducativo, CuentaRecaudoEducativa
 from financiacion_educativa.services.recaudos import monto_cop, fecha_transferencia, evidencias_bancarias_elegibles, referencia_bancaria, PERMISO_REGISTRAR
 
@@ -118,3 +119,11 @@ class FiltrosRecaudosForm(forms.Form):
         if datos.get('desde') and datos.get('hasta') and datos['desde'] > datos['hasta']:
             raise forms.ValidationError('La fecha inicial debe ser anterior a la final.')
         return datos
+
+
+class FiltrosTableroRecaudosForm(FiltrosRecaudosForm):
+    estado = forms.ChoiceField(label='Listado de respaldo', choices=OPCIONES_SEGMENTO)
+    desde = forms.DateField(label='Fecha efectiva desde',
+        widget=forms.DateInput(format='%Y-%m-%d', attrs={'type': 'date'}))
+    hasta = forms.DateField(label='Fecha efectiva hasta',
+        widget=forms.DateInput(format='%Y-%m-%d', attrs={'type': 'date'}))

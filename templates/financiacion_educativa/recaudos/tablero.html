@@ -1,0 +1,60 @@
+{% extends "financiacion_educativa/dashboards/operaciones/_base.html" %}
+{% load static recaudo_format %}
+{% block extra_head %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/financiacion_educativa_recaudos.css' %}">{% endblock %}
+{% block operations_content %}
+<div class="edu-recaudos-workspace edu-ops-workspace edu-collections-board">
+    <header class="edu-dashboard-heading">
+        <h1>Recaudos y aplicaciones</h1>
+        <p>Ingresos confirmados en banco y su aplicaci&oacute;n a cuotas.</p>
+        <a href="{% url 'financiacion_educativa_web:operaciones:recaudos' %}">Ir a las bandejas de trabajo</a>
+    </header>
+    <form method="get" class="edu-recaudos-form edu-recaudos-filters" aria-label="Filtros del tablero">
+        {% include "financiacion_educativa/recaudos/_campos.html" %}
+        <div class="edu-recaudos-actions"><button type="submit"><i class="bi bi-search" aria-hidden="true"></i> Consultar</button><a href="{% url 'financiacion_educativa_web:operaciones:tablero-recaudos' %}">Limpiar</a></div>
+    </form>
+    {% if form.errors %}
+        <p class="edu-recaudos-caption">No se muestran importes ni movimientos con un filtro inv&aacute;lido.</p>
+    {% else %}
+        <p class="edu-recaudos-caption">Fecha efectiva bancaria: {{ form.cleaned_data.desde|date:"d/m/Y" }} &ndash; {{ form.cleaned_data.hasta|date:"d/m/Y" }} (ambos d&iacute;as incluidos). Importes en COP.</p>
+        <div class="edu-collections-indicators" aria-label="Importes de la cohorte bancaria">
+            {% for indicador in indicadores %}
+            <a class="edu-collections-indicator" data-indicador="{{ indicador.codigo }}" href="{{ indicador.url }}"{% if indicador.activo %} aria-current="true"{% endif %}>
+                <span>{{ indicador.etiqueta }}</span>
+                <strong>{{ indicador.importe|cop_recaudo }}</strong>
+                <small>{{ indicador.cantidad }} movimiento{{ indicador.cantidad|pluralize:"s" }} &middot; Ver respaldo <span aria-hidden="true">&rarr;</span></small>
+            </a>
+            {% endfor %}
+        </div>
+        <section class="edu-collections-split" aria-labelledby="applied-split-title">
+            <h2 id="applied-split-title">Desglose de lo aplicado</h2>
+            <dl class="edu-recaudos-summary"><div><dt>Capital aplicado</dt><dd>{{ totales.capital|cop_recaudo }}</dd></div><div><dt>Intereses aplicados</dt><dd>{{ totales.intereses|cop_recaudo }}</dd></div></dl>
+            <p class="edu-recaudos-caption">Solo aplicaciones registradas. Los ingresos por aplicar a&uacute;n no tienen desglose de capital e intereses. No son saldos de deuda ni un reparto entre partes.</p>
+        </section>
+        <details class="edu-recaudos-disclosure">
+            <summary>Ver importes por mes bancario</summary>
+            <div class="edu-dashboard-table-wrap" tabindex="0" role="region" aria-label="Importes por mes"><table class="edu-dashboard-table edu-recaudos-table">
+                <thead><tr><th scope="col">Mes</th><th scope="col">Confirmados</th><th scope="col">Por aplicar</th><th scope="col">Aplicados</th><th scope="col">Capital aplicado</th><th scope="col">Intereses aplicados</th></tr></thead>
+                <tbody>{% for mes in meses %}<tr><th scope="row">{{ mes.mes|date:"m/Y" }}</th><td>{{ mes.confirmados|cop_recaudo }}</td><td>{{ mes.pendientes|cop_recaudo }}</td><td>{{ mes.aplicados|cop_recaudo }}</td><td>{{ mes.capital|cop_recaudo }}</td><td>{{ mes.intereses|cop_recaudo }}</td></tr>{% empty %}<tr><td colspan="6">Sin ingresos confirmados en este rango.</td></tr>{% endfor %}</tbody>
+            </table></div>
+        </details>
+        <section id="movimientos" aria-labelledby="movements-title" tabindex="-1">
+            <h2 id="movements-title">{{ etiqueta_listado }}</h2>
+            <p id="movements-total">{{ pagina.paginator.count }} movimiento{{ pagina.paginator.count|pluralize:"s" }} &middot; {{ total_listado|cop_recaudo }}</p>
+            <p class="edu-recaudos-caption">Respaldo completo del indicador seleccionado, no solo de esta p&aacute;gina. Mismo rango bancario e instituci&oacute;n.</p>
+            <div class="edu-dashboard-table-wrap" tabindex="0" role="region" aria-label="Movimientos de respaldo"><table class="edu-dashboard-table edu-recaudos-table edu-ops-inbox">
+                <thead><tr><th scope="col">Obligaci&oacute;n / Instituci&oacute;n</th><th scope="col">Fecha efectiva</th><th scope="col">Recibido</th><th scope="col">Capital aplicado</th><th scope="col">Intereses aplicados</th><th scope="col">Aplicaci&oacute;n</th></tr></thead>
+                <tbody>{% for ingreso in pagina %}<tr>
+                    <td data-label="Obligaci&oacute;n / Instituci&oacute;n"><a href="{% url 'financiacion_educativa_web:operaciones:recaudo-detalle' ingreso.reporte_id %}">{{ ingreso.reporte.solicitud.referencia_externa }}</a><small>{{ ingreso.reporte.solicitud.institucion.nombre_comercial }}</small></td>
+                    <td data-label="Fecha efectiva">{{ ingreso.fecha_efectiva|date:"d/m/Y" }}</td>
+                    <td data-label="Recibido">{{ ingreso.monto_recibido|cop_recaudo }}</td>
+                    <td data-label="Capital aplicado">{% if ingreso.aplicacion %}{{ ingreso.aplicacion.capital_aplicado|cop_recaudo }}{% else %}&mdash;{% endif %}</td>
+                    <td data-label="Intereses aplicados">{% if ingreso.aplicacion %}{{ ingreso.aplicacion.interes_aplicado|cop_recaudo }}{% else %}&mdash;{% endif %}</td>
+                    <td data-label="Aplicaci&oacute;n">{% if ingreso.aplicacion %}<span class="edu-recaudos-badge is-safe">Aplicado &middot; Cuota {{ ingreso.aplicacion.cuota.numero }}</span>{% else %}<span class="edu-recaudos-badge">Pendiente de aplicar</span>{% endif %}</td>
+                </tr>{% empty %}<tr><td colspan="6">Sin movimientos en este listado. Cambia los filtros o consulta otra categor&iacute;a.</td></tr>{% endfor %}</tbody>
+            </table></div>
+            <nav class="edu-recaudos-actions" aria-label="Paginaci&oacute;n de movimientos">{% if pagina.has_previous %}<a href="?{{ querystring }}&page={{ pagina.previous_page_number }}#movimientos">Anterior</a>{% endif %}<span>{{ pagina.number }} / {{ pagina.paginator.num_pages }}</span>{% if pagina.has_next %}<a href="?{{ querystring }}&page={{ pagina.next_page_number }}#movimientos">Siguiente</a>{% endif %}</nav>
+        </section>
+        <p class="edu-recaudos-notice">Confirmar una transferencia no paga una cuota. Solo una aplicaci&oacute;n registrada permite mostrarla como aplicada.</p>
+    {% endif %}
+</div>
+{% endblock %}
