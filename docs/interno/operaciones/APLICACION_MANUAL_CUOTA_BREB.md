@@ -1,5 +1,15 @@
 # Aplicar manualmente un recaudo conciliado
 
+Estado actual, 2026-11-11: Carlos confirma `82028d2` desplegado en staging,
+con 0031 y 0032 aplicadas. Operaciones muestra las cuotas 1 y 2 pagadas,
+el estudiante ve ambos pagos aplicados y el acceso directo a la evidencia
+bancaria privada devuelve 403. Los duplicados solo se validaron localmente,
+no en staging.
+Es un antecedente aportado por el responsable, no una inspeccion remota de
+esta revision. Las secciones historicas de instalacion/validacion siguientes
+no indican que deban repetirse migraciones ya aplicadas. El cierre y plan
+vigentes se encuentran al final de este documento.
+
 Primer alcance de la Fase 2B. La migración `0031_aplicacion_manual_cuota` crea
 un registro por ingreso y por cuota. No aplica movimientos existentes por lote.
 
@@ -280,3 +290,122 @@ solapadas; no es una ejecucion de toda la suite. Check sin incidencias y
 makemigrations sin cambios pendientes; 0032 aplicada solo en la base temporal y
 SQL revisado. 0031 conserva el hash Git `8d91a1221b6ca435861262a609f945f1d781d457`.
 No hubo registros reales, llamadas a proveedores, commit, push o despliegue.
+
+## Cierre del recorrido sin reporte previo y plan de liberacion
+
+Base funcional candidata: `82028d2dc26035a36779e63ec905c34a2087193d`.
+La evidencia nueva de esta revision es local y sintetica, no una repeticion de
+la operacion bancaria real ni una certificacion de datos de staging. El incremento
+de cierre solo agrega cobertura y actualiza este procedimiento y el roadmap;
+no modifica servicios, permisos, interfaz ni las migraciones 0031/0032.
+
+La prueba integrada
+`IngresoOperacionesTests.test_recorrido_sin_reporte_repite_registro_y_aplicacion_sin_filtrar_evidencia`
+ejecuta las vistas de Django y renderiza sus templates con este recorrido:
+
+1. Obligacion firmada/autorizada sintetica, sin reporte previo del estudiante.
+2. Subida de evidencia desde Registrar pago recibido. PENDING bloquea crear el
+   ingreso; el antivirus simulado limpio habilita SAFE. Sin proveedores reales.
+3. Registro con cuenta, monto exacto, fecha, referencia y evidencia del operador.
+   Sin comprobante ni reporte ficticio del estudiante. Todavia no hay cuota pagada.
+4. Mismo POST y nueva clave con la referencia normalizada: mismo recaudo.
+5. Vista previa y confirmacion explicita: una aplicacion a la primera cuota.
+   Repetir el POST y volver a registrar el movimiento no crea otra aplicacion,
+   reporte o conciliacion ni avanza silenciosamente a la cuota siguiente.
+6. Operaciones muestra Pagada. La cuenta propietaria muestra Pago aplicado a la
+   cuota e Ingreso registrado por Operaciones; no muestra actor, referencia,
+   identificador de evidencia, ruta privada ni enlace operativo del soporte.
+   Intentar descargarlo directamente retorna 403; el comprobante inexistente,
+   incluso agregando banco=1, retorna 404. Otra cuenta no puede abrir el reporte.
+7. Calendario firmado, conciliacion original, APPROVED, autorizacion y
+   financial_terms se conservan. Solo se acredita la aplicacion persistida.
+
+La confirmacion al estudiante de este alcance es la consulta del resultado en
+su portal. No se implementan ni envian correos nuevos. Notificaciones automaticas,
+reparto y PDF del plan siguen siendo bloques posteriores.
+
+### Reproduccion local aislada
+
+Con PostgreSQL temporal, proveedores simulados y sin cargar .env compartidos:
+
+```text
+python manage.py test financiacion_educativa.tests.test_ingreso_operaciones financiacion_educativa.tests.test_aplicacion_cuotas --noinput
+python manage.py check
+python manage.py makemigrations --check --dry-run
+git diff --check
+```
+
+Exigir cero omisiones: tres carreras de registro (incluido el cruce con el reporte
+del estudiante y la unicidad global) y dos de aplicacion (mismo ingreso/misma cuota).
+No sustituir este resultado por SQLite ni por ejecuciones historicas.
+
+Resultado actual (2026-11-11): PostgreSQL 16.13 temporal aislado; ambos modulos,
+39 pruebas OK en 66.391 s, cero omisiones, incluidas las cinco concurrencias y
+el recorrido integrado anterior. Se ejecutaron las vistas con Django TestClient
+y templates reales; no es una prueba de navegador movil ni una consulta remota.
+Los soportes y contratos son sinteticos; antivirus simulado, correo locmem y
+sin llamadas a bancos, ZapSign u otros proveedores. Se elimina el contenedor
+y su base temporal al finalizar. No se reutilizaron resultados anteriores.
+
+### Evidencia confirmada en staging por Carlos
+
+Sobre `82028d2`, con 0031 y 0032 aplicadas, el responsable confirma:
+
+- Operaciones muestra las cuotas 1 y 2 como pagadas.
+- Desde la cuenta del estudiante se ven ambos pagos aplicados.
+- El acceso directo a la evidencia bancaria privada devuelve HTTP 403.
+
+Esta comprobacion fue comunicada por Carlos, no ejecutada remotamente por el
+agente. No se incluyen datos personales, referencias bancarias ni documentos.
+Repeticion del registro, doble aplicacion, unicidad e idempotencia concurrente:
+verificadas en las 39 pruebas locales PostgreSQL; NO verificadas en staging
+en este cierre. Falta repetir alli el ensayo de duplicados con datos sinteticos
+si se exige como condicion de liberacion. No utilizar el pago real para probarlo.
+
+Las comprobaciones finales locales fueron: check sin incidencias, makemigrations
+--check --dry-run sin cambios, migrate --plan sin operaciones pendientes y
+git diff --check correcto. El contenedor PostgreSQL temporal fue eliminado.
+
+### Liberacion pendiente, sin ejecutar
+
+1. Revisar el diff de cierre y fijar el SHA candidato aprobado. El codigo funcional
+   sigue en 82028d2; este cierre versiona cobertura/documentacion en la misma
+   rama y se presenta mediante PR a main, sin fusion ni despliegue automaticos.
+   No mezclar anulacion, cambios de firma por correo ni redisenos.
+2. En staging, mediante el acceso autorizado del responsable, confirmar sin escribir:
+
+```bash
+cd /var/www/fundetec-staging/current
+sudo -u fundetec-staging git rev-parse HEAD
+sudo -u fundetec-staging git status --short
+staging_manage showmigrations financiacion_educativa
+staging_manage migrate --plan
+staging_manage check
+systemctl is-active fundetec-staging.service
+curl -fsS --max-time 15 https://staging-api.aprobado.com.co/health/
+```
+
+   Exigir arbol limpio, HEAD aprobado, 0031/0032 [X] y ausencia de migraciones
+   inesperadas. No ejecutar migrate hacia 0031: ya esta superada por 0032.
+   No es necesario reinstalar staging para cambiar solo cobertura/documentacion.
+3. El resultado visible de cuotas 1/2 y el 403 ya fueron confirmados por Carlos.
+   Con cuentas y obligacion sinteticas, completar el ensayo pendiente de
+   repeticion de registro/aplicacion en interfaz, conservando el mismo movimiento
+   de prueba. Mantener permisos independientes de registrar/aplicar. No usar el
+   caso real para este ensayo ni alterar sus evidencias.
+4. Antes de produccion: autorizacion separada de release, SHA exacto, revision del
+   diff contra el HEAD productivo, respaldo verificable de PostgreSQL y archivos
+   privados y plan/SQL de las migraciones que realmente falten. No suponer las
+   rutas, HEAD o estado de migraciones productivos a partir de staging. Confirmar
+   perfil contractual, cuenta receptora y escaner existentes; no cambiar flags
+   de automatizacion, IA, correo o firma para liberar esta funcion.
+5. Desplegar solo tras esa autorizacion y mediante el procedimiento productivo
+   vigente. Asignar en Admin los permisos especificos al responsable designado,
+   diferenciando registrar, conciliar y aplicar. Mantener el caso real sin operar.
+   El despliegue NO autoriza registrar/aplicar el pago real: requiere verificar
+   movimiento existente, cuota/intencion y autorizacion operativa expresa aparte.
+6. Para detener el uso, retirar permisos de registro/aplicacion. Conservar 0031,
+   0032, ingresos, evidencias y aplicaciones. No revertir a codigo que requiera
+   comprobantes del pagador en ingresos OPERATIONS o esconda aplicaciones. Si
+   existen aplicaciones, conservar lectura compatible y escalar cualquier error;
+   no existe reverso financiero en este alcance.

@@ -167,8 +167,21 @@ Primer incremento: [aplicación manual de una cuota BRE-B](interno/operaciones/A
 
 
 Propuesta del libro completo y decisiones pendientes: `docs/DISENO_RECAUDOS_FASE_2B.md`.
-Solo esta implementado localmente este incremento de aplicaciones integras, con
-migracion 0031, sin procesar pagos reales ni historicos por lote. Dashboard global
+Estado actualizado 2026-11-11: Carlos confirma `82028d2` instalado en staging,
+con 0031 y 0032 aplicadas. Confirma cuotas 1 y 2 pagadas en Operaciones,
+ambos pagos aplicados visibles para el estudiante y acceso directo a evidencia
+bancaria privada bloqueado con 403. Esta evidencia fue aportada por Carlos;
+no constituye una inspeccion remota ejecutada por el agente.
+Incluye ingreso recibido sin reporte previo del estudiante y aplicacion manual
+integra, con permisos separados. Esta revision cierra localmente con datos
+sinteticos la repeticion del registro, aplicacion unica y privacidad del resultado
+del estudiante; no consulta ni opera el pago real. El procedimiento enlazado
+distingue la evidencia local de la confirmacion remota aportada por Carlos.
+PostgreSQL 16.13 local aislado: 39 pruebas OK, cero omisiones, cinco concurrencias.
+Duplicados/reintentos e idempotencia: verificados localmente, NO verificados en
+staging en este cierre. No atribuir ese resultado a la prueba manual del servidor.
+La liberacion productiva y el uso del caso real requieren autorizaciones separadas.
+Dashboard global
 de saldos/cortes, reparto 80/20, notificaciones y envio de plan PDF siguen pendientes.
 El detalle operativo muestra aplicaciones persistidas y capital restante segun
 ellas; no es liquidacion a corte ni cambia financial_terms o APPROVED.

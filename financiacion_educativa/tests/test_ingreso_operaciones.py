@@ -46,6 +46,88 @@ class DatosIngresoOperaciones(base.DatosRecaudosMixin):
 
 @override_settings(**base.AISLAMIENTO)
 class IngresoOperacionesTests(DatosIngresoOperaciones, TestCase):
+    def test_recorrido_sin_reporte_repite_registro_y_aplicacion_sin_filtrar_evidencia(self):
+        from financiacion_educativa.services.estado_publico import obtener_resultado_publico
+
+        self.assertFalse(ReporteRecaudoEducativo.objects.exists())
+        cuotas_originales = list(self.fotografia.cuotas.values())
+        contrato_original = obtener_resultado_publico(self.solicitud)
+        self.client.force_login(self.actor)
+        detalle_obligacion = self.detalle_url(self.solicitud)
+        self.assertContains(self.client.get(detalle_obligacion), 'Registrar pago recibido')
+        self.assertEqual(self.client.post(self.url_registro(), {
+            'accion': 'evidencia', 'archivo': imagen_jpeg_prueba(marca='e2e-bank-only'),
+        }).status_code, 302)
+        banco = ArchivoRecaudoEducativo.objects.filter(finalidad='BANK_EVIDENCE').exclude(pk=self.banco.pk).get()
+        self.assertEqual(banco.creado_por_id, self.actor.pk)
+        self.assertEqual(banco.estado_escaneo, 'PENDING')
+        datos = self.post(evidencia_id=banco.pk)
+        pendiente = self.client.post(self.url_registro(), datos)
+        self.assertEqual(pendiente.status_code, 200)
+        self.assertTrue(pendiente.context['form'].errors)
+        self.assertFalse(ReporteRecaudoEducativo.objects.exists())
+        self.escanear(banco.pk)
+        banco.refresh_from_db()
+        self.assertEqual(banco.estado_escaneo, 'SAFE')
+
+        respuesta = self.client.post(self.url_registro(), datos)
+        ingreso = ConciliacionRecaudoEducativo.objects.get()
+        registro = ingreso.reporte
+        detalle_recaudo = reverse('financiacion_educativa_web:operaciones:recaudo-detalle', args=[registro.pk])
+        self.assertRedirects(respuesta, detalle_recaudo)
+        self.assertRedirects(self.client.post(self.url_registro(), datos), detalle_recaudo)
+        # A fresh form/key still resolves the same normalized bank movement.
+        repetido = {**datos, 'clave': uuid4(), 'referencia': ' ops-bank-001 '}
+        self.assertRedirects(self.client.post(self.url_registro(), repetido), detalle_recaudo)
+        self.assertEqual(ingreso.evidencia_movimiento_id, banco.pk)
+        self.assertEqual(registro.origen, 'OPERATIONS')
+        self.assertEqual(registro.reportado_por_id, self.actor.pk)
+        self.assertIsNone(registro.comprobante_id)
+        self.assertFalse(AplicacionCuotaEducativa.objects.exists())
+        conciliacion_original = ConciliacionRecaudoEducativo.objects.values().get(pk=ingreso.pk)
+
+        self.client.force_login(self.pagador)
+        estado = reverse('financiacion_educativa_web:reporte-pago', args=[self.solicitud.pk, registro.pk])
+        antes = self.client.get(estado)
+        self.assertContains(antes, 'pendiente')
+        self.assertNotContains(antes, 'Pago aplicado a la cuota')
+        self.client.force_login(self.actor)
+        form = self.client.get(detalle_recaudo).context['aplicar_form']
+        aplicar = reverse('financiacion_educativa_web:operaciones:recaudo-aplicar-cuota', args=[registro.pk])
+        confirmacion = {**form.initial, 'confirmar_cuota': 'on'}
+        self.assertRedirects(self.client.post(aplicar, confirmacion), detalle_recaudo)
+        aplicacion = AplicacionCuotaEducativa.objects.get()
+        self.assertRedirects(self.client.post(aplicar, confirmacion), detalle_recaudo)
+        self.assertRedirects(self.client.post(self.url_registro(), repetido), detalle_recaudo)
+        self.assertEqual(ReporteRecaudoEducativo.objects.count(), 1)
+        self.assertEqual(ConciliacionRecaudoEducativo.objects.count(), 1)
+        self.assertEqual(AplicacionCuotaEducativa.objects.count(), 1)
+        self.assertEqual(AplicacionCuotaEducativa.objects.get().pk, aplicacion.pk)
+        self.assertEqual(aplicacion.cuota_id, self.cuota.pk)
+        self.assertEqual(aplicacion.conciliacion_id, ingreso.pk)
+        self.assertEqual(aplicacion.actor_id, self.actor.pk)
+        self.assertEqual(aplicacion.capital_aplicado + aplicacion.interes_aplicado, ingreso.monto_recibido)
+        self.assertEqual(aplicacion.fecha_efectiva, ingreso.fecha_efectiva)
+        self.assertEqual(list(self.fotografia.cuotas.values()), cuotas_originales)
+        self.assertEqual(ConciliacionRecaudoEducativo.objects.values().get(pk=ingreso.pk), conciliacion_original)
+        self.solicitud.refresh_from_db()
+        self.assertEqual(obtener_resultado_publico(self.solicitud), contrato_original)
+        self.assertContains(self.client.get(detalle_obligacion), 'Pagada')
+
+        self.client.force_login(self.pagador)
+        pagina = self.client.get(estado)
+        self.assertContains(pagina, f'Pago aplicado a la cuota {self.cuota.numero}')
+        self.assertContains(pagina, 'Ingreso registrado por Operaciones')
+        soporte = reverse('financiacion_educativa_web:operaciones:recaudo-soporte', args=[registro.pk])
+        for privado in (soporte, str(banco.pk), banco.archivo.name, ingreso.referencia_verificada, self.actor.username):
+            self.assertNotContains(pagina, privado)
+        self.assertEqual(self.client.get(soporte + '?banco=1').status_code, 403)
+        self.assertEqual(self.client.get(soporte + '?banco=1&download=1').status_code, 403)
+        comprobante = reverse('financiacion_educativa_web:pago-comprobante', args=[self.solicitud.pk, registro.pk])
+        self.assertEqual(self.client.get(comprobante + '?banco=1').status_code, 404)
+        self.client.force_login(self.actor)
+        self.assertEqual(self.client.get(estado).status_code, 404)
+
     def test_registro_sin_reporte_previo_y_aplicacion_completa(self):
         self.assertEqual(ReporteRecaudoEducativo.objects.count(), 0)
         archivos = ArchivoRecaudoEducativo.objects.count()
