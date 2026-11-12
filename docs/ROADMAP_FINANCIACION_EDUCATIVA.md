@@ -1,6 +1,6 @@
 # Roadmap de financiacion educativa
 
-Actualizado: 2026-11-11. Producto independiente de libranza y gestion_creditos.
+Actualizado: 2026-11-12. Producto independiente de libranza y gestion_creditos.
 El backlog legado se conserva en `archivo/legacy/` y no gobierna este roadmap.
 
 ## Estado y criterios de cierre
@@ -15,6 +15,7 @@ El backlog legado se conserva en `archivo/legacy/` y no gobierna este roadmap.
 | Fase 2B: libro de aplicaciones | Primer incremento manual implementado localmente; pendiente liberacion | Reutiliza el ingreso conciliado para cubrir exactamente la primera cuota pendiente, con verificacion explicita del operador, vista previa firmada, auditoria, bloqueo y unicidad. No altera calendario firmado. Parciales, excedentes, abonos, reversos, liquidaciones y mora siguen pendientes. |
 | Distribucion financiera | Pendiente de libro 2B y convenio confirmado | Originacion 10% del monto solicitado ya calculada por motor/fotografia. Reparto propuesto de intereses 80% APROBADO y 20% Jowalth sin confirmar ni implementar. Capital, IVA, garantia y seguro separados; no repartir el ingreso bruto ni inventar reglas. |
 | Dashboard de recaudos y aplicaciones | Consulta bancaria y detalle de aplicaciones integras locales; tablero global pendiente | Detalle operativo muestra cuotas pagadas solo con aplicacion persistente, capital/interes aplicados y capital restante derivado. Tablero global, parciales y saldos a corte dependen de las siguientes etapas 2B; no derivarlos del reporte o calendario sin aplicaciones. |
+| Portal de Operaciones: incremento de Recaudos (2026-11-12) | Revision local en rama separada desde 3766649; no desplegado | Bandejas Por verificar / Por aplicar / Aplicados derivadas de los registros existentes. Registro y conciliacion conservan los datos al cargar, consultar y abrir evidencia propia. No introduce estados, permisos, migraciones ni reglas de reparto. Evidencia y validacion: `PORTAL_OPERACIONES_RECAUDOS.md`. |
 | Notificaciones de pagos | Pendiente de eventos/plantillas y aprobacion operativa | No existen nuevos correos BRE-B. Diferenciar reporte recibido, ingreso confirmado y aplicacion realizada; reutilizar outbox/idempotencia y matriz institucional sin reenviar invitaciones. |
 | Envio del plan PDF | Pendiente de generacion privada y evento de envio aprobado | Existe plan contractual HTML desde fotografia; no endpoint/artefacto PDF independiente del plan ni su envio implementados. Definir destinatario/momento, version contractual vs proyeccion y entrega idempotente por outbox. No prometer un plan actualizado sin libro. |
 | Fase 2C: ePayco | Pendiente, sin adaptadores ni integracion activados | Comercio y credenciales sandbox autorizados; confirmacion servidor a servidor autenticada, importe/moneda/orden, idempotencia, ambiente y reversos. Nunca confirmar por la redireccion del navegador. |
@@ -62,6 +63,15 @@ Debe definirse su base (intereses efectivamente aplicados/recaudados o la que
 apruebe el convenio), corte, participantes, redondeo y efecto de compensaciones.
 No mezclarlo con originacion, capital, IVA, garantia o seguro ni implementarlo
 como reparto del dinero bruto recibido.
+
+Revision del 2026-11-12: no se encontro un convenio de reparto aprobado en el
+repositorio ni fue suministrado para este incremento. La propuesta 80/20 no
+define vigencia, criterio temporal ni redondeo; sigue bloqueada como calculo
+definitivo. El alcance solicitado fija como unica base elegible el
+`AplicacionCuotaEducativa.interes_aplicado`, no el ingreso confirmado pendiente.
+No se habilitan importes Parte APROBADO / Parte institucion ni resumen de reparto
+por periodo. Definiciones faltantes y PR financiero separado:
+`PORTAL_OPERACIONES_RECAUDOS.md#reparto-de-intereses-bloqueado`.
 
 ## Dashboard inicial y verificacion
 

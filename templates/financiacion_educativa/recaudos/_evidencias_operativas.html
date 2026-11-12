@@ -1,0 +1,19 @@
+<section class="edu-ops-evidence" aria-labelledby="titulo-evidencia">
+<h2 id="titulo-evidencia">Evidencia bancaria</h2>
+<p class="edu-recaudos-caption">Solo evidencia propia del banco; no sustituye el comprobante del estudiante. Los datos digitados se conservan al cargar o consultar.</p>
+{% include "financiacion_educativa/recaudos/_campos.html" with form=evidencia_form %}
+<div class="edu-recaudos-actions">
+<button type="submit" name="accion" value="evidencia" formnovalidate{% if evidencia_action %} formaction="{{ evidencia_action }}"{% endif %}><i class="bi bi-upload" aria-hidden="true"></i> Registrar evidencia</button>
+<button type="submit" name="accion" value="actualizar" class="edu-ops-secondary" formnovalidate{% if evidencia_action %} formaction="{{ evidencia_action }}"{% endif %}><i class="bi bi-arrow-clockwise" aria-hidden="true"></i> Consultar estado</button>
+</div>
+<ul class="edu-ops-evidence-list" aria-label="Estado de tus evidencias bancarias">
+{% for evidencia in evidencias %}
+<li><strong>Evidencia {{ evidencia.creado_en|date:"d/m/Y H:i:s" }}</strong>
+{% if evidencia.estado_escaneo == 'SAFE' %}<span class="edu-recaudos-badge is-safe">Lista para verificar</span><p>Verificaci&oacute;n de seguridad completada. Comprueba el movimiento antes de seleccionarla.</p><a href="{% url 'financiacion_educativa_web:operaciones:evidencia-propia' evidencia.pk %}" target="_blank" rel="noopener">Revisar evidencia <span class="edu-recaudos-caption">(nueva pesta&ntilde;a)</span></a>
+{% elif evidencia.estado_escaneo == 'BLOCKED' %}<span class="edu-recaudos-badge is-blocked">Rechazada por seguridad</span><p>No se puede utilizar. Adjunta otra evidencia.</p>
+{% elif evidencia.estado_escaneo == 'ERROR' %}<span class="edu-recaudos-badge is-blocked">Error t&eacute;cnico de verificaci&oacute;n</span><p>No se puede utilizar todav&iacute;a. Solicita el reintento de seguridad al responsable operativo.</p>
+{% else %}<span class="edu-recaudos-badge">Revisi&oacute;n pendiente</span><p>Consulta nuevamente cuando termine el escaneo. No vuelvas a cargar el mismo soporte por esta espera.</p>{% endif %}
+</li>
+{% empty %}<li>No tienes evidencias registradas. Adjunta el soporte bancario para continuar.</li>{% endfor %}
+</ul>
+</section>

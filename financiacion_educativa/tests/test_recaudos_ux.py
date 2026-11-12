@@ -347,10 +347,14 @@ class RecaudosUXTests(DatosRecaudosMixin, TestCase):
         pendiente = ArchivoRecaudoEducativo.objects.get(finalidad='BANK_EVIDENCE')
         total = ArchivoRecaudoEducativo.objects.count()
         respuesta = self.client.get(self.accion_url('detalle'))
-        self.assertContains(respuesta, 'Verificaci')
+        self.assertContains(respuesta, 'Revisi&oacute;n pendiente')
+        self.assertContains(respuesta, 'name="accion" value="actualizar"')
         self.assertFalse(respuesta.context['confirmar_form'].fields['evidencia_id'].queryset.exists())
         self.escanear(pendiente.pk)
-        actualizada = self.client.get(self.accion_url('detalle'))
+        actualizada = self.client.post(self.accion_url('evidencia'), {
+            'accion': 'actualizar', 'referencia': 'REFERENCIA-CONSERVADA', 'monto': '100000.00',
+        })
+        self.assertEqual(actualizada.context['confirmar_form']['referencia'].value(), 'REFERENCIA-CONSERVADA')
         self.assertTrue(actualizada.context['confirmar_form'].fields['evidencia_id'].queryset.filter(pk=pendiente.pk).exists())
         self.assertEqual(ArchivoRecaudoEducativo.objects.count(), total)
 

@@ -8,6 +8,7 @@ app_name = 'operaciones'
 
 urlpatterns = [
     path('recaudos/', recaudos.bandeja_view, name='recaudos'),
+    path('recaudos/evidencias/<uuid:archivo_id>/', recaudos.evidencia_propia_view, name='evidencia-propia'),
     path('recaudos/<uuid:reporte_id>/', recaudos.detalle_operativo_view, name='recaudo-detalle'),
     path('recaudos/<uuid:reporte_id>/aplicar-cuota/', recaudos.aplicar_cuota_view, name='recaudo-aplicar-cuota'),
     path('recaudos/<uuid:reporte_id>/confirmar/', recaudos.confirmar_view, name='recaudo-confirmar'),

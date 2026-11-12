@@ -1,0 +1,7 @@
+<nav aria-label="Recorrido del ingreso"><ol class="edu-ops-steps">
+<li><a href="{% url 'financiacion_educativa_web:operaciones:obligacion-detalle' solicitud_id %}">Obligaci&oacute;n</a></li>
+<li{% if paso == 'registro' %} aria-current="step"{% endif %}>Registrar ingreso</li>
+<li{% if paso == 'evidencia' %} aria-current="step"{% endif %}>Evidencia</li>
+<li{% if paso == 'aplicar' %} aria-current="step"{% endif %}>Aplicar a cuota</li>
+<li{% if paso == 'resultado' %} aria-current="step"{% endif %}>Resultado</li>
+</ol></nav>
