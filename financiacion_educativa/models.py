@@ -3207,6 +3207,7 @@ class OutboxCorreoEducativo(models.Model):
 
 # Modelos aditivos de recaudos: no alteran el estado ni la fotografia contractual.
 from .models_recaudos import (  # noqa: E402,F401
+    AplicacionCuotaEducativa,
     ArchivoRecaudoEducativo, IntentoEscaneoRecaudo, CuentaRecaudoEducativa,
     ReceptorBrebEducativo, EventoReceptorBrebEducativo, ReporteRecaudoEducativo,
     ConciliacionRecaudoEducativo, RechazoReporteRecaudoEducativo,

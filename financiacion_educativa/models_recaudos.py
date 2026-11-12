@@ -156,16 +156,22 @@ class EventoReceptorBrebEducativo(EvidenciaInmutable):
 
 
 class ReporteRecaudoEducativo(EvidenciaInmutable):
+    class Origen(models.TextChoices):
+        PAYER = 'PAYER', 'Reportado por el pagador'
+        OPERATIONS = 'OPERATIONS', 'Registrado por Operaciones'
+
     class Proposito(models.TextChoices):
         INSTALLMENT = 'INSTALLMENT', 'Cuota'
         PRINCIPAL = 'PRINCIPAL', 'Abono a capital'
         FULL_PAYMENT = 'FULL_PAYMENT', 'Intencion de pago total'
+        UNSPECIFIED = 'UNSPECIFIED', 'Pendiente de identificar'
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     solicitud = models.ForeignKey('financiacion_educativa.SolicitudFinanciacionEducativa', on_delete=models.PROTECT, related_name='reportes_recaudo')
     fotografia = models.ForeignKey('financiacion_educativa.CondicionesFinancieras', on_delete=models.PROTECT)
-    receptor = models.ForeignKey(ReceptorBrebEducativo, on_delete=models.PROTECT)
-    comprobante = models.OneToOneField(ArchivoRecaudoEducativo, on_delete=models.PROTECT)
+    origen = models.CharField(max_length=16, choices=Origen.choices, default=Origen.PAYER)
+    receptor = models.ForeignKey(ReceptorBrebEducativo, on_delete=models.PROTECT, null=True, blank=True)
+    comprobante = models.OneToOneField(ArchivoRecaudoEducativo, on_delete=models.PROTECT, null=True, blank=True)
     reportado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
     clave_idempotencia = models.UUIDField()
     payload_sha256 = models.CharField(max_length=64)
@@ -180,19 +186,37 @@ class ReporteRecaudoEducativo(EvidenciaInmutable):
         permissions = [
             ('consultar_recaudos_educativos', 'Puede consultar reportes y recaudos educativos'),
             ('conciliar_recaudos_educativos', 'Puede confirmar o rechazar un ingreso educativo'),
+            ('registrar_pagos_recibidos_educativos', 'Puede registrar ingresos bancarios sin reporte del pagador'),
         ]
         constraints = [
             models.UniqueConstraint(fields=['solicitud', 'reportado_por', 'clave_idempotencia'], name='uniq_reporte_recaudo_payload'),
             models.CheckConstraint(condition=models.Q(monto_reportado__gt=0), name='reporte_recaudo_monto_positivo'),
+            models.CheckConstraint(condition=(
+                models.Q(origen='PAYER', receptor__isnull=False, comprobante__isnull=False)
+                & ~models.Q(proposito='UNSPECIFIED')
+                | models.Q(origen='OPERATIONS', receptor__isnull=True, comprobante__isnull=True)
+            ), name='reporte_recaudo_origen_soportes'),
         ]
 
     def clean(self):
         if self.fotografia_id and self.fotografia.solicitud_id != self.solicitud_id:
             raise ValidationError('La fotografia no pertenece a la obligacion.')
+        if self.origen == self.Origen.OPERATIONS:
+            if self.receptor_id or self.comprobante_id:
+                raise ValidationError('Un ingreso de Operaciones no tiene comprobante del pagador ni version de QR.')
+        elif not self.receptor_id or not self.comprobante_id or self.proposito == self.Proposito.UNSPECIFIED:
+            raise ValidationError('El reporte del pagador requiere receptor, comprobante y finalidad declarada.')
+
+    @property
+    def admite_aplicacion_cuota(self):
+        return (self.proposito == self.Proposito.INSTALLMENT or
+                self.origen == self.Origen.OPERATIONS and self.proposito == self.Proposito.UNSPECIFIED)
 
     @property
     def estado_publico(self):
         if hasattr(self, 'conciliacion'):
+            if hasattr(self.conciliacion, 'aplicacion'):
+                return 'Pago aplicado a cuota'
             return 'Ingreso confirmado pendiente de aplicacion'
         if hasattr(self, 'rechazo'):
             return 'Reporte no conciliado'
@@ -224,3 +248,47 @@ class RechazoReporteRecaudoEducativo(EvidenciaInmutable):
     motivo_publico = models.CharField(max_length=500)
     actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
     creado_en = models.DateTimeField(auto_now_add=True)
+
+
+class AplicacionCuotaEducativa(EvidenciaInmutable):
+    """Aplicación íntegra a una cuota del calendario firmado."""
+
+    conciliacion = models.OneToOneField(
+        ConciliacionRecaudoEducativo, on_delete=models.PROTECT, related_name='aplicacion',
+    )
+    cuota = models.OneToOneField(
+        'financiacion_educativa.CuotaAmortizacionEducativa',
+        on_delete=models.PROTECT, related_name='aplicacion_recaudo',
+    )
+    capital_aplicado = models.DecimalField(max_digits=14, decimal_places=2)
+    interes_aplicado = models.DecimalField(max_digits=14, decimal_places=2)
+    fecha_efectiva = models.DateField()
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    cuota_verificada = models.BooleanField(default=False)
+    creada_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta(EvidenciaInmutable.Meta):
+        permissions = [('aplicar_cuotas_educativas', 'Puede aplicar recaudos conciliados a cuotas educativas')]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(capital_aplicado__gt=0, interes_aplicado__gte=0, cuota_verificada=True),
+                name='aplicacion_cuota_importes_validos',
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        if not self.conciliacion_id or not self.cuota_id:
+            return
+        ingreso, cuota = self.conciliacion, self.cuota
+        if (
+            ingreso.reporte.fotografia_id != cuota.fotografia_id
+            or not ingreso.reporte.admite_aplicacion_cuota
+            or ingreso.monto_recibido != cuota.valor_cuota
+            or self.capital_aplicado != cuota.capital
+            or self.interes_aplicado != cuota.interes
+            or self.fecha_efectiva != ingreso.fecha_efectiva
+            or cuota.capital + cuota.interes != cuota.valor_cuota
+            or not self.cuota_verificada
+        ):
+            raise ValidationError('La aplicación no coincide con el recaudo y la cuota contractual.')

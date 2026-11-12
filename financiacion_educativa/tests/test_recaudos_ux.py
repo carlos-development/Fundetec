@@ -339,7 +339,7 @@ class RecaudosUXTests(DatosRecaudosMixin, TestCase):
         self.escanear(otro.comprobante_id)
         url = reverse('financiacion_educativa_web:operaciones:recaudo-confirmar', args=[otro.pk])
         duplicado = self.client.post(url, {**datos, 'referencia': 'unico-ux'})
-        self.assertIn('referencia', duplicado.context['confirmar_form'].errors)
+        self.assertRedirects(duplicado, reverse('financiacion_educativa_web:operaciones:recaudo-detalle', args=[self.reporte.pk]))
         self.assertEqual(ConciliacionRecaudoEducativo.objects.count(), 1)
 
     def test_escaneo_pendiente_tiene_consulta_sin_recargar_archivo(self):

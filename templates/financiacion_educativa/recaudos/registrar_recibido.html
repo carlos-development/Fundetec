@@ -1,0 +1,16 @@
+{% extends "financiacion_educativa/dashboards/operaciones/_base.html" %}
+{% load static %}
+{% block extra_head %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/financiacion_educativa_recaudos.css' %}">{% endblock %}
+{% block operations_content %}<div class="edu-recaudos-workspace">
+<header class="edu-dashboard-heading"><a href="{% url 'financiacion_educativa_web:operaciones:obligacion-detalle' fotografia.solicitud_id %}">Volver a la obligacion</a><h1>Registrar pago recibido</h1><p>{{ fotografia.solicitud.referencia_externa }} &middot; {{ fotografia.solicitud.nombre_curso }}</p></header>
+<section class="edu-recaudos-band"><h2>Ingreso bancario sin reporte del estudiante</h2>
+<p>Se registrara a tu nombre como Operaciones. No se creara un comprobante del pagador ni se aplicara dinero a una cuota.</p>
+<form method="post" class="edu-recaudos-form">{% csrf_token %}{% include "financiacion_educativa/recaudos/_campos.html" with form=form %}
+<p class="edu-recaudos-caption">Verifica la cuenta, referencia, monto y fecha en el banco. Si el movimiento ya existe, se abrira su recaudo sin duplicarlo.</p>
+<button type="submit"><i class="bi bi-check2-circle" aria-hidden="true"></i> Registrar ingreso bancario</button></form></section>
+<details class="edu-recaudos-disclosure"{% if evidencia_form.errors %} open{% endif %}><summary>Registrar evidencia bancaria para verificar</summary>
+<p>Adjunta evidencia bancaria propia. Solo podras seleccionarla cuando el escaneo termine limpio; no se admite un comprobante del estudiante como sustituto.</p>
+<form method="post" enctype="multipart/form-data" class="edu-recaudos-form">{% csrf_token %}<input type="hidden" name="accion" value="evidencia">
+{% include "financiacion_educativa/recaudos/_campos.html" with form=evidencia_form %}<button type="submit"><i class="bi bi-upload" aria-hidden="true"></i> Registrar evidencia</button></form>
+<p><a href="{% url 'financiacion_educativa_web:operaciones:registrar-pago-recibido' fotografia.solicitud_id %}">Actualizar evidencias disponibles</a></p></details>
+</div>{% endblock %}

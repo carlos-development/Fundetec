@@ -7,7 +7,8 @@
 <section class="edu-breb-status{% if reporte.conciliacion %} is-confirmed{% elif reporte.rechazo or reporte.comprobante.estado_escaneo == 'BLOCKED' %} is-warning{% endif %}" aria-labelledby="estado-reporte">
     <span class="edu-breb-eyebrow">Tu reporte de transferencia</span>
     <h1 id="estado-reporte">{% if reporte.conciliacion %}Transferencia confirmada{% else %}{{ reporte.estado_publico }}{% endif %}</h1>
-    {% if reporte.conciliacion %}<p>La aplicaci&oacute;n a tu cuota est&aacute; pendiente</p>
+    {% if reporte.conciliacion.aplicacion %}<p>Pago aplicado a la cuota {{ reporte.conciliacion.aplicacion.cuota.numero }}.</p>
+    {% elif reporte.conciliacion %}<p>La aplicaci&oacute;n a tu cuota est&aacute; pendiente</p>
     {% elif reporte.rechazo %}<p>{{ reporte.rechazo.motivo_publico }}</p><p>Corrige el reporte, no tu solicitud de financiaci&oacute;n.</p>
     {% elif reporte.comprobante.estado_escaneo == 'BLOCKED' %}<p>Tu comprobante fue bloqueado por seguridad. Contacta a soporte antes de volver a reportar.</p>
     {% elif reporte.comprobante.estado_escaneo == 'ERROR' %}<p>El equipo debe reintentar la verificaci&oacute;n de seguridad. No necesitas volver a transferir.</p>
@@ -17,12 +18,14 @@
     {% elif not reporte.conciliacion %}<a class="edu-recaudos-button" href="{% url 'financiacion_educativa_web:reporte-pago' solicitud.pk reporte.pk %}"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i> Consultar nuevamente</a>{% endif %}
 </section>
 <details class="edu-recaudos-disclosure edu-breb-report-details"><summary>Detalles del reporte y comprobante</summary>
+    {% if reporte.origen == 'OPERATIONS' %}<p>Ingreso registrado por Operaciones. No se aporto un comprobante del pagador.</p>{% else %}
     <dl class="edu-recaudos-summary"><div><dt>Prop&oacute;sito declarado</dt><dd>{{ reporte.get_proposito_display }}</dd></div><div><dt>Receptor</dt><dd>{{ reporte.receptor.titular }}</dd></div><div><dt>Monto reportado</dt><dd>{{ reporte.monto_reportado|cop_recaudo }}</dd></div><div><dt>Fecha declarada</dt><dd>{{ reporte.fecha_declarada|date:"d/m/Y" }}</dd></div></dl>
     <h2>Seguridad del comprobante</h2>
     {% if reporte.comprobante.estado_escaneo == 'SAFE' %}<span class="edu-recaudos-badge is-safe">Sin hallazgos de seguridad</span><p>Verificaci&oacute;n de seguridad completada.</p><p><a href="{% url 'financiacion_educativa_web:pago-comprobante' solicitud.pk reporte.pk %}">Descargar comprobante</a></p>
     {% elif reporte.comprobante.estado_escaneo == 'BLOCKED' %}<p>Soporte bloqueado.</p>
     {% elif reporte.comprobante.estado_escaneo == 'ERROR' %}<p>Verificaci&oacute;n no disponible. El soporte permanece protegido hasta resolver el fallo t&eacute;cnico.</p>
     {% else %}<p>Comprobante pendiente de verificaci&oacute;n de seguridad.</p>{% endif %}
+    {% endif %}
     {% if not reporte.conciliacion %}<p>El reporte no acredita cuota pagada ni saldo actualizado.</p>{% endif %}
 </details>
 <p><a href="{% url 'financiacion_educativa_web:pagos' solicitud.pk %}">Volver a pagos y reportes</a></p>

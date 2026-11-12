@@ -32,12 +32,13 @@ from .escaneo_documentos import (
 PERMISO_CONFIGURAR = 'financiacion_educativa.configurar_receptor_breb'
 PERMISO_CONSULTAR = 'financiacion_educativa.consultar_recaudos_educativos'
 PERMISO_CONCILIAR = 'financiacion_educativa.conciliar_recaudos_educativos'
+PERMISO_REGISTRAR = 'financiacion_educativa.registrar_pagos_recibidos_educativos'
 PERMISO_ESCANEAR = 'financiacion_educativa.escanear_comprobantes_educativos'
 OBSERVACION_SIN_ADICIONAL = 'Sin observacion adicional registrada.'
 
 
-def evidencias_bancarias_elegibles(actor):
-    if not actor or not actor.is_active or not actor.has_perm(PERMISO_CONCILIAR):
+def evidencias_bancarias_elegibles(actor, *, permiso=PERMISO_CONCILIAR):
+    if not actor or not actor.is_active or not actor.has_perm(permiso):
         return ArchivoRecaudoEducativo.objects.none()
     ultimo = IntentoEscaneoRecaudo.objects.filter(archivo_id=OuterRef('pk')).order_by('-numero')
     return ArchivoRecaudoEducativo.objects.filter(
@@ -145,7 +146,7 @@ def _guardar_archivo(datos, actor, finalidad):
 
 
 def registrar_evidencia_bancaria(*, archivo, actor):
-    exigir_permiso(actor, PERMISO_CONCILIAR)
+    exigir_permiso(actor, PERMISO_REGISTRAR if actor and actor.has_perm(PERMISO_REGISTRAR) else PERMISO_CONCILIAR)
     habilitados()
     return _guardar_archivo(validar_archivo(archivo), actor, 'BANK_EVIDENCE')
 
@@ -212,7 +213,7 @@ def reportar_pago(*, solicitud_id, actor, receptor_id, clave, proposito, monto, 
         clave = uuid.UUID(str(clave))
     except (ValueError, TypeError, AttributeError):
         raise ValidationError('La clave de reporte no es valida.') from None
-    if proposito not in ReporteRecaudoEducativo.Proposito.values:
+    if proposito not in ReporteRecaudoEducativo.Proposito.values or proposito == ReporteRecaudoEducativo.Proposito.UNSPECIFIED:
         raise ValidationError('El proposito del reporte no es valido.')
     referencia = (referencia or '').strip()
     try:
@@ -254,10 +255,78 @@ def reportar_pago(*, solicitud_id, actor, receptor_id, clave, proposito, monto, 
 
 
 def referencia_bancaria(valor):
+    if not isinstance(valor, str):
+        raise ValidationError({'referencia': 'Ingrese la referencia unica del movimiento verificada en el banco.'})
     referencia = valor.strip().upper()
     if not re.fullmatch(r'[A-Z0-9][A-Z0-9._/-]{0,119}', referencia):
         raise ValidationError({'referencia': 'Ingrese la referencia unica del movimiento verificada en el banco.'})
     return referencia
+
+
+class MovimientoBancarioRegistrado(ValidationError):
+    def __init__(self, conciliacion):
+        self.reporte_id = conciliacion.reporte_id
+        super().__init__({'referencia': 'El movimiento bancario ya esta conciliado. Revise la referencia.'})
+
+
+@transaction.atomic
+def registrar_pago_recibido(*, solicitud_id, actor, cuenta_id, monto, fecha,
+                            referencia, evidencia_id, clave, proposito='UNSPECIFIED'):
+    from financiacion_educativa.dashboards.operaciones.permissions import PERMISO_ACCESO
+
+    habilitados()
+    for permiso in (PERMISO_ACCESO, PERMISO_CONSULTAR, PERMISO_REGISTRAR):
+        exigir_permiso(actor, permiso)
+    try:
+        cuenta_id, evidencia_id, clave = (uuid.UUID(str(valor)) for valor in (cuenta_id, evidencia_id, clave))
+    except (ValueError, TypeError, AttributeError):
+        raise ValidationError('Cuenta, evidencia o clave de registro no validas.') from None
+    referencia = referencia_bancaria(referencia)
+    monto, fecha = monto_cop(monto), fecha_transferencia(fecha)
+    if proposito not in ReporteRecaudoEducativo.Proposito.values:
+        raise ValidationError('La finalidad del ingreso no es valida.')
+    payload = hashlib.sha256(json.dumps({
+        'cuenta': str(cuenta_id), 'referencia': referencia, 'monto': str(monto),
+        'fecha': fecha.isoformat(), 'evidencia': str(evidencia_id), 'proposito': proposito,
+    }, sort_keys=True).encode()).hexdigest()
+    # Same obligation -> files -> account order as application/reconciliation.
+    SolicitudFinanciacionEducativa.objects.select_for_update().get(pk=solicitud_id)
+    fotografia = obligaciones_autorizadas().filter(solicitud_id=solicitud_id).first()
+    if not fotografia:
+        raise ValidationError('Se requiere una obligacion firmada y autorizada real.')
+    anterior = ReporteRecaudoEducativo.objects.filter(
+        solicitud_id=solicitud_id, reportado_por=actor, clave_idempotencia=clave,
+    ).first()
+    if anterior:
+        if anterior.origen != 'OPERATIONS' or anterior.payload_sha256 != payload:
+            raise ValidationError('La clave ya se uso con otros datos. Recarga antes de registrar.')
+        return anterior.conciliacion, True
+    evidencia = ArchivoRecaudoEducativo.objects.select_for_update().filter(pk=evidencia_id).first()
+    if not evidencia or evidencia.finalidad != 'BANK_EVIDENCE' or evidencia.creado_por_id != actor.pk:
+        raise ValidationError({'evidencia_id': 'Seleccione evidencia bancaria propia y disponible.'})
+    try:
+        leer_soporte_seguro(evidencia)
+    except ValidationError as error:
+        raise ValidationError({'evidencia_id': error.messages}) from None
+    cuenta = CuentaRecaudoEducativa.objects.select_for_update().filter(pk=cuenta_id).first()
+    if not cuenta:
+        raise ValidationError({'cuenta_id': 'Cuenta receptora no disponible.'})
+    duplicado = ConciliacionRecaudoEducativo.objects.filter(
+        cuenta=cuenta, referencia_verificada=referencia,
+    ).first()
+    if duplicado:
+        return duplicado, True
+    registro = ReporteRecaudoEducativo.objects.create(
+        solicitud_id=solicitud_id, fotografia=fotografia, origen='OPERATIONS',
+        receptor=None, comprobante=None, reportado_por=actor,
+        clave_idempotencia=clave, payload_sha256=payload, proposito=proposito,
+        monto_reportado=monto, fecha_declarada=fecha, referencia_declarada=referencia,
+    )
+    return ConciliacionRecaudoEducativo.objects.create(
+        reporte=registro, cuenta=cuenta, referencia_verificada=referencia,
+        monto_recibido=monto, fecha_efectiva=fecha, evidencia_movimiento=evidencia,
+        actor=actor, observacion='Ingreso bancario registrado por Operaciones sin reporte previo del pagador.',
+    ), False
 
 
 @transaction.atomic
@@ -265,6 +334,8 @@ def confirmar_recaudo(*, reporte_id, actor, cuenta_id, referencia, monto, fecha,
     habilitados()
     exigir_permiso(actor, PERMISO_CONCILIAR)
     reporte = ReporteRecaudoEducativo.objects.select_for_update().get(pk=reporte_id)
+    if reporte.origen != ReporteRecaudoEducativo.Origen.PAYER:
+        raise ValidationError('Este ingreso ya fue registrado por Operaciones. Consulte su conciliacion original.')
     if hasattr(reporte, 'rechazo'):
         raise ValidationError('El reporte ya fue rechazado; registre un reporte nuevo.')
     referencia = referencia_bancaria(referencia)
@@ -314,8 +385,9 @@ def confirmar_recaudo(*, reporte_id, actor, cuenta_id, referencia, monto, fecha,
         return anterior, True
     # Cuenta + referencia verificada identifica un movimiento global, no por tenant.
     CuentaRecaudoEducativa.objects.select_for_update().get(pk=cuenta_id)
-    if ConciliacionRecaudoEducativo.objects.filter(cuenta_id=cuenta_id, referencia_verificada=referencia).exists():
-        raise ValidationError({'referencia': 'El movimiento bancario ya esta conciliado. Revise la referencia.'})
+    duplicado = ConciliacionRecaudoEducativo.objects.filter(cuenta_id=cuenta_id, referencia_verificada=referencia).first()
+    if duplicado:
+        raise MovimientoBancarioRegistrado(duplicado)
     try:
         with transaction.atomic():
             conciliacion = ConciliacionRecaudoEducativo.objects.create(
