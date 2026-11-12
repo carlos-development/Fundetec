@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from django.db.models import Count, Prefetch, Q, Sum
+from django.db.models import Count, OuterRef, Prefetch, Q, Subquery, Sum
 from django.shortcuts import get_object_or_404
 
 from financiacion_educativa.choices import (
@@ -14,7 +14,7 @@ from financiacion_educativa.models import (
     HistorialEstadoSolicitud,
     SolicitudFinanciacionEducativa,
 )
-from financiacion_educativa.services.estado_publico import MAPA_ESTADO_PUBLICO
+from financiacion_educativa.services.estado_publico import MAPA_ESTADO_PUBLICO, firmas_autorizadas_reales
 
 
 ESTADOS_INTERNOS_POR_PUBLICO = {
@@ -31,7 +31,6 @@ ESTADOS_SEGUIMIENTO = tuple(
     for estado in EstadoSolicitudFinanciacion.values
     if estado
     not in {
-        EstadoSolicitudFinanciacion.APPROVED,
         EstadoSolicitudFinanciacion.REJECTED,
         EstadoSolicitudFinanciacion.CANCELLED,
         EstadoSolicitudFinanciacion.PAID,
@@ -53,6 +52,14 @@ def solicitudes_de_institucion(*, institucion):
     return SolicitudFinanciacionEducativa.objects.filter(
         institucion=institucion
     )
+
+
+def _con_autorizacion_efectiva(consulta):
+    # Reuse the contractual authority without fetching private signature data.
+    firmas = firmas_autorizadas_reales().filter(solicitud_id=OuterRef('pk'))
+    return consulta.annotate(autorizacion_dashboard_en=Subquery(
+        firmas.order_by('-firmado_en', '-pk').values('firmado_en')[:1],
+    ))
 
 
 def obtener_indicadores_institucionales(*, institucion):
@@ -123,7 +130,7 @@ def obtener_indicadores_institucionales(*, institucion):
 
 
 def obtener_solicitudes_recientes(*, institucion, limite=5):
-    return solicitudes_de_institucion(institucion=institucion).only(
+    return _con_autorizacion_efectiva(solicitudes_de_institucion(institucion=institucion)).only(
         'id',
         'referencia_externa',
         'nombres',
@@ -192,7 +199,7 @@ def filtrar_solicitudes_institucionales(
     orden = filtros.get('orden') or '-creada_en'
     if orden not in ORDENAMIENTOS_PERMITIDOS:
         orden = '-creada_en'
-    return consulta.only(
+    return _con_autorizacion_efectiva(consulta).only(
         'id',
         'referencia_externa',
         'nombres',
@@ -269,4 +276,4 @@ def obtener_solicitud_institucional(*, institucion, application_id):
             to_attr='artefactos_dashboard',
         ),
     )
-    return get_object_or_404(consulta, pk=application_id)
+    return get_object_or_404(_con_autorizacion_efectiva(consulta), pk=application_id)

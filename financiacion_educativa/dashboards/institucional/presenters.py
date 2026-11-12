@@ -5,7 +5,6 @@ from financiacion_educativa.choices import (
 )
 from financiacion_educativa.services.estado_publico import (
     MAPA_ESTADO_PUBLICO,
-    obtener_resultado_publico,
 )
 from instituciones.models import MembresiaInstitucion
 
@@ -19,7 +18,7 @@ SEGUIMIENTO_POR_ESTADO = {
     EstadoSolicitudFinanciacion.PENDING_MANUAL_REVIEW: 'Revision adicional',
     EstadoSolicitudFinanciacion.PENDING_PROMISSORY_NOTE: 'Preparacion contractual',
     EstadoSolicitudFinanciacion.PENDING_SIGNATURE: 'Pendiente de firma',
-    EstadoSolicitudFinanciacion.APPROVED: 'Curso autorizado',
+    EstadoSolicitudFinanciacion.APPROVED: 'Solicitud aprobada',
     EstadoSolicitudFinanciacion.REJECTED: 'Solicitud rechazada',
     EstadoSolicitudFinanciacion.CANCELLED: 'Solicitud cancelada',
     EstadoSolicitudFinanciacion.ACTIVE: 'Financiacion activa',
@@ -29,6 +28,11 @@ SEGUIMIENTO_POR_ESTADO = {
 }
 
 
+def etiqueta_estado_solicitud(codigo):
+    # The public enum's legacy label must not imply contractual authorization.
+    return 'Aprobada' if codigo == EstadoPublicoSolicitud.APPROVED else EstadoPublicoSolicitud(codigo).label
+
+
 def _estado_publico(estado_interno):
     codigo = MAPA_ESTADO_PUBLICO.get(
         estado_interno,
@@ -36,7 +40,7 @@ def _estado_publico(estado_interno):
     )
     return {
         'codigo': codigo,
-        'etiqueta': EstadoPublicoSolicitud(codigo).label,
+        'etiqueta': etiqueta_estado_solicitud(codigo),
         'clase': codigo.lower().replace('_', '-'),
     }
 
@@ -67,6 +71,11 @@ def enmascarar_telefono(valor):
 
 
 def presentar_resumen_solicitud(solicitud):
+    aprobada = solicitud.estado == EstadoSolicitudFinanciacion.APPROVED
+    autorizacion = getattr(solicitud, 'autorizacion_dashboard_en', None)
+    seguimiento = SEGUIMIENTO_POR_ESTADO.get(solicitud.estado, 'Revision adicional')
+    if aprobada:
+        seguimiento = 'Curso autorizado' if autorizacion else 'Autorizacion del curso pendiente'
     return {
         'id': solicitud.pk,
         'referencia': solicitud.referencia_externa,
@@ -77,10 +86,10 @@ def presentar_resumen_solicitud(solicitud):
         'valor_plan': solicitud.valor_plan,
         'plazo_meses': solicitud.plazo_meses,
         'estado': _estado_publico(solicitud.estado),
-        'seguimiento': SEGUIMIENTO_POR_ESTADO.get(
-            solicitud.estado,
-            'Revision adicional',
-        ),
+        'seguimiento': seguimiento,
+        'solicitud_aprobada': aprobada,
+        'curso_autorizado': autorizacion is not None,
+        'autorizacion_efectiva_en': autorizacion,
         'creada_en': solicitud.creada_en,
         'actualizada_en': solicitud.actualizada_en,
     }
@@ -183,7 +192,6 @@ def _presentar_finanzas(solicitud):
 def presentar_detalle_solicitud(solicitud, *, rol):
     contacto_completo = _puede_ver_contacto_completo(rol)
     firma = _presentar_firma(solicitud)
-    resultado_publico = obtener_resultado_publico(solicitud)
     return {
         **presentar_resumen_solicitud(solicitud),
         'correo': (
@@ -208,10 +216,5 @@ def presentar_detalle_solicitud(solicitud, *, rol):
         'documentos': _presentar_documentos(solicitud),
         'linea_tiempo': _presentar_linea_tiempo(solicitud),
         'firma': firma,
-        'autorizacion_efectiva_en': (
-            resultado_publico.autorizacion_efectiva_en
-            if resultado_publico.curso_autorizado
-            else None
-        ),
         'finanzas': _presentar_finanzas(solicitud),
     }

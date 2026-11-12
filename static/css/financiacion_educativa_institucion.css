@@ -1,0 +1,35 @@
+/* Institutional consultation only; no operational or student selectors. */
+.edu-institution-backlinks { display: flex; flex-wrap: wrap; column-gap: 20px; }
+.edu-institution-views { display: flex; gap: 8px; border-bottom: 1px solid var(--edu-line); margin-bottom: 16px; }
+.edu-institution-views a { display: inline-flex; align-items: center; min-height: 44px; padding: 10px 16px; color: #34526b; text-decoration: none; border-bottom: 3px solid transparent; font-weight: 600; }
+.edu-institution-views a[aria-current="page"] { color: #075778; border-color: #087ca7; background: #eaf6fb; }
+.edu-institution-explanation { color: #4f6579; font-size: 14px; margin-bottom: 20px; }
+.edu-institution-status { display: inline-block; min-width: 42px; text-align: center; font-size: 14px; font-weight: 700; padding: 5px 10px; border-radius: 4px; }
+.edu-institution-status.is-yes { background: #e3f4ed; color: #146342; }
+.edu-institution-status.is-no { background: #edf1f5; color: #44566a; }
+.edu-institution-results .edu-dashboard-table { min-width: 0; table-layout: fixed; }
+.edu-institution-results th, .edu-institution-results td { overflow-wrap: anywhere; }
+.edu-institution-results td > span:not(.edu-institution-status) { display: block; }
+.edu-institution-results th:first-child { width: 20%; }
+.edu-institution-results th:last-child { width: 10%; }
+.edu-institution-detail-link { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; font-weight: 600; }
+.edu-institution-outcome { padding: 24px 0; margin: 8px 0 24px; border-block: 1px solid var(--edu-line); }
+.edu-institution-outcome h2 { margin: 0 0 20px; font-size: 20px; }
+.edu-institution-decisions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; margin: 0; }
+.edu-institution-decisions > div { min-width: 0; }
+.edu-institution-decisions dt { font-size: 14px; color: #4f6579; margin-bottom: 8px; }
+.edu-institution-decisions dd { margin: 0; }
+.edu-institution-decisions p { font-size: 14px; color: #34526b; margin: 8px 0 0; }
+.edu-institution-notice { padding: 14px 16px; border-left: 3px solid #b78620; background: #fff7df; color: #695115; font-size: 14px; margin: 20px 0 0; }
+.edu-institution-disclosure { border-bottom: 1px solid var(--edu-line); margin: 0 0 24px; }
+.edu-institution-disclosure > summary { cursor: pointer; min-height: 44px; padding: 12px 0; font-weight: 600; }
+.edu-institution-views a:focus-visible, .edu-institution-detail-link:focus-visible, .edu-institution-disclosure > summary:focus-visible { outline: 3px solid #e0b000; outline-offset: 3px; }
+@media (max-width: 640px) {
+    .edu-institution-views a { flex: 1; justify-content: center; padding: 8px 12px; font-size: 14px; text-align: center; }
+    .edu-institution-decisions { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+    .edu-institution-decisions > div + div { padding-top: 20px; border-top: 1px solid var(--edu-line); }
+    .edu-institution-results .edu-dashboard-table tr { padding: 16px 0; }
+    .edu-institution-results .edu-dashboard-table td { display: block; box-sizing: border-box; padding: 8px 0; }
+    .edu-institution-results .edu-dashboard-table td::before { display: block; margin-bottom: 4px; }
+    .edu-institution-results .edu-dashboard-table td > small { font-size: 13px; }
+}

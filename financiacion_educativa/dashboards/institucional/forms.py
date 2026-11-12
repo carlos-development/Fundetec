@@ -1,6 +1,7 @@
 from django import forms
 
 from financiacion_educativa.choices import EstadoPublicoSolicitud
+from .presenters import etiqueta_estado_solicitud
 
 
 ORDENAMIENTOS_SOLICITUDES = (
@@ -38,7 +39,9 @@ class FiltrosSolicitudesInstitucionalesForm(forms.Form):
     estado = forms.ChoiceField(
         required=False,
         label='Estado',
-        choices=(('', 'Todos los estados'),) + tuple(EstadoPublicoSolicitud.choices),
+        choices=(('', 'Todos los estados'),) + tuple(
+            (codigo, etiqueta_estado_solicitud(codigo)) for codigo in EstadoPublicoSolicitud.values
+        ),
     )
     programa = forms.ChoiceField(required=False, label='Curso')
     periodo = forms.ChoiceField(required=False, label='Periodo academico')
