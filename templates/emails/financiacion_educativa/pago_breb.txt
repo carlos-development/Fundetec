@@ -1,0 +1,13 @@
+APROBADO
+
+{{ titulo }}
+
+{{ mensaje }}
+
+Referencia de la solicitud: {{ referencia }}
+{% if cuota %}Cuota: {{ cuota }}
+{% endif %}{{ etiqueta }}: {{ importe }}
+
+{{ nota }}
+
+No respondas con documentos, contrasenas ni informacion sensible.

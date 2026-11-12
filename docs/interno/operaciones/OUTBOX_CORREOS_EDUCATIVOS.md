@@ -9,6 +9,9 @@ entrega con `transaction.on_commit`.
 
 El outbox cubre:
 
+- avisos BRE-B de reporte recibido, ingreso confirmado y pago aplicado, con
+  envio desactivado por defecto y destinatario verificado (tutor en menores);
+
 - invitacion inicial y reemisiones;
 - enlace personal de captura movil;
 - confirmacion de expediente recibido;
@@ -52,6 +55,9 @@ La allowlist cerrada de eventos auditables es:
 - `REVIEW_DECISION`;
 - `AUTOMATIC_CORRECTION`;
 - `AUTOMATIC_CONTINUATION`.
+- `BREB_REPORT_RECEIVED`;
+- `BREB_INCOME_CONFIRMED`;
+- `BREB_PAYMENT_APPLIED`.
 
 `NEW_APPLICATION_INTERNAL` no pertenece a la allowlist y conserva su
 configuracion y comportamiento. Actualmente no existe otro evento estudiantil
@@ -81,6 +87,14 @@ seguridad.`
 | Expediente/firma | Si | Si | No |
 | Decision/finalizacion | Si | Si | No |
 | Mensajes internos | No aplica | Segun configuracion existente | No |
+| BRE-B: reporte recibido | Titular adulto o tutor verificado del menor | Auditoria despues de SENT, si configurada | No |
+| BRE-B: ingreso confirmado | Titular adulto o tutor verificado del menor | Auditoria despues de SENT, si configurada | No |
+| BRE-B: pago aplicado | Titular adulto o tutor verificado del menor | Auditoria despues de SENT, si configurada | No |
+
+La decision explicita para menores en este bloque es notificar al tutor
+verificado como destinatario principal, sin copia automatica al estudiante.
+La matriz anterior de invitaciones/documentacion no cambia. Reglas, casos sin
+destinatario, activacion y recuperacion: `../../NOTIFICACIONES_PAGOS_BREB.md`.
 
 ## Estados
 
@@ -90,6 +104,8 @@ seguridad.`
 - `SENT`: entrega confirmada por el backend.
 - `FAILED`: configuracion, autenticacion o rechazo permanente.
 - `AMBIGUOUS`: pudo transmitirse antes de un timeout, desconexion o caida.
+- `SUPERSEDED`: aviso BRE-B superado por una transicion posterior; no fue
+  enviado, no produce copias ni se recupera como fallido.
 
 `AMBIGUOUS` no se reenvia automaticamente. Requiere conciliacion operativa y
 una resolucion explicita. Ningun estado del correo modifica estados

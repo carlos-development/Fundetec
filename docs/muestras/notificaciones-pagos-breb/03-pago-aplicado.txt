@@ -1,0 +1,13 @@
+APROBADO
+
+Pago aplicado a tu cuota
+
+Aplicamos el pago a la cuota indicada.
+
+Referencia de la solicitud: REC-SINTETICO
+Cuota: 1
+Importe aplicado: $101.528,00
+
+Esta confirmación corresponde a la cuota indicada; no es una declaración de deuda cancelada ni paz y salvo.
+
+No respondas con documentos, contrasenas ni informacion sensible.

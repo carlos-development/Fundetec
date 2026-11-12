@@ -345,9 +345,13 @@ class EstadoOutboxCorreoEducativo(models.TextChoices):
     SENT = 'SENT', 'Enviado'
     FAILED = 'FAILED', 'Fallido'
     AMBIGUOUS = 'AMBIGUOUS', 'Entrega ambigua'
+    SUPERSEDED = 'SUPERSEDED', 'Aviso sustituido sin envio'
 
 
 class TipoEventoCorreoEducativo(models.TextChoices):
+    BREB_REPORT_RECEIVED = 'BREB_REPORT_RECEIVED', 'Reporte BRE-B recibido'
+    BREB_INCOME_CONFIRMED = 'BREB_INCOME_CONFIRMED', 'Ingreso BRE-B confirmado'
+    BREB_PAYMENT_APPLIED = 'BREB_PAYMENT_APPLIED', 'Pago BRE-B aplicado'
     INITIAL_INVITATION = 'INITIAL_INVITATION', 'Invitacion inicial'
     INVITATION_REISSUE = 'INVITATION_REISSUE', 'Reemision de invitacion'
     CONTINUATION_REMINDER_1H = (
@@ -386,6 +390,9 @@ class TipoEventoCorreoEducativo(models.TextChoices):
 
 
 class CodigoMensajeCorreoEducativo(models.TextChoices):
+    BREB_REPORT_RECEIVED = 'BREB_REPORT_RECEIVED', 'Reporte BRE-B recibido'
+    BREB_INCOME_CONFIRMED = 'BREB_INCOME_CONFIRMED', 'Ingreso BRE-B confirmado'
+    BREB_PAYMENT_APPLIED = 'BREB_PAYMENT_APPLIED', 'Pago BRE-B aplicado'
     INVITATION = 'INVITATION', 'Invitacion de continuacion'
     NEW_APPLICATION_INTERNAL = (
         'NEW_APPLICATION_INTERNAL',

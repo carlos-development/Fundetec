@@ -247,6 +247,8 @@ def reportar_pago(*, solicitud_id, actor, receptor_id, clave, proposito, monto, 
                 fecha_declarada=fecha, referencia_declarada=referencia,
                 cuota_sugerida=fotografia.proxima_cuota,
             )
+            from .notificaciones_pagos import registrar_aviso_pago
+            registrar_aviso_pago(reporte=reporte, evento='BREB_REPORT_RECEIVED')
             return reporte, False
     except Exception:
         if guardado:
@@ -322,17 +324,23 @@ def registrar_pago_recibido(*, solicitud_id, actor, cuenta_id, monto, fecha,
         clave_idempotencia=clave, payload_sha256=payload, proposito=proposito,
         monto_reportado=monto, fecha_declarada=fecha, referencia_declarada=referencia,
     )
-    return ConciliacionRecaudoEducativo.objects.create(
+    ingreso = ConciliacionRecaudoEducativo.objects.create(
         reporte=registro, cuenta=cuenta, referencia_verificada=referencia,
         monto_recibido=monto, fecha_efectiva=fecha, evidencia_movimiento=evidencia,
         actor=actor, observacion='Ingreso bancario registrado por Operaciones sin reporte previo del pagador.',
-    ), False
+    )
+    from .notificaciones_pagos import registrar_aviso_pago
+    registrar_aviso_pago(reporte=registro, evento='BREB_INCOME_CONFIRMED')
+    return ingreso, False
 
 
 @transaction.atomic
 def confirmar_recaudo(*, reporte_id, actor, cuenta_id, referencia, monto, fecha, evidencia_id, observacion='', justificacion_diferencia=''):
     habilitados()
     exigir_permiso(actor, PERMISO_CONCILIAR)
+    # Match registration/application order before files/account and outbox FKs.
+    solicitud_id = ReporteRecaudoEducativo.objects.values_list('solicitud_id', flat=True).get(pk=reporte_id)
+    SolicitudFinanciacionEducativa.objects.select_for_update().get(pk=solicitud_id)
     reporte = ReporteRecaudoEducativo.objects.select_for_update().get(pk=reporte_id)
     if reporte.origen != ReporteRecaudoEducativo.Origen.PAYER:
         raise ValidationError('Este ingreso ya fue registrado por Operaciones. Consulte su conciliacion original.')
@@ -398,6 +406,8 @@ def confirmar_recaudo(*, reporte_id, actor, cuenta_id, referencia, monto, fecha,
             )
     except IntegrityError:
         raise ValidationError({'referencia': 'El movimiento bancario ya esta conciliado. Revise la referencia.'}) from None
+    from .notificaciones_pagos import registrar_aviso_pago
+    registrar_aviso_pago(reporte=reporte, evento='BREB_INCOME_CONFIRMED')
     return conciliacion, False
 
 

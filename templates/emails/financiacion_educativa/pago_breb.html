@@ -1,0 +1,13 @@
+{% extends "emails/financiacion_educativa/_base.html" %}
+{% block email_title %}{{ titulo }}{% endblock %}
+{% block preheader %}{{ mensaje }}{% endblock %}
+{% block content %}
+  <h1 class="email-title" style="margin:0 0 16px;font-size:26px;line-height:32px;font-weight:800;color:#0B2E59;">{{ titulo }}</h1>
+  <p style="margin:0 0 24px;font-size:15px;line-height:23px;color:#5B6B82;">{{ mensaje }}</p>
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;margin:0 0 24px;background-color:#F5F8FC;border:1px solid #E6EBF2;border-radius:8px;overflow:hidden;border-collapse:separate;">
+    {% include "emails/financiacion_educativa/_information_field.html" with label="Referencia de la solicitud" value=referencia %}
+    {% if cuota %}{% include "emails/financiacion_educativa/_information_field.html" with label="Cuota" value=cuota %}{% endif %}
+    {% include "emails/financiacion_educativa/_information_field.html" with label=etiqueta value=importe is_last=True %}
+  </table>
+  <p style="margin:0;font-size:14px;line-height:22px;color:#5B6B82;">{{ nota }}</p>
+{% endblock %}
