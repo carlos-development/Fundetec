@@ -1,0 +1,8 @@
+{% extends "financiacion_educativa/_base.html" %}
+{% block content %}
+<section class="edu-page-band"><div class="edu-page-shell">
+    <h1>Plan contractual no disponible</h1>
+    <p role="alert">El calendario guardado requiere revisi&oacute;n. No generamos un plan alternativo ni recalculamos tus condiciones.</p>
+    <a class="edu-button" href="{% url 'financiacion_educativa_web:finanzas' solicitud.pk %}">Volver a mi financiaci&oacute;n</a>
+</div></section>
+{% endblock %}
