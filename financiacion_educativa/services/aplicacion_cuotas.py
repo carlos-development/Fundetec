@@ -129,8 +129,11 @@ def aplicar_cuota(*, reporte_id, cuota_id, actor, vista_previa, confirmar_cuota)
     cuota = CuotaAmortizacionEducativa.objects.select_for_update().get(pk=cuota.pk)
     if cuota.pk != cuota_id or snapshot != _snapshot(reporte, cuota, actor):
         raise ValidationError('La cuota cambió. Recarga el reporte antes de confirmar.')
-    return AplicacionCuotaEducativa.objects.create(
+    aplicacion = AplicacionCuotaEducativa.objects.create(
         conciliacion=ingreso, cuota=cuota, capital_aplicado=cuota.capital,
         interes_aplicado=cuota.interes, fecha_efectiva=ingreso.fecha_efectiva, actor=actor,
         cuota_verificada=True,
     )
+    from .notificaciones_pagos import registrar_aviso_pago
+    registrar_aviso_pago(reporte=reporte, evento='BREB_PAYMENT_APPLIED')
+    return aplicacion

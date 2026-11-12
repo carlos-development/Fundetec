@@ -341,16 +341,19 @@ class ConcurrenciaIngresoOperacionesTests(DatosIngresoOperaciones, TransactionTe
 
     @skipUnlessDBFeature('has_select_for_update')
     def test_ambos_flujos_compiten_por_el_mismo_movimiento(self):
+        from financiacion_educativa.models import OutboxCorreoEducativo
+
         reporte, _ = self.reportar(monto=self.cuota.valor_cuota)
         self.escanear(reporte.comprobante_id)
         datos = self.datos_confirmacion(reporte, self.banco, referencia='OPS-BANK-001')
         resultados, errores = self.paralelos([lambda: self.registrar(), lambda: recaudos.confirmar_recaudo(**datos)])
         self.assertTrue(resultados)
-        self.assertTrue(all(isinstance(e, recaudos.MovimientoBancarioRegistrado) for e in errores))
+        self.assertTrue(all(isinstance(e, recaudos.MovimientoBancarioRegistrado) for e in errores), repr(errores))
         self.assertEqual(len(resultados) + len(errores), 2)
         self.assertEqual(ConciliacionRecaudoEducativo.objects.count(), 1)
         ganador = ConciliacionRecaudoEducativo.objects.get()
         self.assertEqual(ReporteRecaudoEducativo.objects.filter(origen='OPERATIONS').count(), int(ganador.reporte.origen == 'OPERATIONS'))
+        self.assertEqual(OutboxCorreoEducativo.objects.filter(codigo_mensaje='BREB_INCOME_CONFIRMED').count(), 1)
 
     @skipUnlessDBFeature('has_select_for_update')
     def test_movimiento_global_entre_instituciones_no_se_duplica(self):

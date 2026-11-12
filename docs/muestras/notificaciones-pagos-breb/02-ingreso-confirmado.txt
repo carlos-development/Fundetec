@@ -1,0 +1,12 @@
+APROBADO
+
+Ingreso confirmado en banco
+
+Confirmamos el ingreso en el banco. Todavía no se ha aplicado a una cuota.
+
+Referencia de la solicitud: REC-SINTETICO
+Importe recibido: $101.528,00
+
+La confirmación bancaria no equivale a una cuota pagada. No necesitas volver a transferir por esta espera.
+
+No respondas con documentos, contrasenas ni informacion sensible.

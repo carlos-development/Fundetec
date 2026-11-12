@@ -3037,6 +3037,10 @@ class OutboxCorreoEducativo(models.Model):
         choices=CodigoMensajeCorreoEducativo.choices,
     )
     contexto = models.JSONField(default=dict, blank=True)
+    reporte_recaudo = models.ForeignKey(
+        'financiacion_educativa.ReporteRecaudoEducativo', on_delete=models.PROTECT,
+        null=True, blank=True, related_name='correos_outbox', editable=False,
+    )
     estado = models.CharField(
         max_length=20,
         choices=EstadoOutboxCorreoEducativo.choices,
@@ -3106,6 +3110,24 @@ class OutboxCorreoEducativo(models.Model):
             ),
         ]
         constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(reporte_recaudo__isnull=True)
+                    & ~models.Q(codigo_mensaje__in=[
+                        'BREB_REPORT_RECEIVED', 'BREB_INCOME_CONFIRMED', 'BREB_PAYMENT_APPLIED',
+                    ])
+                    & ~models.Q(tipo_evento__in=[
+                        'BREB_REPORT_RECEIVED', 'BREB_INCOME_CONFIRMED', 'BREB_PAYMENT_APPLIED',
+                    ])
+                    | models.Q(reporte_recaudo__isnull=False, contexto={}, destinatarios_copia=[])
+                    & (
+                        models.Q(codigo_mensaje='BREB_REPORT_RECEIVED', tipo_evento='BREB_REPORT_RECEIVED')
+                        | models.Q(codigo_mensaje='BREB_INCOME_CONFIRMED', tipo_evento='BREB_INCOME_CONFIRMED')
+                        | models.Q(codigo_mensaje='BREB_PAYMENT_APPLIED', tipo_evento='BREB_PAYMENT_APPLIED')
+                    )
+                ),
+                name='out_email_breb_reference',
+            ),
             models.UniqueConstraint(
                 fields=['evento_logico'],
                 condition=models.Q(estado=EstadoOutboxCorreoEducativo.SENT),

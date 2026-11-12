@@ -177,6 +177,9 @@ class CopiasCorreoEducativoTests(TestCase):
         self.assertSetEqual(
             set(EVENTOS_AUDITABLES_ESTUDIANTE),
             {
+                TipoEventoCorreoEducativo.BREB_REPORT_RECEIVED,
+                TipoEventoCorreoEducativo.BREB_INCOME_CONFIRMED,
+                TipoEventoCorreoEducativo.BREB_PAYMENT_APPLIED,
                 TipoEventoCorreoEducativo.INITIAL_INVITATION,
                 TipoEventoCorreoEducativo.INVITATION_REISSUE,
                 TipoEventoCorreoEducativo.CONTINUATION_REMINDER_1H,
@@ -215,10 +218,11 @@ class CopiasCorreoEducativoTests(TestCase):
         copias = OutboxCorreoEducativo.objects.filter(
             codigo_mensaje=CodigoMensajeCorreoEducativo.AUDIT_COPY,
         )
-        self.assertEqual(copias.count(), len(EVENTOS_AUDITABLES_ESTUDIANTE))
+        # BRE-B notices need real payment transitions, covered by their own module.
+        self.assertEqual(copias.count(), len(codigos))
         self.assertEqual(
             copias.values('correo_origen_id').distinct().count(),
-            len(EVENTOS_AUDITABLES_ESTUDIANTE),
+            len(codigos),
         )
 
     def test_mensaje_interno_no_genera_copias(self):

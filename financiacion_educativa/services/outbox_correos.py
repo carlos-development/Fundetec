@@ -50,10 +50,12 @@ from financiacion_educativa.services.correos import (
     normalizar_destinatario,
     validar_configuracion_smtp,
 )
+from financiacion_educativa.services.notificaciones_pagos import CODIGOS_PAGO
 
 
 logger = logging.getLogger(__name__)
 EVENTOS_AUDITABLES_ESTUDIANTE = frozenset({
+    *CODIGOS_PAGO,
     TipoEventoCorreoEducativo.INITIAL_INVITATION,
     TipoEventoCorreoEducativo.INVITATION_REISSUE,
     TipoEventoCorreoEducativo.CONTINUATION_REMINDER_1H,
@@ -75,11 +77,13 @@ ESTADOS_RECLAMABLES = {
     EstadoOutboxCorreoEducativo.RETRYING,
 }
 CODIGOS_TEMPORALES = {
+    'PAYMENT_NOTIFICATIONS_DISABLED',
     'SMTP_CONNECT_ERROR',
     'SMTP_TEMPORARY_ERROR',
     'DELIVERY_NOT_STARTED',
 }
 CODIGOS_PERMANENTES = {
+    'PAYMENT_RECIPIENT_UNVERIFIED',
     'SMTP_CONFIGURATION_ERROR',
     'SMTP_AUTHENTICATION_ERROR',
     'SMTP_RECIPIENT_REFUSED',
@@ -144,10 +148,17 @@ def crear_intencion_correo(
     enlace_captura=None,
     decision=None,
     correo_origen=None,
+    reporte_recaudo=None,
 ):
     if not transaction.get_connection().in_atomic_block:
         raise RuntimeError('La intencion de correo debe crearse atomicamente.')
-    destinatarios = _normalizar_lista(destinatarios)
+    es_pago = codigo_mensaje in CODIGOS_PAGO
+    sin_destinatario_pago = es_pago and not destinatarios
+    destinatarios = [] if sin_destinatario_pago else _normalizar_lista(destinatarios)
+    if es_pago and (reporte_recaudo is None or reporte_recaudo.solicitud_id != solicitud.pk):
+        raise ValidationError('El aviso de pago requiere un reporte de la misma solicitud.')
+    if reporte_recaudo is not None and not es_pago:
+        raise ValidationError('Solo los avisos de pago admiten un reporte de recaudo.')
     copias = (
         [
             correo
@@ -188,7 +199,11 @@ def crear_intencion_correo(
         'enlace_captura': enlace_captura,
         'decision': decision,
         'correo_origen': correo_origen,
+        'reporte_recaudo': reporte_recaudo,
     }
+    if sin_destinatario_pago:
+        defaults.update(estado=EstadoOutboxCorreoEducativo.FAILED,
+            codigo_ultimo_error='PAYMENT_RECIPIENT_UNVERIFIED')
     try:
         outbox, creado = OutboxCorreoEducativo.objects.get_or_create(
             clave_idempotencia=clave,
@@ -201,12 +216,16 @@ def crear_intencion_correo(
         outbox.solicitud_id != solicitud.pk
         or outbox.codigo_mensaje != codigo_mensaje
         or outbox.correo_origen_id != getattr(correo_origen, 'pk', None)
+        or outbox.reporte_recaudo_id != getattr(reporte_recaudo, 'pk', None)
     ):
         raise ValidationError('La clave idempotente pertenece a otro correo.')
     return outbox, creado
 
 
 def _asunto_original(outbox):
+    if outbox.codigo_mensaje in CODIGOS_PAGO:
+        from financiacion_educativa.services.correos_pagos import PRESENTACIONES_PAGO
+        return PRESENTACIONES_PAGO[outbox.codigo_mensaje]['titulo'] + ' | Aprobado'
     from financiacion_educativa.services.mensajes_correccion import TITULO_CORRECCION
     if outbox.codigo_mensaje == CodigoMensajeCorreoEducativo.INVITATION:
         from financiacion_educativa.services.entrega_invitaciones import (
@@ -487,6 +506,10 @@ def reclamar_correo_pendiente():
         estado__in=ESTADOS_RECLAMABLES,
         proxima_ejecucion_en__lte=ahora,
     ).order_by('proxima_ejecucion_en', 'creada_en')
+    if not settings.FINANCIACION_EDUCATIVA_BREB_PAYMENT_EMAILS_ENABLED:
+        # Subquery avoids a nullable join in the FOR UPDATE claim.
+        originales_pago = OutboxCorreoEducativo.objects.filter(codigo_mensaje__in=CODIGOS_PAGO).values('pk')
+        queryset = queryset.exclude(Q(codigo_mensaje__in=CODIGOS_PAGO) | Q(correo_origen_id__in=originales_pago))
     queryset = (
         queryset.select_for_update(skip_locked=True)
         if connection.features.has_select_for_update_skip_locked
@@ -629,7 +652,10 @@ def _preparar_enlace_personal(*, outbox_id, lease_id):
 
 
 def _construir_mensaje(outbox, connection_mail):
-    if outbox.codigo_mensaje in CODIGOS_COPIA:
+    if outbox.codigo_mensaje in CODIGOS_PAGO:
+        from financiacion_educativa.services.correos_pagos import construir_correo_pago
+        mensaje = construir_correo_pago(outbox=outbox, connection=connection_mail)
+    elif outbox.codigo_mensaje in CODIGOS_COPIA:
         original = outbox.correo_origen
         mensaje = construir_correo_copia_educativa(
             recipients=outbox.destinatarios,
@@ -690,6 +716,13 @@ def _construir_mensaje(outbox, connection_mail):
 
 
 def _entregar(outbox, lease_id):
+    if outbox.codigo_mensaje in CODIGOS_PAGO:
+        from financiacion_educativa.services.notificaciones_pagos import entregar_aviso_pago
+        return entregar_aviso_pago(outbox, lease_id, lambda reporte: _enviar_mensaje_smtp(outbox, reporte=reporte))
+    if outbox.correo_origen_id and outbox.correo_origen.codigo_mensaje in CODIGOS_PAGO:
+        from financiacion_educativa.services.notificaciones_pagos import NotificacionesPagoDeshabilitadas
+        if not settings.FINANCIACION_EDUCATIVA_BREB_PAYMENT_EMAILS_ENABLED:
+            raise NotificacionesPagoDeshabilitadas()
     if outbox.codigo_mensaje in {
         CodigoMensajeCorreoEducativo.INVITATION,
         CodigoMensajeCorreoEducativo.MOBILE_CAPTURE,
@@ -718,6 +751,12 @@ def _entregar(outbox, lease_id):
             },
             message_id=outbox.message_id,
         )
+    return _enviar_mensaje_smtp(outbox)
+
+
+def _enviar_mensaje_smtp(outbox, reporte=None):
+    if reporte is not None:
+        outbox.reporte_recaudo = reporte
     if settings.EMAIL_BACKEND in SMTP_BACKENDS:
         validar_configuracion_smtp()
     elif not settings.DEBUG:
@@ -730,6 +769,8 @@ def _entregar(outbox, lease_id):
 
 def _clasificar_error(error):
     codigo = getattr(error, 'codigo', '')
+    if codigo == 'PAYMENT_NOTICE_SUPERSEDED':
+        return codigo, EstadoOutboxCorreoEducativo.SUPERSEDED
     if codigo:
         if codigo in CODIGOS_TEMPORALES:
             return codigo, EstadoOutboxCorreoEducativo.RETRYING
@@ -865,8 +906,9 @@ def procesar_siguiente_correo():
         codigo = ''
     except Exception as error:
         codigo, estado = _clasificar_error(error)
-        logger.warning(
-            'Fallo controlado del outbox educativo: outbox_id=%s tipo=%s '
+        registrar_log = logger.info if estado == EstadoOutboxCorreoEducativo.SUPERSEDED else logger.warning
+        registrar_log(
+            'Resultado controlado del outbox educativo: outbox_id=%s tipo=%s '
             'codigo=%s clase=%s',
             outbox.pk,
             outbox.tipo_evento,
@@ -921,7 +963,16 @@ def reintentar_fallidos(*, dry_run=False, solicitud_id=None, outbox_id=None):
         queryset = queryset.filter(solicitud_id=solicitud_id)
     if outbox_id:
         queryset = queryset.filter(pk=outbox_id)
-    registros = list(queryset)
+    registros = []
+    for registro in queryset:
+        if registro.codigo_mensaje in CODIGOS_PAGO and not registro.destinatarios:
+            from financiacion_educativa.services.notificaciones_pagos import destinatario_verificado
+            correo = destinatario_verificado(registro.solicitud)
+            if not correo:
+                continue
+            # Persist the verified snapshot before SMTP, including ambiguous outcomes.
+            registro.destinatarios = [correo]
+        registros.append(registro)
     if dry_run:
         transaction.set_rollback(True)
         return len(registros)
