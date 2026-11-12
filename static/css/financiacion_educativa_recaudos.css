@@ -32,6 +32,20 @@
 .edu-ops-workspace .edu-recaudos-form input[type="checkbox"] { width: 20px; height: 20px; vertical-align: middle; }
 .edu-ops-workspace .edu-recaudos-form label[for="id_confirmar_cuota"] { display: inline; }
 .edu-ops-inbox td small { display: block; color: #4f6579; font-size: 12px; margin-top: 4px; }
+.edu-collections-indicators { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 24px 0; }
+.edu-collections-indicator { display: flex; flex-direction: column; gap: 12px; min-width: 0; padding: 20px; border: 1px solid var(--edu-line); border-top: 3px solid #087ca7; border-radius: 8px; background: #fff; color: var(--edu-ink); text-decoration: none; }
+.edu-collections-indicator[aria-current="true"] { border-color: #087ca7; background: #f0f9fc; }
+.edu-collections-indicator:nth-child(2) { border-top-color: #ad7c0c; }
+.edu-collections-indicator:nth-child(3) { border-top-color: #18845d; }
+.edu-collections-indicator > span { font-size: 14px; font-weight: 600; }
+.edu-collections-indicator strong { font-size: 25px; overflow-wrap: anywhere; }
+.edu-collections-indicator small { color: #34526b; font-size: 13px; }
+.edu-collections-indicator:focus-visible { outline: 3px solid #e0b000; outline-offset: 3px; }
+.edu-collections-split { padding: 16px 0; border-block: 1px solid var(--edu-line); }
+.edu-collections-board h2 { font-size: 20px; }
+.edu-collections-board #movimientos { margin-top: 28px; scroll-margin-top: 24px; }
+.edu-collections-board .edu-dashboard-table td { white-space: normal; }
+@media (max-width: 1050px) { .edu-collections-indicators { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 1050px) { .edu-ops-columns { grid-template-columns: minmax(0, 1fr); gap: 0; } }
 @media (max-width: 760px) {
     .edu-ops-tabs { gap: 0; }
