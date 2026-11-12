@@ -1,0 +1,7 @@
+{% extends "financiacion_educativa/_base.html" %}
+{% block title %}Autorizaci&oacute;n pendiente | Aprobado{% endblock %}
+{% block content %}<section class="edu-page-band"><div class="edu-page-shell">
+<h1>Autorizaci&oacute;n contractual pendiente de verificar</h1><p>{{ solicitud.nombre_curso }}</p>
+<div class="alert-warning" role="status">El estado aprobado no acredita una firma contractual vigente y coherente. No se habilitan pagos ni se presenta una obligaci&oacute;n autorizada.</div>
+<p>Tu solicitud permanece visible en Mis solicitudes. No necesitas crear otra.</p><a class="edu-button-secondary" href="{% url 'financiacion_educativa_web:reanudar-solicitudes' %}">Volver a mis solicitudes</a>
+</div></section>{% endblock %}

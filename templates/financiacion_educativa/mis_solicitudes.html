@@ -1,40 +1,40 @@
 {% extends "financiacion_educativa/_base.html" %}
-{% load financiacion_format %}
+{% load financiacion_format static %}
+{% block extra_head %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/financiacion_educativa_estudiante.css' %}">{% endblock %}
 
 {% block title %}Mis solicitudes | {{ education_brand.name|default:"Aprobado" }}{% endblock %}
 
 {% block content %}
 <section class="edu-page-band">
-    <div class="edu-page-shell edu-resume-shell">
+    <div class="edu-page-shell edu-student">
         <header class="edu-page-heading">
             <p class="edu-eyebrow">Financiaci&oacute;n educativa</p>
             <h1>Mis solicitudes</h1>
             <p>Consulta o contin&uacute;a una solicitud asociada a tu cuenta.</p>
         </header>
+        <nav class="edu-student-tabs" aria-label="Mis solicitudes">
+            <a href="{% url 'financiacion_educativa_web:reanudar-solicitudes' %}"{% if seccion == 'tramites' %} aria-current="page"{% endif %}>En tr&aacute;mite <span>{{ tramites|length }}</span></a>
+            <a href="{% url 'financiacion_educativa_web:reanudar-solicitudes' %}?seccion=financiaciones"{% if seccion == 'financiaciones' %} aria-current="page"{% endif %}>Financiaciones aprobadas <span>{{ financiaciones|length }}</span></a>
+        </nav>
 
         {% if opciones %}
-            <div class="edu-request-list">
+            <div class="edu-student-cards">
                 {% for opcion in opciones %}
-                    <article class="edu-request-row">
-                        <div>
-                            <span class="edu-request-label">{{ opcion.solicitud.institucion.nombre_comercial }}</span>
-                            <h2>{{ opcion.solicitud.nombre_curso }}</h2>
-                            <p>{{ opcion.solicitud.valor_plan|cop }} &middot; {{ opcion.solicitud.plazo_meses }} meses</p>
-                        </div>
-                        <div class="edu-request-action">
-                            <span class="edu-badge">{{ opcion.destino.titulo }}</span>
-                            <a class="edu-button-secondary" href="{{ opcion.url }}">{{ opcion.destino.accion }}</a>
-                        </div>
-                    </article>
+                    {% include 'financiacion_educativa/portal_estudiante/_solicitud.html' %}
                 {% endfor %}
             </div>
-        {% else %}
+        {% elif not tramites and not financiaciones and not cerradas %}
             <div class="edu-empty">
                 <h2>No tienes solicitudes asociadas</h2>
                 <p>Las solicitudes nuevas se vinculan a tu cuenta desde la invitaci&oacute;n enviada por la instituci&oacute;n.</p>
                 <a class="edu-button-secondary" href="{% url 'home' %}">Volver al inicio</a>
             </div>
+        {% elif seccion == 'financiaciones' %}
+            <div class="edu-empty"><h2>A&uacute;n no hay financiaciones autorizadas</h2><p>Cuando exista autorizaci&oacute;n contractual efectiva, podr&aacute;s consultar aqu&iacute; tu financiaci&oacute;n.</p></div>
+        {% else %}
+            <div class="edu-empty"><h2>No tienes tr&aacute;mites pendientes</h2><p>Tus financiaciones aprobadas siguen disponibles en su secci&oacute;n.</p></div>
         {% endif %}
+        {% if cerradas %}<details class="edu-student-details"><summary>Otras solicitudes y resultados cerrados ({{ cerradas|length }})</summary><div class="edu-student-cards">{% for opcion in cerradas %}{% include 'financiacion_educativa/portal_estudiante/_solicitud.html' %}{% endfor %}</div></details>{% endif %}
     </div>
 </section>
 {% endblock %}

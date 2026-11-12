@@ -1,21 +1,26 @@
 {% extends "financiacion_educativa/_base.html" %}
-{% load financiacion_format %}
+{% load financiacion_format static %}
+{% block extra_head %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/financiacion_educativa_estudiante.css' %}">{% endblock %}
 
 {% block title %}Tu financiaci&oacute;n | Aprobado{% endblock %}
 
 {% block content %}
+{% if portal_financiacion %}
+{% include 'financiacion_educativa/portal_estudiante/_financiacion.html' %}
+<details class="edu-student-contract-details"><summary>Condiciones del calendario firmado</summary>
+{% endif %}
 <section class="edu-flow-page">
     <div class="edu-flow-container">
-        {% include "financiacion_educativa/_progress.html" with current_step="review" %}
+        {% if not portal_financiacion %}{% include "financiacion_educativa/_progress.html" with current_step="review" %}{% endif %}
         <div class="edu-flow-grid">
             <article class="edu-surface">
                 <div class="edu-page-heading">
                     <p class="edu-eyebrow">Informaci&oacute;n financiera</p>
-                    <h1>Tu financiaci&oacute;n educativa</h1>
-                    <p>Valores informativos en COP. Las proyecciones de esta pantalla no registran pagos ni emiten comprobantes.</p>
+                    {% if portal_financiacion %}<h2>Condiciones de tu financiaci&oacute;n</h2>{% else %}<h1>Tu financiaci&oacute;n educativa</h1>{% endif %}
+                    {% if portal_financiacion %}<p>Importes pactados en COP. Los saldos de amortizaci&oacute;n del calendario original no son un saldo de liquidaci&oacute;n con los pagos posteriores.</p>{% else %}<p>Valores informativos en COP. Las proyecciones de esta pantalla no registran pagos ni emiten comprobantes.</p>{% endif %}
                 </div>
                 {% if error %}<div class="edu-error-summary" role="alert">{{ error }}</div>{% endif %}
-                {% if recaudos_disponibles %}
+                {% if recaudos_disponibles and not portal_financiacion %}
                     <section class="edu-section-block" aria-labelledby="payments-title">
                         <h2 id="payments-title">Pagos de tu obligaci&oacute;n</h2>
                         <p>Consulta el receptor BRE-B y reporta una transferencia. Un reporte no acredita una cuota pagada; el ingreso debe verificarse en el banco y queda pendiente de aplicaci&oacute;n financiera.</p>
@@ -74,7 +79,7 @@
                         </div>
                     </section>
 
-                    <section id="proyecciones" class="edu-section-block" aria-labelledby="projections-title" {% if focus_projections %}data-scroll-on-load{% endif %}>
+                    {% if not portal_financiacion %}<section id="proyecciones" class="edu-section-block" aria-labelledby="projections-title" {% if focus_projections %}data-scroll-on-load{% endif %}>
                         <div class="edu-section-title"><h2 id="projections-title">Proyecciones informativas</h2></div>
                         <div class="alert-warning">
                             Estas herramientas simulan escenarios sobre el plan actual. No reciben dinero, no registran pagos y no modifican la obligaci&oacute;n.
@@ -134,6 +139,7 @@
                             </div>
                         </div>
                     </section>
+                    {% endif %}
                 {% else %}
                     <div class="edu-finance-simulator-link">
                         <div>
@@ -156,4 +162,5 @@
         </div>
     </div>
 </section>
+{% if portal_financiacion %}</details>{% endif %}
 {% endblock %}

@@ -4,6 +4,7 @@ from datetime import timedelta
 from urllib.parse import urlencode
 
 from django.conf import settings
+from .portal_estudiante import solicitudes_del_portal, contexto_financiacion_del_portal
 from financiacion_educativa.dashboards.operaciones.cartera import obligaciones_autorizadas
 from django.core import signing
 from django.contrib import messages
@@ -1826,35 +1827,12 @@ def calcular_simulacion_view(request, solicitud_id):
 @login_required
 @require_GET
 def reanudar_solicitudes_view(request):
-    solicitudes = list(
-        SolicitudFinanciacionEducativa.objects.filter(
-            usuario=request.user,
-        ).select_related('institucion')
-    )
-    activas = [
-        solicitud
-        for solicitud in solicitudes
-        if resolver_destino_reanudacion(solicitud).inconclusa
-    ]
-    if len(activas) == 1:
-        return redirect(resolver_url_reanudacion(activas[0]))
-
-    candidatas = activas or solicitudes
-    if len(candidatas) == 1:
-        return redirect(resolver_url_reanudacion(candidatas[0]))
-
-    opciones = [
-        {
-            'solicitud': solicitud,
-            'destino': resolver_destino_reanudacion(solicitud),
-            'url': resolver_url_reanudacion(solicitud),
-        }
-        for solicitud in candidatas
-    ]
+    grupos = solicitudes_del_portal(request.user)
+    seccion = 'financiaciones' if request.GET.get('seccion') == 'financiaciones' else 'tramites'
     return render(
         request,
         'financiacion_educativa/mis_solicitudes.html',
-        {'opciones': opciones},
+        {**grupos, 'seccion': seccion, 'opciones': grupos[seccion]},
     )
 
 
@@ -1880,10 +1858,18 @@ def estado_solicitud_view(request, solicitud_id):
 @require_GET
 def finanzas_view(request, solicitud_id):
     solicitud = _solicitud_del_usuario(request, solicitud_id)
+    fotografia = obligaciones_autorizadas().filter(solicitud_id=solicitud.pk).first()
+    if fotografia:
+        contexto = _contexto_financiero(solicitud, **contexto_financiacion_del_portal(fotografia))
+    elif solicitud.estado == EstadoSolicitudFinanciacion.APPROVED:
+        return render(request, 'financiacion_educativa/portal_estudiante/sin_autorizacion.html', {'solicitud': solicitud})
+    else:
+        # Preserve the existing pre-contract informational/projection workflow.
+        contexto = _contexto_financiero(solicitud)
     return render(
         request,
         'financiacion_educativa/finanzas.html',
-        _contexto_financiero(solicitud),
+        contexto,
     )
 
 
