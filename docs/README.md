@@ -12,6 +12,8 @@ material heredado sin presentarlo como parte del producto educativo actual.
 
 ## Uso interno
 
+- `AVISO_PLAN_CONTRACTUAL.md`: aviso transaccional de disponibilidad del plan,
+  sin PDF adjunto, destinatario verificado y activacion independiente.
 - `ROADMAP_FINANCIACION_EDUCATIVA.md`: fases, criterios de cierre y dashboard
   financiero consultivo de obligaciones autorizadas.
 - `interno/arquitectura/`: fuente HTML y documento tecnico derivado.
