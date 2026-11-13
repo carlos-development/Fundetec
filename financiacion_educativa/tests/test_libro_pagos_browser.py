@@ -20,9 +20,10 @@ class LibroBrowserTests(DatosLibro, StaticLiveServerTestCase):
         ingreso = self.nuevo_ingreso(self.cuota.capital // 2)
         from financiacion_educativa.models_libro import PoliticaLibroEducativo
         from financiacion_educativa.services.libro_pagos import REGLAS_SINTETICAS
-        self.politica = PoliticaLibroEducativo.objects.create(institucion=self.institucion,
-            version='SYNTHETIC_CAPITAL_FIRST', reglas={**REGLAS_SINTETICAS, 'imputacion': 'CAPITAL_FIRST'},
-            referencia_aprobacion='SYNTHETIC_ONLY', aprobada_por=self.actor, vigente_desde=self.fecha)
+        from financiacion_educativa.tests.piloto_libro_helpers import politica_sintetica
+        self.politica = politica_sintetica(self.institucion, self.actor, self.aprobador,
+            'SYNTHETIC_CAPITAL_FIRST', date(2026, 7, 1),
+            reglas={**REGLAS_SINTETICAS, 'imputacion': 'CAPITAL_FIRST'}, reemplaza_id=self.politica.pk)
         movimiento = self.registrar(ingreso)
         completa = self.nuevo_ingreso(self.cuota.valor_cuota - movimiento.importe)
         capital = self.nuevo_ingreso('400000')

@@ -3237,6 +3237,10 @@ from .models_recaudos import (  # noqa: E402,F401
 
 
 from .models_libro import PoliticaLibroEducativo, MovimientoLibroEducativo, LineaLibroEducativo  # noqa: E402,F401
+from .models_gobernanza_libro import (  # noqa: E402,F401
+    PropuestaPoliticaLibro, EventoPoliticaLibro, EventoAlcanceLibro,
+    ControlPilotoLibro, EventoControlPilotoLibro,
+)
 
 
 class ConfiguracionAnexoMatriculaEducativa(models.Model):

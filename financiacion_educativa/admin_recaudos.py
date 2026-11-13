@@ -10,6 +10,8 @@ from .models_recaudos import (
 )
 from .services import recaudos
 from .models_libro import PoliticaLibroEducativo, MovimientoLibroEducativo, LineaLibroEducativo
+from .models_gobernanza_libro import (PropuestaPoliticaLibro, EventoPoliticaLibro,
+    EventoAlcanceLibro, ControlPilotoLibro, EventoControlPilotoLibro)
 
 
 class EvidenciaSoloLecturaAdmin(admin.ModelAdmin):
@@ -35,7 +37,9 @@ class EvidenciaSoloLecturaAdmin(admin.ModelAdmin):
         return False
 
 
-for modelo in (PoliticaLibroEducativo, MovimientoLibroEducativo, LineaLibroEducativo,
+for modelo in (PropuestaPoliticaLibro, EventoPoliticaLibro, EventoAlcanceLibro,
+               ControlPilotoLibro, EventoControlPilotoLibro,
+               PoliticaLibroEducativo, MovimientoLibroEducativo, LineaLibroEducativo,
                ArchivoRecaudoEducativo, IntentoEscaneoRecaudo, CuentaRecaudoEducativa,
                EventoReceptorBrebEducativo, ReporteRecaudoEducativo,
                ConciliacionRecaudoEducativo, RechazoReporteRecaudoEducativo):

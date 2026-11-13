@@ -46,6 +46,10 @@ def requiere_permisos_operativos(*permisos):
 
 def capacidades_operativas(usuario):
     return {
+        'politicas_libro': usuario.is_active and usuario.has_perms((PERMISO_ACCESO,)) and any(
+            usuario.has_perm('financiacion_educativa.' + permiso) for permiso in (
+                'preparar_politicas_libro', 'revisar_politicas_libro', 'aprobar_politicas_libro',
+                'controlar_piloto_libro', 'gestionar_alcances_libro', 'aplicar_cuotas_educativas', 'compensar_libro_educativo')),
         'seguimiento_cartera': usuario.is_active and usuario.has_perms((PERMISO_ACCESO, PERMISO_SOLICITUDES,
             'financiacion_educativa.consultar_recaudos_educativos')),
         'registrar_pagos': settings.FINANCIACION_EDUCATIVA_RECAUDOS_ENABLED and usuario.is_active and usuario.has_perms((

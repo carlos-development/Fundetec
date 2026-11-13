@@ -1,7 +1,10 @@
-# Libro de pagos 2B: candidato de revision
+# Libro de pagos 2B: base desplegada y control del piloto
 
-Base: `origin/main` en `f0f345d`, merge PR #10. Carlos confirma su despliegue
-en produccion. Esta entrega es local y no certifica ningun otro despliegue.
+Base del libro: PR #11, merge `7fc37739f5f73f665355b0aafc7a880d601c6d58`.
+Carlos confirma su despliegue en produccion con contabilizacion desactivada.
+El procedimiento vigente de gobierno, piloto por institucion, diagnostico y
+apagado esta en [PILOTO_LIBRO_2B.md](PILOTO_LIBRO_2B.md). Su validacion es local;
+no certifica que el nuevo control ya se haya instalado o ensayado en staging.
 
 ## Limites de habilitacion
 
@@ -14,9 +17,10 @@ sin libro nuevo. No se aplican automaticamente ingresos ni se envian correos.
 No existe una politica productiva aprobada ni se crea una en la migracion.
 Las politicas sinteticas son escenarios de prueba, NO un convenio. No copiar
 fixtures ni crear politicas en produccion para desbloquear un caso urgente.
-La configuracion de politicas en Admin es de solo lectura: un alta requiere
-un procedimiento posterior de aprobacion con evidencia del convenio, responsable
-y fecha de vigencia. El flag no basta para aprobar una politica.
+La configuracion de politicas en Admin es de solo lectura. El incremento de
+piloto incorpora preparacion, revision independiente, aprobacion y consulta en
+Operaciones, con evidencia del convenio, responsable y vigencia bancaria.
+El flag no basta para aprobar una politica ni para contabilizar.
 
 ## Fuentes, invariantes y consulta
 
@@ -102,7 +106,8 @@ proyeccion. No es un recibo ni un permiso de contabilizacion.
 
 Confirmar exige acceso operativo + consultar recaudos + aplicar cuotas,
 habilitacion global, politica vigente de la institucion, motivo y confirmacion.
-El servicio bloquea solicitud -> ingreso -> archivos en orden de PK, sin
+El servicio bloquea control de piloto -> institucion -> solicitud -> ingreso
+-> archivos en orden de PK, sin
 OUTER JOIN nullable en los locks. Revalida firma, SAFE, hash, propiedad,
 finalidad de soportes y distribucion dentro de la transaccion. El cambio de
 secuencia exige otra vista previa: no aplicar silenciosamente a otra cuota.
@@ -115,17 +120,20 @@ El lock de solicitud serializa diferentes ingresos y el flujo integro anterior.
 Tras empezar el libro nuevo, el flujo antiguo exige revisar la distribucion
 en el libro: no puede crear una cobertura paralela sobre el calendario original.
 
-Compensar exige adicionalmente `compensar_libro_educativo`. Servicio
-`compensar(movimiento_id, actor, clave, motivo, secuencia_esperada)`; se prueba
-con datos sinteticos, no se publica una accion de anulacion ni se autoriza su
-uso real. Se resta exactamente el ultimo asiento completo; original y lineas
+Compensar exige `compensar_libro_educativo`, alcance explicito, otro operador,
+politica y piloto vigentes y una vista previa firmada de 15 minutos mediante
+`preparar_compensacion`. Servicio `compensar` revalida ese token, el ingreso,
+la politica, el control y la secuencia. No requiere permiso POST, pero si acceso
+y consulta de recaudos. El recorrido se publica en Operaciones exclusivamente
+bajo esos controles; no autoriza su uso real sin aprobacion comercial.
+Se resta exactamente el ultimo asiento completo; original y lineas
 se conservan. Se bloquean sucesores y doble compensacion. El ORM impide
 edicion, borrado, update y bulk; SQL directo requiere controles del administrador
 de BD y queda fuera de esa proteccion. No se deshabilitan constraints.
 
 ## Migracion, staging y reversion (no ejecutados en servidores)
 
-Migracion unica nueva: `financiacion_educativa.0034_libro_pagos`, depende de
+Migracion del alcance base PR #11: `financiacion_educativa.0034_libro_pagos`, depende de
 0033, instituciones.0003 y usuario intercambiable. Crea tres tablas, FK PROTECT,
 unicidades y CHECK de importes y compensacion. No modifica 0031/0032 ni filas
 anteriores. Compatible con PostgreSQL; el permiso nuevo se crea en post_migrate.

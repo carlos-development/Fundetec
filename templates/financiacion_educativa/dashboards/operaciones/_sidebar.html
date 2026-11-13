@@ -1,5 +1,6 @@
 <aside class="edu-dashboard-sidebar" aria-label="Navegaci&oacute;n operativa">
     <nav>
+        {% if capacidades_operativas.politicas_libro %}<a href="{% url 'financiacion_educativa_web:operaciones:politicas-libro' %}"><i class="bi bi-journal-check" aria-hidden="true"></i> Politicas del libro</a>{% endif %}
         {% if capacidades_operativas.seguimiento_cartera %}<a{% if seccion_operativa == 'seguimiento-cartera' %} class="is-active" aria-current="page"{% endif %} href="{% url 'financiacion_educativa_web:operaciones:seguimiento-cartera' %}"><i class="bi bi-calendar2-week" aria-hidden="true"></i> Seguimiento de cartera</a>{% endif %}
         {% if capacidades_operativas.recaudos %}<a{% if seccion_operativa == 'tablero-recaudos' %} class="is-active" aria-current="page"{% endif %} href="{% url 'financiacion_educativa_web:operaciones:tablero-recaudos' %}"><i class="bi bi-bar-chart" aria-hidden="true"></i> Tablero de recaudos</a>{% endif %}
         {% if capacidades_operativas.recaudos %}<a{% if seccion_operativa == 'recaudos' %} class="is-active" aria-current="page"{% endif %} href="{% url 'financiacion_educativa_web:operaciones:recaudos' %}"><i class="bi bi-bank" aria-hidden="true"></i> Recaudos</a>{% endif %}

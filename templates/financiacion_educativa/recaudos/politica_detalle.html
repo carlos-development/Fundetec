@@ -1,0 +1,12 @@
+{% extends "financiacion_educativa/dashboards/operaciones/_base.html" %}
+{% load static %}
+{% block extra_head %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/financiacion_educativa_recaudos.css' %}">{% endblock %}
+{% block operations_content %}<div class="edu-recaudos-workspace edu-ops-workspace">
+<h1>{{ propuesta.version }}</h1><p>{{ propuesta.institucion }} · {% if propuesta.es_sintetica %}SINTETICA: no representa aprobacion comercial{% else %}No sintetica{% endif %}</p>
+<p>Aplica a la fecha bancaria desde {{ propuesta.vigente_desde|date:"d/m/Y" }} hasta {{ propuesta.vigente_hasta|date:"d/m/Y"|default:"sin limite final" }}, ambos incluidos. La fecha de registro no cambia esta seleccion.</p>
+<dl class="edu-recaudos-summary">{% for etiqueta, valor in reglas %}<div><dt>{{ etiqueta }}</dt><dd>{{ valor }}</dd></div>{% endfor %}</dl>
+<h2>Respaldo y auditoria</h2><p>{{ propuesta.respaldo }}</p><p>Preparada por {{ propuesta.preparada_por.get_username }} · {{ propuesta.creada_en|date:"d/m/Y H:i" }}</p>
+{% for evento in eventos %}<section class="edu-recaudos-band"><h3>{{ evento.get_tipo_display }}</h3><p>{{ evento.actor.get_username }} · {{ evento.creado_en|date:"d/m/Y H:i" }}</p><p>{{ evento.respaldo }}</p></section>{% empty %}<p>Pendiente de revision independiente.</p>{% endfor %}
+<p class="edu-recaudos-notice">No modifica movimientos anteriores. Una correccion necesita otra version; retirar una politica impide nuevas escrituras, pero conserva su evidencia.</p>
+<form method="post" class="edu-recaudos-form">{% csrf_token %}{{ form.as_p }}<button type="submit"><i class="bi bi-check2-circle" aria-hidden="true"></i> Registrar decision</button></form>
+<p><a href="{% url 'financiacion_educativa_web:operaciones:politicas-libro' %}?institucion={{ propuesta.institucion_id }}">Volver a versiones</a></p></div>{% endblock %}
