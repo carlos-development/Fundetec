@@ -3,7 +3,7 @@ from decimal import Decimal
 
 from django import forms
 from django.core.paginator import Paginator
-from django.db.models import Count, F, Min, Sum
+from django.db.models import Count, F, Min, Sum, Q
 from django.http import Http404, QueryDict
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
@@ -14,6 +14,8 @@ from django.views.decorators.http import require_GET
 from instituciones.models import Institucion
 from financiacion_educativa.models import CuotaAmortizacionEducativa
 from financiacion_educativa.services import recaudos
+from financiacion_educativa.services.libro_pagos import anotar_cuotas, anotar_estado_actual, anotar_ingresos, resumen_ingresos
+from financiacion_educativa.models_recaudos import ConciliacionRecaudoEducativo
 from financiacion_educativa.services.seguimiento_cartera import ESTADOS_RECAUDO, anotar_seguimiento, reportes_abiertos
 from .cartera import obligaciones_autorizadas
 from .permissions import capacidades_operativas, requiere_permisos_operativos, PERMISO_SOLICITUDES
@@ -72,9 +74,12 @@ def regreso_seguimiento(request):
 
 
 def cuotas_seguimiento(datos, hoy):
-    base = CuotaAmortizacionEducativa.objects.filter(
+    base = anotar_cuotas(CuotaAmortizacionEducativa.objects.filter(
         fotografia_id__in=obligaciones_autorizadas().values('pk'),
-    )
+    ))
+    # A superseding projection is not an unpaid copy of the original schedule.
+    base = anotar_estado_actual(base, fotografia_ref='fotografia_id').filter(
+        Q(estado_actual_libro__isnull=True) | ~Q(estado_actual_libro__proyectado=True))
     if datos.get('institucion'):
         base = base.filter(fotografia__solicitud__institucion=datos['institucion'])
     if datos.get('q'):
@@ -92,8 +97,8 @@ def cuotas_seguimiento(datos, hoy):
 
 def seleccionar_bandeja(base, bandeja, hoy):
     if bandeja == 'aplicados':
-        return base.filter(aplicacion_recaudo__isnull=False)
-    base = base.filter(aplicacion_recaudo__isnull=True)
+        return base.filter(Q(capital_cubierto__gt=0) | Q(interes_cubierto__gt=0))
+    base = base.filter(cubierta_libro=False)
     if bandeja == 'primeras':
         return base.filter(numero=1, fecha_vencimiento__lt=hoy)
     if bandeja == 'hoy':
@@ -107,8 +112,8 @@ def resumen(consulta, aplicada=False):
     campos = dict(cuotas=Count('pk'), obligaciones=Count('fotografia_id', distinct=True),
         importe=Sum('valor_cuota', default=Decimal('0.00')))
     if aplicada:
-        campos.update(capital=Sum('aplicacion_recaudo__capital_aplicado', default=Decimal('0.00')),
-            intereses=Sum('aplicacion_recaudo__interes_aplicado', default=Decimal('0.00')))
+        campos.update(capital=Sum('capital_cubierto', default=Decimal('0.00')),
+            intereses=Sum('interes_cubierto', default=Decimal('0.00')))
     resultado = consulta.aggregate(**campos)
     if aplicada:
         resultado['importe'] = resultado['capital'] + resultado['intereses']
@@ -136,6 +141,25 @@ def seguimiento_view(request):
         return render(request, 'financiacion_educativa/dashboards/operaciones/seguimiento.html',
             _contexto(request, form=form), status=400)
     datos = {**form.cleaned_data, 'page': request.GET.get('page', '1')}
+    proyectadas = anotar_estado_actual(anotar_seguimiento(obligaciones_autorizadas(),
+        fotografia_ref='pk', solicitud_ref='solicitud_id', hoy=hoy)).filter(estado_actual_libro__proyectado=True)
+    if datos.get('institucion'):
+        proyectadas = proyectadas.filter(solicitud__institucion=datos['institucion'])
+    if datos.get('q'):
+        proyectadas = proyectadas.filter(solicitud__referencia_externa__icontains=datos['q'])
+    if datos.get('estado_operativo'):
+        proyectadas = proyectadas.filter(estado_recaudo=datos['estado_operativo'])
+    proyecciones = []
+    for foto in proyectadas:
+        plan = foto.estado_actual_libro['plan']
+        primera = plan[0] if plan else None
+        if (datos.get('desde') or datos.get('hasta')) and not any(
+            (not datos.get('desde') or fila['fecha'] >= datos['desde'].isoformat()) and
+            (not datos.get('hasta') or fila['fecha'] <= datos['hasta'].isoformat()) for fila in plan):
+            continue
+        proyecciones.append({'referencia': foto.solicitud.referencia_externa,
+            'capital': foto.estado_actual_libro['capital'], 'primera': primera,
+            'cantidad': len(plan), 'url': enlace('seguimiento-detalle', datos, args=[foto.solicitud_id])})
     base = cuotas_seguimiento(datos, hoy)
     indicadores = []
     for codigo, nombre in BANDEJAS:
@@ -157,8 +181,8 @@ def seguimiento_view(request):
         ).annotate(cantidad=Count('pk'), importe=Sum('valor_cuota'), fecha=Min('fecha_vencimiento')).order_by(
             'fecha', 'prioridad', 'fotografia_id')
         if datos['bandeja'] == 'aplicados':
-            listado = listado.annotate(capital=Sum('aplicacion_recaudo__capital_aplicado'),
-                intereses=Sum('aplicacion_recaudo__interes_aplicado')).annotate(importe=F('capital') + F('intereses'))
+            listado = listado.annotate(capital=Sum('capital_cubierto'),
+                intereses=Sum('interes_cubierto')).annotate(importe=F('capital') + F('intereses'))
     else:
         listado = seleccion.select_related('fotografia__solicitud__institucion', 'aplicacion_recaudo').order_by(
             'fecha_vencimiento', 'prioridad', 'fotografia_id', 'numero')
@@ -175,10 +199,10 @@ def seguimiento_view(request):
                 'numero': fila.numero, 'fecha': fila.fecha_vencimiento, 'importe': fila.valor_cuota,
                 'estado_recaudo': fila.estado_recaudo, 'primera_pendiente': fila.primera_pendiente}
             if datos['bandeja'] == 'aplicados':
-                aplicacion = fila.aplicacion_recaudo
-                dato.update(importe=aplicacion.capital_aplicado + aplicacion.interes_aplicado,
-                    capital=aplicacion.capital_aplicado, intereses=aplicacion.interes_aplicado,
-                    fecha_bancaria=aplicacion.fecha_efectiva)
+                aplicacion = getattr(fila, 'aplicacion_recaudo', None)
+                dato.update(importe=fila.capital_cubierto + fila.interes_cubierto,
+                    capital=fila.capital_cubierto, intereses=fila.interes_cubierto,
+                    fecha_bancaria=aplicacion.fecha_efectiva if aplicacion else None)
         dato.update(dias=max(0, (hoy - dato['fecha']).days),
             vencida=dato['fecha'] < hoy, vence_hoy=dato['fecha'] == hoy,
             estado=dict(ESTADOS_RECAUDO)[dato['estado_recaudo']],
@@ -195,7 +219,7 @@ def seguimiento_view(request):
         por_obligacion=datos['vista'] == 'obligaciones', rapidos=rapidos,
         vista_cuotas=enlace('seguimiento-cartera', datos, vista='cuotas', page=None),
         vista_obligaciones=enlace('seguimiento-cartera', datos, vista='obligaciones', page=None),
-        querystring=parametros(datos, page=None).urlencode()))
+        querystring=parametros(datos, page=None).urlencode(), proyecciones=proyecciones))
 
 
 @never_cache
@@ -206,17 +230,19 @@ def detalle_view(request, application_id):
     if not form.is_valid():
         raise Http404
     datos = {**form.cleaned_data, 'page': request.GET.get('page', '1')}
-    foto = get_object_or_404(anotar_seguimiento(obligaciones_autorizadas(), fotografia_ref='pk',
-        solicitud_ref='solicitud_id', hoy=timezone.localdate()), solicitud_id=application_id)
-    pendientes = list(foto.cuotas.filter(aplicacion_recaudo__isnull=True).order_by('numero'))
+    foto = get_object_or_404(anotar_estado_actual(anotar_seguimiento(obligaciones_autorizadas(), fotografia_ref='pk',
+        solicitud_ref='solicitud_id', hoy=timezone.localdate())), solicitud_id=application_id)
+    pendientes = list(anotar_cuotas(foto.cuotas.all()).filter(cubierta_libro=False).order_by('numero'))
     movimientos = list(reportes_abiertos(foto).select_related('conciliacion').order_by('creado_en', 'pk'))
+    disponibles = dict(anotar_ingresos(ConciliacionRecaudoEducativo.objects.filter(
+        reporte__fotografia=foto)).values_list('pk', 'disponible_libro'))
     abiertos = []
     primera = pendientes[0] if pendientes else None
     for reporte in movimientos:
         ingreso = getattr(reporte, 'conciliacion', None)
         revision = bool(ingreso and (not primera or not reporte.admite_aplicacion_cuota
             or ingreso.monto_recibido != primera.valor_cuota or ingreso.monto_recibido != reporte.monto_reportado))
-        abiertos.append({'importe': ingreso.monto_recibido if ingreso else reporte.monto_reportado,
+        abiertos.append({'importe': disponibles[ingreso.pk] if ingreso else reporte.monto_reportado,
             'confirmado': ingreso is not None, 'revision': revision,
             'url': enlace('recaudo-detalle', datos, args=[reporte.pk]) + '&origen=cartera'})
     abiertos.sort(key=lambda m: not m['confirmado'])
@@ -228,7 +254,11 @@ def detalle_view(request, application_id):
         url_accion = abiertos[0]['url']
     else:
         accion, url_accion = 'Ver obligaci\u00f3n', url_obligacion
+    ingresos_libro = ConciliacionRecaudoEducativo.objects.filter(reporte__fotografia=foto)
     return render(request, 'financiacion_educativa/dashboards/operaciones/seguimiento_detalle.html',
         _contexto(request, fotografia=foto, pendientes=pendientes, abiertos=abiertos,
+            resumen_libro=resumen_ingresos(ingresos_libro),
+            proyeccion_libro=foto.estado_actual_libro if foto.estado_actual_libro and foto.estado_actual_libro['proyectado'] else None,
+            libro_proyectado=foto.movimientos_libro.exists(),
             estado=dict(ESTADOS_RECAUDO)[foto.estado_recaudo], accion=accion, url_accion=url_accion,
             vuelta=enlace('seguimiento-cartera', datos), url_obligacion=url_obligacion, hoy=timezone.localdate()))

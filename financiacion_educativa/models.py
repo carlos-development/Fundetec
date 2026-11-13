@@ -3236,6 +3236,9 @@ from .models_recaudos import (  # noqa: E402,F401
 )
 
 
+from .models_libro import PoliticaLibroEducativo, MovimientoLibroEducativo, LineaLibroEducativo  # noqa: E402,F401
+
+
 class ConfiguracionAnexoMatriculaEducativa(models.Model):
     institucion = models.OneToOneField(Institucion, primary_key=True, on_delete=models.PROTECT,
                                       related_name='configuracion_anexo_matricula')

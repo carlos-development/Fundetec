@@ -3,12 +3,15 @@ from django.urls import path
 from . import views
 from .tablero_recaudos import tablero_view
 from . import seguimiento
+from . import libro
 from financiacion_educativa.web import recaudos
 
 
 app_name = 'operaciones'
 
 urlpatterns = [
+    path('recaudos/ingresos/<uuid:ingreso_id>/libro/', libro.consulta_view, name='libro-ingreso'),
+    path('recaudos/ingresos/<uuid:ingreso_id>/previsualizar/', libro.preview_view, name='libro-preview'),
     path('seguimiento-cartera/', seguimiento.seguimiento_view, name='seguimiento-cartera'),
     path('seguimiento-cartera/<uuid:application_id>/', seguimiento.detalle_view, name='seguimiento-detalle'),
     path('recaudos/tablero/', tablero_view, name='tablero-recaudos'),

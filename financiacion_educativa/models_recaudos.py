@@ -217,6 +217,14 @@ class ReporteRecaudoEducativo(EvidenciaInmutable):
         if hasattr(self, 'conciliacion'):
             if hasattr(self.conciliacion, 'aplicacion'):
                 return 'Pago aplicado a cuota'
+            from .services.libro_pagos import anotar_ingresos
+            aplicado = getattr(self, 'dinero_aplicado', None)
+            disponible = getattr(self, 'dinero_sin_destino', None)
+            if aplicado is None:
+                neto = anotar_ingresos(ConciliacionRecaudoEducativo.objects.filter(pk=self.conciliacion.pk)).get()
+                aplicado, disponible = neto.aplicado_neto, neto.disponible_libro
+            if aplicado > 0:
+                return 'Aplicacion contabilizada; dinero restante sin destino' if disponible else 'Aplicacion contabilizada en el libro'
             return 'Ingreso confirmado pendiente de aplicacion'
         if hasattr(self, 'rechazo'):
             return 'Reporte no conciliado'

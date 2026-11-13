@@ -30,7 +30,8 @@ def tablero_view(request):
     consulta = cohorte_bancaria(datos)
     tablero = construir_tablero(consulta, datos)
     listado = filtrar_segmento(consulta, datos['estado'])
-    total_listado = listado.aggregate(importe=Sum('monto_recibido', default=CERO))['importe']
+    campo = {'TO_APPLY': 'disponible_libro', 'APPLIED': 'aplicado_neto'}.get(datos['estado'], 'monto_recibido')
+    total_listado = listado.aggregate(importe=Sum(campo, default=CERO))['importe']
     pagina = Paginator(listado.select_related('reporte__solicitud__institucion', 'aplicacion__cuota').order_by(
         '-fecha_efectiva', '-confirmada_en', 'pk'), 25).get_page(request.GET.get('page'))
     return render(request, 'financiacion_educativa/recaudos/tablero.html', {
