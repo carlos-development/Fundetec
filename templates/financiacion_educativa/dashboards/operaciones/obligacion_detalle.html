@@ -2,6 +2,7 @@
 {% load financiacion_format %}
 {% block title %}Obligaci&oacute;n {{ obligacion.referencia }} | Aprobado{% endblock %}
 {% block operations_content %}
+{% if seguimiento_regreso %}<a href="{{ seguimiento_regreso }}">Volver al seguimiento filtrado</a>{% endif %}
 <header class="edu-dashboard-heading"><a class="edu-dashboard-text-link" href="{% url 'financiacion_educativa_web:operaciones:obligaciones' %}"><i class="bi bi-arrow-left" aria-hidden="true"></i> Obligaciones</a><h1>{{ obligacion.referencia }}</h1><p>{{ obligacion.solicitante }} &middot; {{ obligacion.documento }}</p></header>
 <section class="edu-dashboard-panel"><h2>Contrato autorizado</h2><dl class="edu-dashboard-data-list">
     {% if capacidades_operativas.registrar_pagos %}<div><dt>Ingreso recibido en el banco</dt><dd><a class="edu-button" href="{% url 'financiacion_educativa_web:operaciones:registrar-pago-recibido' fotografia.solicitud_id %}"><i class="bi bi-plus-circle" aria-hidden="true"></i> Registrar pago recibido</a></dd></div>{% endif %}

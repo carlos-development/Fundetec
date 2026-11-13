@@ -2,11 +2,13 @@
 
 from django.db.models import Exists, OuterRef
 from django.urls import reverse
+from django.utils import timezone
 
 from financiacion_educativa.dashboards.operaciones.cartera import obligaciones_autorizadas
 from financiacion_educativa.models import SolicitudFinanciacionEducativa
 from financiacion_educativa.models_recaudos import AplicacionCuotaEducativa, ReporteRecaudoEducativo
 from financiacion_educativa.services.reanudacion import resolver_destino_reanudacion
+from financiacion_educativa.services.seguimiento_cartera import etiqueta_vencimiento
 
 
 def calendario_del_portal(fotografia):
@@ -15,9 +17,11 @@ def calendario_del_portal(fotografia):
     ).order_by('numero').values(
         'numero', 'fecha_vencimiento', 'valor_cuota', 'capital', 'interes', 'aplicada',
     ))
+    primera = next((c for c in cuotas if not c['aplicada']), None)
     return {
         'cuotas_portal': cuotas,
-        'primera_cuota_pendiente': next((c for c in cuotas if not c['aplicada']), None),
+        'primera_cuota_pendiente': primera,
+        'etiqueta_primera_cuota': etiqueta_vencimiento(primera['fecha_vencimiento'], timezone.localdate()) if primera else '',
         'cuotas_aplicadas': sum(c['aplicada'] for c in cuotas),
     }
 
@@ -66,10 +70,12 @@ def contexto_financiacion_del_portal(fotografia):
     )
     historial = []
     hay_confirmadas_por_aplicar = False
+    hay_reportes_por_verificar = False
     for fila in filas:
         numero = fila['conciliacion__aplicacion__cuota__numero']
         confirmada = fila['conciliacion__monto_recibido'] is not None
         hay_confirmadas_por_aplicar |= confirmada and numero is None
+        hay_reportes_por_verificar |= not confirmada and not fila['rechazo__motivo_publico']
         historial.append({
             'estado': ('Pago aplicado' if numero is not None else
                        'Transferencia confirmada' if confirmada else
@@ -86,4 +92,5 @@ def contexto_financiacion_del_portal(fotografia):
         **calendario_del_portal(fotografia),
         'historial_portal': historial,
         'hay_confirmadas_por_aplicar': hay_confirmadas_por_aplicar,
+        'hay_reportes_por_verificar': hay_reportes_por_verificar,
     }

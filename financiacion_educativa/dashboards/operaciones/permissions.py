@@ -46,6 +46,8 @@ def requiere_permisos_operativos(*permisos):
 
 def capacidades_operativas(usuario):
     return {
+        'seguimiento_cartera': usuario.is_active and usuario.has_perms((PERMISO_ACCESO, PERMISO_SOLICITUDES,
+            'financiacion_educativa.consultar_recaudos_educativos')),
         'registrar_pagos': settings.FINANCIACION_EDUCATIVA_RECAUDOS_ENABLED and usuario.is_active and usuario.has_perms((
             PERMISO_ACCESO, 'financiacion_educativa.consultar_recaudos_educativos',
             'financiacion_educativa.registrar_pagos_recibidos_educativos')),
