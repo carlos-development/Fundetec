@@ -1,0 +1,9 @@
+{% extends "emails/financiacion_educativa/_base.html" %}
+{% block email_title %}Tu plan contractual est&aacute; disponible{% endblock %}
+{% block preheader %}Consulta el calendario pactado desde tu cuenta de Aprobado.{% endblock %}
+{% block content %}
+<h1 class="email-title" style="margin:0 0 16px;font-size:26px;line-height:32px;font-weight:800;color:#0B2E59;">Tu plan contractual est&aacute; disponible</h1>
+<p style="margin:0 0 24px;font-size:15px;line-height:23px;color:#5B6B82;">Ya puedes consultar y descargar el plan de pagos de tu contrato desde tu cuenta de Aprobado.</p>
+<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:0 0 24px;"><tr><td style="background-color:#007CAD;border-radius:6px;"><a class="cta-link" href="{{ portal_url }}" style="display:inline-block;padding:15px 24px;color:#FFFFFF;text-decoration:none;font-size:15px;line-height:22px;font-weight:700;">Ver mi plan de pagos</a></td></tr></table>
+<p style="margin:0;font-size:14px;line-height:22px;color:#5B6B82;">El documento muestra el calendario pactado. No representa un saldo vigente ni una liquidaci&oacute;n. Para consultarlo debes iniciar sesi&oacute;n con la cuenta que tiene acceso a la financiaci&oacute;n.</p>
+{% endblock %}

@@ -51,6 +51,7 @@ from financiacion_educativa.services.correos import (
     validar_configuracion_smtp,
 )
 from financiacion_educativa.services.notificaciones_pagos import CODIGOS_PAGO
+from financiacion_educativa.services.notificaciones_plan_contractual import CODIGO_PLAN
 
 
 logger = logging.getLogger(__name__)
@@ -77,12 +78,18 @@ ESTADOS_RECLAMABLES = {
     EstadoOutboxCorreoEducativo.RETRYING,
 }
 CODIGOS_TEMPORALES = {
+    'PLAN_NOTIFICATIONS_DISABLED',
     'PAYMENT_NOTIFICATIONS_DISABLED',
     'SMTP_CONNECT_ERROR',
     'SMTP_TEMPORARY_ERROR',
     'DELIVERY_NOT_STARTED',
 }
 CODIGOS_PERMANENTES = {
+    'PLAN_RECIPIENT_NO_ACCESS',
+    'PLAN_RECIPIENT_UNVERIFIED',
+    'PLAN_GUARDIAN_UNDEFINED',
+    'PLAN_RECIPIENT_CHANGED',
+    'PLAN_VERSION_UNAVAILABLE',
     'PAYMENT_RECIPIENT_UNVERIFIED',
     'SMTP_CONFIGURATION_ERROR',
     'SMTP_AUTHENTICATION_ERROR',
@@ -149,12 +156,22 @@ def crear_intencion_correo(
     decision=None,
     correo_origen=None,
     reporte_recaudo=None,
+    plan_contractual=None,
+    plan_destinatario_usuario=None,
 ):
     if not transaction.get_connection().in_atomic_block:
         raise RuntimeError('La intencion de correo debe crearse atomicamente.')
     es_pago = codigo_mensaje in CODIGOS_PAGO
+    es_plan = codigo_mensaje == CODIGO_PLAN
     sin_destinatario_pago = es_pago and not destinatarios
-    destinatarios = [] if sin_destinatario_pago else _normalizar_lista(destinatarios)
+    sin_destinatario_plan = es_plan and not destinatarios
+    destinatarios = [] if sin_destinatario_pago or sin_destinatario_plan else _normalizar_lista(destinatarios)
+    if es_plan and (plan_contractual is None or plan_contractual.solicitud_id != solicitud.pk):
+        raise ValidationError('El aviso requiere una version del plan de la misma solicitud.')
+    if not es_plan and (plan_contractual is not None or plan_destinatario_usuario is not None):
+        raise ValidationError('Solo el aviso del plan admite version y cuenta de destino.')
+    if es_plan and (contexto or destinatarios_copia or tipo_evento != CODIGO_PLAN):
+        raise ValidationError('El aviso del plan no admite copias ni contexto personalizado.')
     if es_pago and (reporte_recaudo is None or reporte_recaudo.solicitud_id != solicitud.pk):
         raise ValidationError('El aviso de pago requiere un reporte de la misma solicitud.')
     if reporte_recaudo is not None and not es_pago:
@@ -200,10 +217,15 @@ def crear_intencion_correo(
         'decision': decision,
         'correo_origen': correo_origen,
         'reporte_recaudo': reporte_recaudo,
+        'plan_contractual': plan_contractual,
+        'plan_destinatario_usuario': plan_destinatario_usuario,
     }
     if sin_destinatario_pago:
         defaults.update(estado=EstadoOutboxCorreoEducativo.FAILED,
             codigo_ultimo_error='PAYMENT_RECIPIENT_UNVERIFIED')
+    if sin_destinatario_plan:
+        defaults.update(estado=EstadoOutboxCorreoEducativo.FAILED,
+            codigo_ultimo_error='PLAN_RECIPIENT_UNVERIFIED')
     try:
         outbox, creado = OutboxCorreoEducativo.objects.get_or_create(
             clave_idempotencia=clave,
@@ -217,6 +239,7 @@ def crear_intencion_correo(
         or outbox.codigo_mensaje != codigo_mensaje
         or outbox.correo_origen_id != getattr(correo_origen, 'pk', None)
         or outbox.reporte_recaudo_id != getattr(reporte_recaudo, 'pk', None)
+        or outbox.plan_contractual_id != getattr(plan_contractual, 'pk', None)
     ):
         raise ValidationError('La clave idempotente pertenece a otro correo.')
     return outbox, creado
@@ -510,6 +533,8 @@ def reclamar_correo_pendiente():
         # Subquery avoids a nullable join in the FOR UPDATE claim.
         originales_pago = OutboxCorreoEducativo.objects.filter(codigo_mensaje__in=CODIGOS_PAGO).values('pk')
         queryset = queryset.exclude(Q(codigo_mensaje__in=CODIGOS_PAGO) | Q(correo_origen_id__in=originales_pago))
+    if not settings.FINANCIACION_EDUCATIVA_CONTRACTUAL_PLAN_EMAILS_ENABLED:
+        queryset = queryset.exclude(codigo_mensaje=CODIGO_PLAN)
     queryset = (
         queryset.select_for_update(skip_locked=True)
         if connection.features.has_select_for_update_skip_locked
@@ -652,7 +677,10 @@ def _preparar_enlace_personal(*, outbox_id, lease_id):
 
 
 def _construir_mensaje(outbox, connection_mail):
-    if outbox.codigo_mensaje in CODIGOS_PAGO:
+    if outbox.codigo_mensaje == CODIGO_PLAN:
+        from financiacion_educativa.services.correo_plan_contractual import construir_correo_plan
+        mensaje = construir_correo_plan(outbox=outbox, connection=connection_mail)
+    elif outbox.codigo_mensaje in CODIGOS_PAGO:
         from financiacion_educativa.services.correos_pagos import construir_correo_pago
         mensaje = construir_correo_pago(outbox=outbox, connection=connection_mail)
     elif outbox.codigo_mensaje in CODIGOS_COPIA:
@@ -716,6 +744,9 @@ def _construir_mensaje(outbox, connection_mail):
 
 
 def _entregar(outbox, lease_id):
+    if outbox.codigo_mensaje == CODIGO_PLAN:
+        from financiacion_educativa.services.notificaciones_plan_contractual import entregar_aviso_plan
+        return entregar_aviso_plan(outbox, lease_id, lambda: _enviar_mensaje_smtp(outbox))
     if outbox.codigo_mensaje in CODIGOS_PAGO:
         from financiacion_educativa.services.notificaciones_pagos import entregar_aviso_pago
         return entregar_aviso_pago(outbox, lease_id, lambda reporte: _enviar_mensaje_smtp(outbox, reporte=reporte))
@@ -769,7 +800,7 @@ def _enviar_mensaje_smtp(outbox, reporte=None):
 
 def _clasificar_error(error):
     codigo = getattr(error, 'codigo', '')
-    if codigo == 'PAYMENT_NOTICE_SUPERSEDED':
+    if codigo in {'PAYMENT_NOTICE_SUPERSEDED', 'PLAN_NOTICE_SUPERSEDED'}:
         return codigo, EstadoOutboxCorreoEducativo.SUPERSEDED
     if codigo:
         if codigo in CODIGOS_TEMPORALES:
