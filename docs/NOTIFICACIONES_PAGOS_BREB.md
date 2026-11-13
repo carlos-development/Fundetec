@@ -237,3 +237,11 @@ Revision final de muestras: se normalizaron solo espacios de fin de linea en
 los HTML de ejemplo; su prueba y render se repitieron 1/1 OK en 4.065 segundos
 en otro PostgreSQL temporal aislado, tambien eliminado. Sin cambios funcionales
 despues de la ejecucion de 201 pruebas.
+
+## Estado operativo comunicado el 2026-11-13
+
+Carlos confirma avisos BRE-B activos en produccion. El primer envio real y su
+recepcion siguen pendientes de verificar. Esta confirmacion actualiza el estado
+operativo, no los flags ni la evidencia historica de pruebas de este documento.
+El nuevo diagnostico solo observa conteos; SENT no acredita entrega en buzon.
+Ver `RESPALDO_RESTAURACION_ALERTAS_EDUCATIVAS.md`.
