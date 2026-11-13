@@ -5,9 +5,8 @@ from datetime import date
 from decimal import Decimal
 from uuid import UUID
 
-from django.conf import settings
 from django.core import signing
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.db.models import Case, DecimalField, F, JSONField, OuterRef, Subquery, Sum, Value, When
 from django.db.models.functions import Coalesce
@@ -15,11 +14,12 @@ from django.utils import timezone
 
 from financiacion_educativa.dashboards.operaciones.cartera import obligaciones_autorizadas
 from financiacion_educativa.models import SolicitudFinanciacionEducativa
-from financiacion_educativa.models_libro import LineaLibroEducativo, MovimientoLibroEducativo, PoliticaLibroEducativo
+from financiacion_educativa.models_libro import LineaLibroEducativo, MovimientoLibroEducativo
 from financiacion_educativa.models_recaudos import AplicacionCuotaEducativa, ArchivoRecaudoEducativo, ConciliacionRecaudoEducativo
 from .aplicacion_cuotas import exigir_operador
 from .motor_financiero import calcular_interes_causado_diario_30, generar_plan_reduccion_plazo, sumar_meses
-from .recaudos import exigir_permiso, habilitados, leer_soporte_seguro
+from .recaudos import PERMISO_CONSULTAR, exigir_permiso, habilitados, leer_soporte_seguro
+from . import gobernanza_libro as gobierno
 
 
 CERO = Decimal('0.00')
@@ -150,9 +150,8 @@ def _validar_ingreso(ingreso):
 def _politica(ingreso, politica_id):
     if politica_id is None:
         return None, dict(REGLAS_SINTETICAS), 'SIMULACION_NO_APROBADA'
-    politica = PoliticaLibroEducativo.objects.get(pk=politica_id)
-    if politica.institucion_id != ingreso.reporte.solicitud.institucion_id or politica.vigente_desde > ingreso.fecha_efectiva:
-        raise ValidationError('La politica no aplica a esta institucion y fecha bancaria.')
+    politica = gobierno.resolver_politica(ingreso.reporte.solicitud.institucion_id,
+        ingreso.fecha_efectiva, politica_id)
     validar_reglas(politica.reglas)
     return politica, politica.reglas, politica.version
 
@@ -163,7 +162,7 @@ def calcular_distribucion(*, foto, estado, recibido, fecha, modo, reglas):
     if modo not in dict(MODOS):
         raise ValidationError('Tipo de aplicacion no permitido.')
     if fecha < date.fromisoformat(estado['ultima_fecha']):
-        raise ValidationError('Fecha retroactiva anterior al ultimo corte contabilizado; requiere revision.')
+        raise ValidationError('Fecha retroactiva anterior al ultimo corte contabilizado; requiere revision.', code='RETROACTIVE_REVIEW_REQUIRED')
     if foto.politica_causacion != 'DAILY_30' or foto.es_legado:
         raise ValidationError('La version contractual no admite esta causacion.')
     plan = json.loads(json.dumps(estado['plan']))
@@ -209,7 +208,7 @@ def calcular_distribucion(*, foto, estado, recibido, fecha, modo, reglas):
             raise ValidationError('No quedan componentes pendientes en el libro.')
         objetivo = _dinero(plan[0]['capital']) + _dinero(plan[0]['interes'])
         if modo == 'FULL' and restante != objetivo:
-            raise ValidationError('La cuota completa requiere coincidencia exacta, sin tolerancia de centavos.')
+            raise ValidationError('La cuota completa requiere coincidencia exacta, sin tolerancia de centavos.', code='INSTALLMENT_AMOUNT_MISMATCH')
         conceptos = ('interes', 'capital') if reglas['imputacion'] == 'INTEREST_FIRST' else ('capital', 'interes')
         for fila in plan[:1] if modo == 'FULL' else plan:
             for campo in conceptos:
@@ -225,9 +224,9 @@ def calcular_distribucion(*, foto, estado, recibido, fecha, modo, reglas):
         excluidos = CERO
     else:
         if any(causados[id(f)] < 0 for f in plan):
-            raise ValidationError('Hay intereses anticipados en el periodo. Su tratamiento exige politica adicional; no se pierden ni se cobran de nuevo al reproyectar.')
+            raise ValidationError('Hay intereses anticipados en el periodo. Su tratamiento exige politica adicional; no se pierden ni se cobran de nuevo al reproyectar.', code='PREPAID_INTEREST_REVIEW_REQUIRED')
         if modo == 'PRINCIPAL' and any(date.fromisoformat(f['fecha']) < fecha for f in plan):
-            raise ValidationError('Abono con cuotas vencidas requiere politica adicional; no se refinancia el atraso.')
+            raise ValidationError('Abono con cuotas vencidas requiere politica adicional; no se refinancia el atraso.', code='OVERDUE_PRINCIPAL_REVIEW_REQUIRED')
         # Each earned saved period is counted once; redundant extraction is irrelevant here.
         for fila in plan:
             causado = max(CERO, causados[id(fila)])
@@ -236,7 +235,7 @@ def calcular_distribucion(*, foto, estado, recibido, fecha, modo, reglas):
                 raise ValidationError('El ingreso no cubre los intereses causados a la fecha.')
         saldo = _dinero(estado['capital'])
         if modo == 'PAYOFF' and restante < saldo:
-            raise ValidationError('El ingreso no cubre la liquidacion; no hay tolerancia de un centavo.')
+            raise ValidationError('El ingreso no cubre la liquidacion; no hay tolerancia de un centavo.', code='PAYOFF_SHORTFALL')
         if modo == 'PRINCIPAL' and restante <= 0:
             raise ValidationError('El ingreso no produce un abono a capital.')
         asignar(None, 'CAPITAL', saldo)
@@ -254,7 +253,7 @@ def calcular_distribucion(*, foto, estado, recibido, fecha, modo, reglas):
             excluidos = max(CERO, excluidos - proyeccion.intereses_totales)
         # The existing motor rounds COP principal to pesos. Never silently discard bank cents.
         if sum((c.capital for c in proyeccion.cuotas), CERO) != saldo:
-            raise ValidationError('El capital residual contiene centavos; falta aprobar su tratamiento en la reproyeccion.')
+            raise ValidationError('El capital residual contiene centavos; falta aprobar su tratamiento en la reproyeccion.', code='RESIDUAL_CENTS_REVIEW_REQUIRED')
         nuevo_plan = [{'cuota': None, 'numero': c.numero, 'fecha': c.fecha_vencimiento.isoformat(),
                        'capital': str(c.capital), 'interes': str(c.interes), 'interes_original': str(c.interes),
                        'corte': (fecha if i == 0 else proyeccion.cuotas[i - 1].fecha_vencimiento).isoformat()}
@@ -276,6 +275,7 @@ def preparar_preview(*, ingreso_id, actor, modo, politica_id=None):
     habilitados()
     exigir_operador(actor)
     ingreso = ConciliacionRecaudoEducativo.objects.get(pk=ingreso_id)
+    alcance = gobierno.exigir_alcance(actor, ingreso.reporte.solicitud.institucion_id, 'POST')
     _validar_ingreso(ingreso)
     if hasattr(ingreso, 'aplicacion'):
         raise ValidationError('Este ingreso ya tiene una aplicacion integra historica; se consulta sin copiarla al libro.')
@@ -286,7 +286,10 @@ def preparar_preview(*, ingreso_id, actor, modo, politica_id=None):
         raise ValidationError('El ingreso no tiene dinero sin destino.')
     resultado = calcular_distribucion(foto=ingreso.reporte.fotografia, estado=estado,
         recibido=disponible, fecha=ingreso.fecha_efectiva, modo=modo, reglas=reglas)
+    from financiacion_educativa.models_gobernanza_libro import ControlPilotoLibro
+    control = ControlPilotoLibro.objects.get(pk=1)
     snapshot = {'motor': 'EDU_LEDGER_V1', 'ingreso': str(ingreso.pk), 'actor': str(actor.pk), 'modo': modo,
+                'control_revision': control.revision, 'alcance': alcance.pk,
                 'politica': politica.pk if politica else None, 'reglas': reglas, 'version': version,
                 'estado': estado, 'resultado': resultado, 'fecha': ingreso.fecha_efectiva.isoformat(),
                 'recibido': str(ingreso.monto_recibido), 'evidencia': ingreso.evidencia_movimiento.sha256}
@@ -300,22 +303,25 @@ def _cargar_token(token):
         raise ValidationError('Vista previa vencida o alterada. Recarga y revisa de nuevo.') from None
 
 
-def _exigir_habilitacion(politica_id):
-    if getattr(settings, 'FINANCIACION_EDUCATIVA_LIBRO_ENABLED', False) is not True or not politica_id:
-        raise ValidationError('Contabilizacion 2B bloqueada: requiere politica aprobada y habilitacion explicita.')
-
-
 @transaction.atomic
 def contabilizar(*, ingreso_id, actor, token, clave, motivo, confirmar=False):
     habilitados()
     exigir_operador(actor)
     snapshot = _cargar_token(token)
-    _exigir_habilitacion(snapshot.get('politica'))
+    if not isinstance(snapshot, dict) or snapshot.get('motor') != 'EDU_LEDGER_V1' or not all(
+        clave in snapshot for clave in ('ingreso', 'actor', 'modo', 'estado', 'resultado')):
+        raise ValidationError('La vista previa no corresponde a una aplicacion. Recarga el ingreso.')
+    if not snapshot.get('politica'):
+        raise ValidationError('Contabilizacion 2B bloqueada: la simulacion no tiene politica aprobada.')
     if confirmar is not True or not motivo.strip() or len(motivo) > 1000:
         raise ValidationError('Confirmacion y motivo operativo son obligatorios.')
     if snapshot['ingreso'] != str(ingreso_id) or snapshot['actor'] != str(actor.pk):
         raise ValidationError('Vista previa de otro ingreso u operador.')
     ingreso_base = ConciliacionRecaudoEducativo.objects.get(pk=ingreso_id)
+    institucion_id = ingreso_base.reporte.solicitud.institucion_id
+    control = gobierno.bloquear_piloto(institucion_id)
+    gobierno.exigir_contabilizacion(actor=actor, institucion_id=institucion_id,
+        fecha=ingreso_base.fecha_efectiva, politica_id=snapshot['politica'], control=control)
     # Same global order as the existing complete application; no nullable joined locks.
     SolicitudFinanciacionEducativa.objects.select_for_update().get(pk=ingreso_base.reporte.solicitud_id)
     ingreso = ConciliacionRecaudoEducativo.objects.select_for_update().get(pk=ingreso_id)
@@ -341,6 +347,8 @@ def contabilizar(*, ingreso_id, actor, token, clave, motivo, confirmar=False):
         raise ValidationError('No existe una aplicacion efectiva; el dinero sigue sin destino.')
     despues = resultado['despues']
     despues['secuencia'] = actual['estado']['secuencia'] + 1
+    despues['gobernanza'] = {'politica_id': snapshot['politica'],
+        'revision_piloto': snapshot['control_revision'], 'alcance_id': snapshot['alcance'], 'operacion': 'POST'}
     movimiento = MovimientoLibroEducativo.objects.create(
         ingreso=ingreso, fotografia=ingreso.reporte.fotografia, politica_id=snapshot['politica'],
         secuencia=despues['secuencia'], clave=clave, tipo=snapshot['modo'],
@@ -353,27 +361,59 @@ def contabilizar(*, ingreso_id, actor, token, clave, motivo, confirmar=False):
     return movimiento
 
 
-@transaction.atomic
-def compensar(*, movimiento_id, actor, clave, motivo, secuencia_esperada):
+def preparar_compensacion(*, movimiento_id, actor):
     habilitados()
-    exigir_operador(actor)
-    exigir_permiso(actor, 'financiacion_educativa.compensar_libro_educativo')
     original = MovimientoLibroEducativo.objects.get(pk=movimiento_id)
-    _exigir_habilitacion(original.politica_id)
+    exigir_permiso(actor, PERMISO_CONSULTAR)
+    politica, revision, alcance = gobierno.exigir_contabilizacion(actor=actor,
+        institucion_id=original.fotografia.solicitud.institucion_id,
+        fecha=original.fecha_bancaria, accion='COMPENSATE')
+    if actor.pk == original.actor_id:
+        raise PermissionDenied('La compensacion requiere un autorizante distinto del operador original.')
+    ultimo = MovimientoLibroEducativo.objects.filter(fotografia=original.fotografia).order_by('-secuencia').first()
+    if original.tipo == 'COMPENSATION' or ultimo.pk != original.pk or hasattr(original, 'compensacion'):
+        raise ValidationError('Solo se admite compensar integramente el ultimo movimiento sin sucesores.')
+    estado_libro(original.fotografia)
+    snapshot = {'movimiento': str(original.pk), 'actor': str(actor.pk), 'secuencia': ultimo.secuencia,
+        'politica': politica.pk, 'control_revision': revision, 'alcance': alcance,
+        'original_hash': original.payload_sha256}
+    return snapshot, signing.dumps(snapshot, salt=SALT, compress=True)
+
+
+@transaction.atomic
+def compensar(*, movimiento_id, actor, clave, motivo, secuencia_esperada, token=None):
+    habilitados()
+    exigir_permiso(actor, PERMISO_CONSULTAR)
+    exigir_permiso(actor, 'financiacion_educativa.compensar_libro_educativo')
+    snapshot = _cargar_token(token)
+    if snapshot.get('movimiento') != str(movimiento_id) or snapshot.get('actor') != str(actor.pk):
+        raise ValidationError('Vista previa de compensacion ajena o invalida.')
+    original = MovimientoLibroEducativo.objects.get(pk=movimiento_id)
+    institucion_id = original.fotografia.solicitud.institucion_id
+    control = gobierno.bloquear_piloto(institucion_id)
+    politica, _, _ = gobierno.exigir_contabilizacion(actor=actor, institucion_id=institucion_id,
+        fecha=original.fecha_bancaria, politica_id=snapshot['politica'], accion='COMPENSATE', control=control)
+    if actor.pk == original.actor_id:
+        raise PermissionDenied('La compensacion requiere autorizacion independiente.')
     SolicitudFinanciacionEducativa.objects.select_for_update().get(pk=original.fotografia.solicitud_id)
     ConciliacionRecaudoEducativo.objects.select_for_update().get(pk=original.ingreso_id)
-    payload = _hash({'original': str(original.pk), 'actor': str(actor.pk), 'motivo': motivo, 'secuencia': secuencia_esperada})
+    payload = _hash({'snapshot': snapshot, 'motivo': motivo, 'secuencia': secuencia_esperada})
     existente = MovimientoLibroEducativo.objects.filter(ingreso=original.ingreso, clave=clave).first()
     if existente:
         if existente.payload_sha256 != payload:
             raise ValidationError('Reintento de compensacion diferente.')
         return existente
+    actual, _ = preparar_compensacion(movimiento_id=movimiento_id, actor=actor)
+    if actual != snapshot:
+        raise ValidationError('La politica, el piloto o el movimiento cambio. Recarga la compensacion.')
     ultimo = MovimientoLibroEducativo.objects.filter(fotografia=original.fotografia).order_by('-secuencia').first()
     if not motivo.strip() or len(motivo) > 1000 or original.tipo == 'COMPENSATION' or ultimo.pk != original.pk or ultimo.secuencia != secuencia_esperada or hasattr(original, 'compensacion'):
         raise ValidationError('Solo se admite compensar integramente el ultimo movimiento sin sucesores; requiere revision y motivo.')
     estado = {**original.estado_antes, 'secuencia': ultimo.secuencia + 1}
+    estado['gobernanza'] = {'politica_id': politica.pk, 'revision_piloto': snapshot['control_revision'],
+        'alcance_id': snapshot['alcance'], 'operacion': 'COMPENSATE'}
     movimiento = MovimientoLibroEducativo.objects.create(
-        ingreso=original.ingreso, fotografia=original.fotografia, politica=original.politica,
+        ingreso=original.ingreso, fotografia=original.fotografia, politica=politica,
         secuencia=estado['secuencia'], clave=clave, tipo='COMPENSATION', compensa=original,
         importe=original.importe, capital=original.capital, intereses=original.intereses,
         sin_destino=original.sin_destino, fecha_bancaria=original.fecha_bancaria, actor=actor,

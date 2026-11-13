@@ -1,0 +1,7 @@
+{% extends "financiacion_educativa/dashboards/operaciones/_base.html" %}
+{% load static %}
+{% block extra_head %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/financiacion_educativa_recaudos.css' %}">{% endblock %}
+{% block operations_content %}<div class="edu-recaudos-workspace edu-ops-workspace"><h1>Control del piloto 2B</h1>
+<p class="edu-recaudos-notice">{% if control.activo %}Activo{% else %}Detenido{% endif %} · Revision {{ control.revision }}. Solo una institucion puede tener piloto activo. El flag global, la politica vigente y el alcance del operador se comprueban al confirmar.</p>
+<form method="post" class="edu-recaudos-form">{% csrf_token %}{{ form.as_p }}<button type="submit"><i class="bi bi-toggle-on" aria-hidden="true"></i> Confirmar control</button></form>
+<p>Detener no borra asientos ni oculta el libro. La operacion espera a que termine una escritura que ya tenga el bloqueo.</p><a href="{% url 'financiacion_educativa_web:operaciones:politicas-libro' %}">Volver a politicas</a></div>{% endblock %}

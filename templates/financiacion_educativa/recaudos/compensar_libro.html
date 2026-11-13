@@ -1,0 +1,9 @@
+{% extends "financiacion_educativa/dashboards/operaciones/_base.html" %}
+{% load static recaudo_format %}
+{% block extra_head %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/financiacion_educativa_recaudos.css' %}">{% endblock %}
+{% block operations_content %}<div class="edu-recaudos-workspace edu-ops-workspace">
+<h1>Revisar compensacion completa</h1><p>Secuencia {{ movimiento.secuencia }} · Fecha bancaria {{ movimiento.fecha_bancaria|date:"d/m/Y" }}</p>
+<dl class="edu-recaudos-summary"><div><dt>Capital a restituir</dt><dd>{{ movimiento.capital|cop_recaudo }}</dd></div><div><dt>Intereses a restituir</dt><dd>{{ movimiento.intereses|cop_recaudo }}</dd></div></dl>
+<p class="edu-recaudos-notice">El original se conserva. Esta compensacion no devuelve dinero al banco, no modifica el contrato y requiere un autorizante distinto del operador original.</p>
+{% if error %}<div role="alert">{{ error }}</div>{% else %}<form method="post" class="edu-recaudos-form">{% csrf_token %}{{ form.as_p }}<button type="submit"><i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i> Confirmar compensacion</button></form>{% endif %}
+<p><a href="{% url 'financiacion_educativa_web:operaciones:libro-ingreso' movimiento.ingreso_id %}">Volver al libro</a></p></div>{% endblock %}

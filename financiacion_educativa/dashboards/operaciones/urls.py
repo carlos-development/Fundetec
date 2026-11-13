@@ -4,12 +4,18 @@ from . import views
 from .tablero_recaudos import tablero_view
 from . import seguimiento
 from . import libro
+from . import politicas_libro
 from financiacion_educativa.web import recaudos
 
 
 app_name = 'operaciones'
 
 urlpatterns = [
+    path('politicas-libro/', politicas_libro.listado_view, name='politicas-libro'),
+    path('politicas-libro/control/', politicas_libro.control_view, name='control-piloto-libro'),
+    path('politicas-libro/alcances/', politicas_libro.alcances_view, name='alcances-libro'),
+    path('politicas-libro/<int:propuesta_id>/', politicas_libro.detalle_view, name='politica-detalle'),
+    path('recaudos/libro/<uuid:movimiento_id>/compensar/', libro.compensar_view, name='libro-compensar'),
     path('recaudos/ingresos/<uuid:ingreso_id>/libro/', libro.consulta_view, name='libro-ingreso'),
     path('recaudos/ingresos/<uuid:ingreso_id>/previsualizar/', libro.preview_view, name='libro-preview'),
     path('seguimiento-cartera/', seguimiento.seguimiento_view, name='seguimiento-cartera'),

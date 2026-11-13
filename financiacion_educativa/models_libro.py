@@ -15,6 +15,10 @@ class PoliticaLibroEducativo(EvidenciaInmutable):
     referencia_aprobacion = models.CharField(max_length=200)
     aprobada_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
     vigente_desde = models.DateField()
+    vigente_hasta = models.DateField(null=True, blank=True)
+    es_sintetica = models.BooleanField(null=True, blank=True, default=None)
+    propuesta = models.OneToOneField('financiacion_educativa.PropuestaPoliticaLibro', on_delete=models.PROTECT,
+        null=True, blank=True, related_name='politica_aprobada')
     creada_en = models.DateTimeField(auto_now_add=True)
 
     class Meta(EvidenciaInmutable.Meta):
@@ -23,7 +27,7 @@ class PoliticaLibroEducativo(EvidenciaInmutable):
     def clean(self):
         from .services.libro_pagos import validar_reglas
         validar_reglas(self.reglas)
-        if not self.referencia_aprobacion.strip():
+        if not (self.referencia_aprobacion or '').strip():
             raise ValidationError('Se requiere evidencia de aprobacion de la politica.')
 
     def __str__(self):

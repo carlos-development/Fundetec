@@ -16,6 +16,8 @@ from financiacion_educativa.models_libro import PoliticaLibroEducativo, Movimien
 from financiacion_educativa.models_recaudos import AplicacionCuotaEducativa, ConciliacionRecaudoEducativo
 from financiacion_educativa.services import libro_pagos as libro
 from financiacion_educativa.services import recaudos, aplicacion_cuotas
+from financiacion_educativa.services import gobernanza_libro as gobierno
+from financiacion_educativa.tests.piloto_libro_helpers import politica_sintetica, preparar_control_prueba, conceder_alcances
 from financiacion_educativa.services.estado_publico import obtener_resultado_publico
 from financiacion_educativa.dashboards.operaciones.reporte_recaudos import construir_tablero, filtrar_segmento
 from financiacion_educativa.tests.test_aplicacion_cuotas import DatosAplicacion
@@ -28,10 +30,17 @@ class DatosLibro(DatosAplicacion):
         with patch('django.utils.timezone.localdate', return_value=date(2026, 7, 1)):
             super().setUp()
         self.fecha = date(2026, 7, 16)
-        self.politica = PoliticaLibroEducativo.objects.create(
-            institucion=self.institucion, version='SYNTHETIC_TEST_ONLY_V1', reglas=dict(libro.REGLAS_SINTETICAS),
-            referencia_aprobacion='SYNTHETIC-NOT-A-BUSINESS-APPROVAL', aprobada_por=self.actor,
-            vigente_desde=date(2026, 7, 1))
+        preparar_control_prueba()
+        self.aprobador = get_user_model().objects.create_superuser('aprobador-libro', 'aprobador@example.test', 'synthetic-only')
+        self.politica = politica_sintetica(self.institucion, self.actor, self.aprobador,
+            'SYNTHETIC_TEST_ONLY_V1', date(2026, 7, 1))
+        gobierno.controlar_piloto(institucion_id=self.institucion.pk, activo=True, actor=self.aprobador, motivo='Piloto sintetico')
+
+    def datos_compensacion(self, movimiento, **cambios):
+        actor = cambios.pop('actor', self.aprobador)
+        _, token = libro.preparar_compensacion(movimiento_id=movimiento.pk, actor=actor)
+        return dict(movimiento_id=movimiento.pk, actor=actor, token=token, clave=uuid4(),
+            motivo='Compensacion sintetica independiente', secuencia_esperada=movimiento.secuencia, **cambios)
 
     def nuevo_ingreso(self, monto='100000.00', fecha=None):
         fecha = fecha or self.fecha
@@ -183,7 +192,7 @@ class LibroPagosTests(DatosLibro, TestCase):
         ingreso = self.nuevo_ingreso()
         m = self.registrar(ingreso)
         antes = MovimientoLibroEducativo.objects.values().get(pk=m.pk)
-        datos = dict(movimiento_id=m.pk, actor=self.actor, clave=uuid4(), motivo='Error sintetico autorizado', secuencia_esperada=m.secuencia)
+        datos = self.datos_compensacion(m)
         compensacion = libro.compensar(**datos)
         self.assertEqual(libro.compensar(**datos).pk, compensacion.pk)
         self.assertEqual(MovimientoLibroEducativo.objects.values().get(pk=m.pk), antes)
@@ -197,7 +206,7 @@ class LibroPagosTests(DatosLibro, TestCase):
         m = self.registrar(self.nuevo_ingreso())
         self.registrar(self.nuevo_ingreso())
         with self.assertRaisesMessage(ValidationError, 'ultimo'):
-            libro.compensar(movimiento_id=m.pk, actor=self.actor, clave=uuid4(), motivo='Motivo sintetico', secuencia_esperada=2)
+            libro.compensar(**self.datos_compensacion(m))
         with self.assertRaises(PermissionDenied):
             libro.compensar(movimiento_id=m.pk, actor=self.pagador, clave=uuid4(), motivo='Motivo', secuencia_esperada=2)
 
@@ -243,9 +252,9 @@ class LibroPagosTests(DatosLibro, TestCase):
         primero = self.registrar(self.nuevo_ingreso())
         with patch('django.utils.timezone.localdate', return_value=date(2026, 7, 1)):
             solicitud, foto, _, _ = self.contrato('LIBRO-SEGUNDA-INSTITUCION', institucion=self.otra)
-        politica = PoliticaLibroEducativo.objects.create(institucion=self.otra, version='SYNTHETIC_INST_2',
-            reglas=dict(libro.REGLAS_SINTETICAS), referencia_aprobacion='SYNTHETIC_ONLY',
-            aprobada_por=self.actor, vigente_desde=date(2026, 7, 1))
+        politica = politica_sintetica(self.otra, self.actor, self.aprobador, 'SYNTHETIC_INST_2', date(2026, 7, 1))
+        gobierno.controlar_piloto(institucion_id=self.institucion.pk, activo=False, actor=self.aprobador, motivo='Cambio de piloto sintetico')
+        gobierno.controlar_piloto(institucion_id=self.otra.pk, activo=True, actor=self.aprobador, motivo='Segundo piloto sintetico')
         ingreso, _ = recaudos.registrar_pago_recibido(solicitud_id=solicitud.pk, actor=self.actor,
             cuenta_id=self.receptor.cuenta_id, monto='50000', fecha=self.fecha,
             referencia=uuid4().hex, evidencia_id=self.evidencia().pk, clave=uuid4())
@@ -405,6 +414,7 @@ class ConcurrenciaLibroTests(DatosLibro, TransactionTestCase):
     def test_dos_operadores_distintos_sobre_mismo_ingreso(self):
         ingreso = self.nuevo_ingreso()
         otro = get_user_model().objects.create_superuser('otro-libro', 'otro@example.test', 'synthetic-only')
+        conceder_alcances(self.institucion, otro, self.actor, ['POST'])
         _, a = self.preview(ingreso)
         _, b = libro.preparar_preview(ingreso_id=ingreso.pk, actor=otro, modo='PARTIAL', politica_id=self.politica.pk)
         resultados, errores = self.paralelos([
@@ -445,7 +455,7 @@ class ConcurrenciaLibroTests(DatosLibro, TransactionTestCase):
     @skipUnlessDBFeature('has_select_for_update')
     def test_dos_compensaciones_no_duplican(self):
         m = self.registrar(self.nuevo_ingreso())
-        datos = dict(movimiento_id=m.pk, actor=self.actor, clave=uuid4(), motivo='Correccion sintetica', secuencia_esperada=1)
+        datos = self.datos_compensacion(m)
         resultados, errores = self.paralelos([lambda: libro.compensar(**datos)] * 2)
         self.assertEqual(errores, [])
         self.assertEqual(len(resultados), 2)
