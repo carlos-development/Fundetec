@@ -1,0 +1,22 @@
+# Sustituir marcadores tras contrastar unidades y rutas del servidor. No instalar directamente.
+[Unit]
+Description=Diagnostico educativo de solo lectura (sin recuperacion automatica)
+After=network.target
+
+[Service]
+Type=oneshot
+User=@@SERVICE_USER@@
+Group=@@SERVICE_GROUP@@
+WorkingDirectory=@@APP_DIR@@
+EnvironmentFile=@@ENV_FILE@@
+Environment=PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
+ExecStart=@@VENV_PYTHON@@ manage.py diagnosticar_operacion_educativa @@SERVICE_ARGUMENTS@@
+TimeoutStartSec=120
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=fundetec-educational-monitor
+# Exit 2=alertas; 3=diagnostico incompleto. Sin Restart ni recuperacion automatica.

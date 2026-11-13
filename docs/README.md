@@ -14,6 +14,8 @@ material heredado sin presentarlo como parte del producto educativo actual.
 
 - `ROADMAP_FINANCIACION_EDUCATIVA.md`: fases, criterios de cierre y dashboard
   financiero consultivo de obligaciones autorizadas.
+- `RESPALDO_RESTAURACION_ALERTAS_EDUCATIVAS.md`: ensayo sintetico aislado,
+  limites del respaldo y diagnostico operativo sin recuperacion automatica.
 - `interno/arquitectura/`: fuente HTML y documento tecnico derivado.
 - `interno/operaciones/`: procedimientos para reanudar y validar el proyecto.
 - `interno/operaciones/MANTENIMIENTO_STAGING.md`: configuracion, correo y
