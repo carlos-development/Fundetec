@@ -63,9 +63,11 @@ MIME_PREVISUALIZABLES_OPERATIVOS = {
 
 
 def _contexto(request, *, seccion='resumen', **adicional):
+    from .seguimiento import regreso_seguimiento
     return {
         'seccion_operativa': seccion,
         'capacidades_operativas': capacidades_operativas(request.user),
+        'seguimiento_regreso': regreso_seguimiento(request),
         **adicional,
     }
 

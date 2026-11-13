@@ -141,7 +141,9 @@ def comprobante_view(request, solicitud_id, reporte_id):
 
 
 def _contexto(request, **extra):
-    return {'seccion_operativa': 'recaudos', 'capacidades_operativas': capacidades_operativas(request.user), **extra}
+    from financiacion_educativa.dashboards.operaciones.seguimiento import regreso_seguimiento
+    return {'seccion_operativa': 'recaudos', 'capacidades_operativas': capacidades_operativas(request.user),
+        'seguimiento_regreso': regreso_seguimiento(request), **extra}
 
 
 def _datos_conservados(request, clase, **kwargs):

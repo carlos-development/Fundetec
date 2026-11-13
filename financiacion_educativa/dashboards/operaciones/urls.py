@@ -2,12 +2,15 @@ from django.urls import path
 
 from . import views
 from .tablero_recaudos import tablero_view
+from . import seguimiento
 from financiacion_educativa.web import recaudos
 
 
 app_name = 'operaciones'
 
 urlpatterns = [
+    path('seguimiento-cartera/', seguimiento.seguimiento_view, name='seguimiento-cartera'),
+    path('seguimiento-cartera/<uuid:application_id>/', seguimiento.detalle_view, name='seguimiento-detalle'),
     path('recaudos/tablero/', tablero_view, name='tablero-recaudos'),
     path('recaudos/', recaudos.bandeja_view, name='recaudos'),
     path('recaudos/evidencias/<uuid:archivo_id>/', recaudos.evidencia_propia_view, name='evidencia-propia'),
