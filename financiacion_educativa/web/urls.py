@@ -2,11 +2,14 @@ from django.urls import include, path
 
 from . import views
 from . import recaudos
+from .plan_contractual import descargar_plan_view
 
 
 app_name = 'financiacion_educativa_web'
 
 urlpatterns = [
+    path('solicitudes/<uuid:solicitud_id>/finanzas/plan/<uuid:fotografia_id>/pdf/',
+        descargar_plan_view, name='plan-contractual-pdf'),
     path('solicitudes/<uuid:solicitud_id>/pagos/', recaudos.pagos_view, name='pagos'),
     path('solicitudes/<uuid:solicitud_id>/pagos/qr/<uuid:receptor_id>/', recaudos.qr_view, name='pago-qr'),
     path('solicitudes/<uuid:solicitud_id>/pagos/<uuid:reporte_id>/', recaudos.reporte_view, name='reporte-pago'),

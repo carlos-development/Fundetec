@@ -11,6 +11,10 @@
     {% if primera_cuota_pendiente and recaudos_disponibles and not hay_confirmadas_por_aplicar %}<a class="edu-button" href="{% url 'financiacion_educativa_web:pagos' solicitud.pk %}">Pagar y reportar transferencia</a>{% endif %}
     {% if not primera_cuota_pendiente %}<div class="edu-student-information" role="status">No hay cuotas pendientes de aplicaci&oacute;n en este calendario. Esto no constituye paz y salvo ni una liquidaci&oacute;n o cierre de deuda.</div>{% endif %}
     <p class="edu-student-caption">Importes del calendario firmado, no un saldo de liquidaci&oacute;n a la fecha. No se calculan aqu&iacute; mora, excedentes ni reversiones.</p>
+    <div class="edu-student-section">
+        <a class="edu-button-secondary" href="{% url 'financiacion_educativa_web:plan-contractual-pdf' solicitud.pk fotografia.pk %}"><i class="bi bi-file-earmark-pdf" aria-hidden="true"></i> Descargar plan contractual en PDF</a>
+        <p class="edu-student-caption">Versi&oacute;n contractual {{ fotografia.numero_version }}. Incluye el calendario original completo; no es saldo vigente ni liquidaci&oacute;n.</p>
+    </div>
     <section class="edu-student-section" aria-labelledby="history-title"><h2 id="history-title">Historial de pagos y transferencias</h2>
         {% if historial_portal %}<table class="edu-student-table"><thead><tr><th>Concepto</th><th>Fecha</th><th>Importe</th><th>Estado</th><th>Detalle</th></tr></thead><tbody>
             {% for fila in historial_portal %}<tr>

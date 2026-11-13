@@ -1,0 +1,54 @@
+{% load recaudo_format financiacion_format %}
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><title>Plan contractual de pagos</title>
+<style>
+@page { size: A4; margin: 18mm 16mm 20mm; @bottom-right { content: "P\00e1gina " counter(page) " de " counter(pages); font: 9pt sans-serif; color: #526477; } }
+body { font-family: sans-serif; font-size: 10pt; line-height: 1.45; color: #0b2e59; }
+.logo { width: 145px; height: auto; }
+h1 { font-size: 21pt; margin: 18px 0 8px; }
+h2 { font-size: 12pt; margin: 18px 0 8px; }
+p { margin: 5px 0; }
+.muted { color: #526477; font-size: 9pt; }
+.notice { padding: 12px; border-left: 3px solid #087ca7; background: #f0f7fb; margin: 12px 0; }
+table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+td, th { padding: 7px 8px; border-bottom: 1px solid #dce5ed; vertical-align: top; overflow-wrap: anywhere; }
+th { background: #edf5fa; text-align: left; font-weight: bold; }
+.conditions td:first-child { width: 58%; }
+.money { text-align: right; white-space: nowrap; }
+.schedule { font-size: 9pt; }
+.schedule th:first-child, .schedule td:first-child { width: 8%; }
+.schedule th:nth-child(2), .schedule td:nth-child(2) { width: 20%; }
+thead { display: table-header-group; }
+tfoot { display: table-row-group; font-weight: bold; }
+tr { break-inside: avoid; }
+h2 { break-after: avoid; }
+.closing { font-size: 9pt; margin-top: 14px; }
+</style></head><body>
+<img class="logo" src="{{ logo_url }}" alt="Aprobado">
+<h1>Plan contractual de pagos</h1>
+<p>Referencia de solicitud: <strong>{{ fotografia.solicitud.referencia_externa }}</strong></p>
+<p class="muted">Versi&oacute;n contractual {{ fotografia.numero_version }} &middot; Regla {{ fotografia.version_regla }} &middot; Moneda {{ fotografia.moneda }}</p>
+<div class="notice"><strong>No es saldo vigente ni liquidaci&oacute;n.</strong><p>Este documento reproduce las condiciones y el calendario contractual guardados. No incorpora pagos, mora, abonos o ajustes posteriores.</p></div>
+<h2>Condiciones contractuales guardadas</h2>
+<table class="conditions"><tbody>
+<tr><td>Monto solicitado</td><td class="money">{{ fotografia.valor_financiado|cop_recaudo }}</td></tr>
+<tr><td>Originaci&oacute;n</td><td class="money">{{ fotografia.valor_comision|cop_recaudo }}</td></tr>
+<tr><td>IVA de originaci&oacute;n</td><td class="money">{{ fotografia.valor_iva_comision|cop_recaudo }}</td></tr>
+<tr><td>Fondo de garant&iacute;as{% if fotografia.proveedor_fondo_garantias %} &middot; {{ fotografia.proveedor_fondo_garantias }}{% endif %}</td><td class="money">{{ fotografia.valor_fondo_garantias|cop_recaudo }}</td></tr>
+<tr><td>Seguro de vida{% if fotografia.proveedor_seguro_vida %} &middot; {{ fotografia.proveedor_seguro_vida }}{% endif %}</td><td class="money">{{ fotografia.valor_seguro_vida|cop_recaudo }}</td></tr>
+<tr><td>Capital total financiado</td><td class="money">{{ fotografia.capital_financiado|cop_recaudo }}</td></tr>
+<tr><td>Intereses del calendario contractual</td><td class="money">{{ fotografia.interes_total_estimado|cop_recaudo }}</td></tr>
+<tr><td>Total del calendario contractual</td><td class="money">{{ fotografia.total_estimado|cop_recaudo }}</td></tr>
+<tr><td>Cuota de referencia contractual</td><td class="money">{{ fotografia.valor_cuota_estimada|cop_recaudo }}</td></tr>
+<tr><td>Plazo y tasa mensual pactados</td><td>{{ fotografia.plazo_meses }} meses &middot; {{ fotografia.tasa_interes_mensual|porcentaje }} %</td></tr>
+<tr><td>M&eacute;todo guardado</td><td>{{ fotografia.get_metodo_calculo_display }}</td></tr>
+<tr><td>Inicio del plan</td><td>{{ fotografia.fecha_inicio_plan|date:"d/m/Y" }}</td></tr>
+<tr><td>Primer y &uacute;ltimo vencimiento</td><td>{{ fotografia.fecha_primer_vencimiento|date:"d/m/Y" }} &ndash; {{ fotografia.fecha_ultimo_vencimiento|date:"d/m/Y" }}</td></tr>
+</tbody></table>
+<h2>Calendario contractual completo</h2>
+<p class="muted">Se muestran las cuotas originales, sin excluir las que tienen pagos aplicados. El importe de cada cuota es el guardado en su versi&oacute;n contractual.</p>
+<table class="schedule"><thead><tr><th>Cuota</th><th>Vencimiento</th><th class="money">Capital</th><th class="money">Intereses</th><th class="money">Cuota pactada</th></tr></thead><tbody>
+{% for cuota in cuotas %}<tr><td>{{ cuota.numero }}</td><td>{{ cuota.fecha_vencimiento|date:"d/m/Y" }}</td><td class="money">{{ cuota.capital|cop_recaudo }}</td><td class="money">{{ cuota.interes|cop_recaudo }}</td><td class="money">{{ cuota.valor_cuota|cop_recaudo }}</td></tr>{% endfor %}
+</tbody><tfoot><tr><td colspan="2">Total contractual</td><td class="money">{{ totales.capital|cop_recaudo }}</td><td class="money">{{ totales.interes|cop_recaudo }}</td><td class="money">{{ totales.valor_cuota|cop_recaudo }}</td></tr></tfoot></table>
+<p class="closing">Copia informativa del plan contractual guardado. No modifica ni sustituye el pagar&eacute; firmado; no certifica pagos, saldo actual, liquidaci&oacute;n, mora ni paz y salvo.</p>
+</body></html>
