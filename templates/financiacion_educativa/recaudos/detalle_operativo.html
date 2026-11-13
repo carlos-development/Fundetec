@@ -2,6 +2,7 @@
 {% load static recaudo_format l10n %}
 {% block extra_head %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/financiacion_educativa_recaudos.css' %}">{% endblock %}
 {% block operations_content %}<div class="edu-recaudos-workspace edu-ops-workspace">
+{% if reporte.conciliacion %}<p><a href="{% url 'financiacion_educativa_web:operaciones:libro-ingreso' reporte.conciliacion.pk %}">Consultar libro y previsualizar aplicaciones</a></p>{% endif %}
 {% if seguimiento_regreso %}<a href="{{ seguimiento_regreso }}">Volver al seguimiento filtrado</a>{% endif %}
 <header class="edu-dashboard-heading"><h1>Revisar reporte</h1><p>{{ reporte.solicitud.referencia_externa }} &middot; {{ reporte.solicitud.institucion.nombre_comercial }}</p></header>
 {% if reporte.conciliacion.aplicacion %}{% include "financiacion_educativa/recaudos/_recorrido_operativo.html" with solicitud_id=reporte.solicitud_id paso='resultado' %}{% elif reporte.conciliacion %}{% include "financiacion_educativa/recaudos/_recorrido_operativo.html" with solicitud_id=reporte.solicitud_id paso='aplicar' %}{% else %}{% include "financiacion_educativa/recaudos/_recorrido_operativo.html" with solicitud_id=reporte.solicitud_id paso='evidencia' %}{% endif %}

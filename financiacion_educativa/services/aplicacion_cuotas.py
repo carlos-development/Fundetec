@@ -56,6 +56,9 @@ def previsualizar_cuota(reporte):
     ingreso = getattr(reporte, 'conciliacion', None)
     if ingreso is None or hasattr(reporte, 'rechazo'):
         raise ValidationError('Se requiere un ingreso conciliado.')
+    from financiacion_educativa.models_libro import MovimientoLibroEducativo
+    if MovimientoLibroEducativo.objects.filter(fotografia_id=reporte.fotografia_id).exists():
+        raise ValidationError('La obligacion tiene libro 2B. Revise su distribucion vigente; no use el calendario original como saldo.')
     if not reporte.admite_aplicacion_cuota:
         raise ValidationError('Esta operación solo admite pagos de cuota.')
     if not obligaciones_autorizadas().filter(

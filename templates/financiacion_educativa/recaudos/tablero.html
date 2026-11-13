@@ -47,9 +47,9 @@
                     <td data-label="Obligaci&oacute;n / Instituci&oacute;n"><a href="{% url 'financiacion_educativa_web:operaciones:recaudo-detalle' ingreso.reporte_id %}">{{ ingreso.reporte.solicitud.referencia_externa }}</a><small>{{ ingreso.reporte.solicitud.institucion.nombre_comercial }}</small></td>
                     <td data-label="Fecha efectiva">{{ ingreso.fecha_efectiva|date:"d/m/Y" }}</td>
                     <td data-label="Recibido">{{ ingreso.monto_recibido|cop_recaudo }}</td>
-                    <td data-label="Capital aplicado">{% if ingreso.aplicacion %}{{ ingreso.aplicacion.capital_aplicado|cop_recaudo }}{% else %}&mdash;{% endif %}</td>
-                    <td data-label="Intereses aplicados">{% if ingreso.aplicacion %}{{ ingreso.aplicacion.interes_aplicado|cop_recaudo }}{% else %}&mdash;{% endif %}</td>
-                    <td data-label="Aplicaci&oacute;n">{% if ingreso.aplicacion %}<span class="edu-recaudos-badge is-safe">Aplicado &middot; Cuota {{ ingreso.aplicacion.cuota.numero }}</span>{% else %}<span class="edu-recaudos-badge">Pendiente de aplicar</span>{% endif %}</td>
+                    <td data-label="Capital aplicado">{{ ingreso.capital_neto|cop_recaudo }}</td>
+                    <td data-label="Intereses aplicados">{{ ingreso.interes_neto|cop_recaudo }}</td>
+                    <td data-label="Aplicaci&oacute;n">{% if ingreso.aplicacion %}<span class="edu-recaudos-badge is-safe">Aplicado &middot; Cuota {{ ingreso.aplicacion.cuota.numero }}</span>{% elif ingreso.aplicado_neto %}<span class="edu-recaudos-badge is-safe">Aplicacion contabilizada</span>{% endif %}{% if ingreso.disponible_libro %}<p>Sin destino {{ ingreso.disponible_libro|cop_recaudo }}</p>{% endif %}<a href="{% url 'financiacion_educativa_web:operaciones:libro-ingreso' ingreso.pk %}">Ver libro</a></td>
                 </tr>{% empty %}<tr><td colspan="6">Sin movimientos en este listado. Cambia los filtros o consulta otra categor&iacute;a.</td></tr>{% endfor %}</tbody>
             </table></div>
             <nav class="edu-recaudos-actions" aria-label="Paginaci&oacute;n de movimientos">{% if pagina.has_previous %}<a href="?{{ querystring }}&page={{ pagina.previous_page_number }}#movimientos">Anterior</a>{% endif %}<span>{{ pagina.number }} / {{ pagina.paginator.num_pages }}</span>{% if pagina.has_next %}<a href="?{{ querystring }}&page={{ pagina.next_page_number }}#movimientos">Siguiente</a>{% endif %}</nav>

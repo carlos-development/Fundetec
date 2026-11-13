@@ -50,10 +50,11 @@ def _error(form, error):
 
 
 def _reportes():
-    return ReporteRecaudoEducativo.objects.select_related(
+    from financiacion_educativa.services.libro_pagos import anotar_reportes
+    return anotar_reportes(ReporteRecaudoEducativo.objects.select_related(
         'solicitud__institucion', 'receptor__cuenta', 'comprobante', 'conciliacion__aplicacion__cuota',
         'conciliacion__cuenta', 'reportado_por', 'rechazo',
-    ).order_by('-creado_en', 'pk')
+    )).order_by('-creado_en', 'pk')
 
 
 @never_cache
@@ -226,8 +227,8 @@ def bandeja_view(request):
     elif request.GET:
         reportes, confirmados = reportes.none(), confirmados.none()
     pendientes = reportes.filter(conciliacion__isnull=True, rechazo__isnull=True)
-    por_aplicar = reportes.filter(conciliacion__isnull=False, conciliacion__aplicacion__isnull=True)
-    aplicados = reportes.filter(conciliacion__aplicacion__isnull=False)
+    por_aplicar = reportes.filter(conciliacion__isnull=False, dinero_sin_destino__gt=0)
+    aplicados = reportes.filter(dinero_aplicado__gt=0)
     pestanas = []
     for estado, etiqueta, grupo in (
         ('PENDING', 'Por verificar', pendientes), ('TO_APPLY', 'Por aplicar', por_aplicar),

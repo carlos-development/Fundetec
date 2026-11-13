@@ -8,12 +8,13 @@ from django.http import QueryDict
 from django.urls import reverse
 
 from financiacion_educativa.models_recaudos import ConciliacionRecaudoEducativo
+from financiacion_educativa.services.libro_pagos import anotar_ingresos
 
 
 SEGMENTOS = (
     ('CONFIRMED', 'Confirmados en banco', Q()),
-    ('TO_APPLY', 'Pendientes de aplicar', Q(aplicacion__isnull=True)),
-    ('APPLIED', 'Aplicados a cuotas', Q(aplicacion__isnull=False)),
+    ('TO_APPLY', 'Pendientes de aplicar', Q(disponible_libro__gt=0)),
+    ('APPLIED', 'Dinero aplicado', Q(aplicado_neto__gt=0)),
 )
 OPCIONES_SEGMENTO = [(codigo, etiqueta) for codigo, etiqueta, _ in SEGMENTOS]
 CERO = Decimal('0.00')
@@ -25,12 +26,12 @@ def cohorte_bancaria(datos):
     )
     if datos.get('institucion'):
         consulta = consulta.filter(reporte__solicitud__institucion_id=datos['institucion'])
-    return consulta
+    return anotar_ingresos(consulta)
 
 
 def filtrar_segmento(consulta, segmento):
     predicado = next(predicado for codigo, _, predicado in SEGMENTOS if codigo == segmento)
-    return consulta.filter(predicado)
+    return anotar_ingresos(consulta).filter(predicado)
 
 
 def parametros_cohorte(datos):
@@ -42,16 +43,17 @@ def parametros_cohorte(datos):
 
 
 def construir_tablero(consulta, datos):
+    consulta = anotar_ingresos(consulta)
     # All summary amounts come from one SQL statement and OneToOne joins only.
     meses = list(consulta.order_by().annotate(mes=TruncMonth('fecha_efectiva')).values('mes').annotate(
         confirmados=Sum('monto_recibido', default=CERO),
-        pendientes=Sum('monto_recibido', filter=Q(aplicacion__isnull=True), default=CERO),
-        aplicados=Sum('monto_recibido', filter=Q(aplicacion__isnull=False), default=CERO),
-        capital=Sum('aplicacion__capital_aplicado', default=CERO),
-        intereses=Sum('aplicacion__interes_aplicado', default=CERO),
+        pendientes=Sum('disponible_libro', default=CERO),
+        aplicados=Sum('aplicado_neto', default=CERO),
+        capital=Sum('capital_neto', default=CERO),
+        intereses=Sum('interes_neto', default=CERO),
         cantidad_confirmados=Count('pk'),
-        cantidad_pendientes=Count('pk', filter=Q(aplicacion__isnull=True)),
-        cantidad_aplicados=Count('pk', filter=Q(aplicacion__isnull=False)),
+        cantidad_pendientes=Count('pk', filter=Q(disponible_libro__gt=0)),
+        cantidad_aplicados=Count('pk', filter=Q(aplicado_neto__gt=0)),
     ).order_by('mes'))
     campos = ('confirmados', 'pendientes', 'aplicados', 'capital', 'intereses')
     totales = {campo: sum((mes[campo] for mes in meses), CERO) for campo in campos}

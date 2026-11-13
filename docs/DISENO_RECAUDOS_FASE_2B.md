@@ -1,5 +1,10 @@
 # Recaudos educativos: propuesta de aplicaciones 2B
 
+Actualizacion 2026-11-12: el candidato aditivo de libro y vistas previas se
+documenta en `LIBRO_PAGOS_2B.md`. El texto siguiente conserva el diseno historico;
+no implica que las decisiones pendientes esten aprobadas. La contabilizacion
+nueva permanece deshabilitada por defecto.
+
 Base inspeccionada: main 317c2c8, 2026-10-06. Documento de diseno, no libro
 implementado, migracion ejecutable ni politica nueva aprobada. Las cifras son
 sinteticas. El ingreso confirmado 2A sigue pendiente de aplicacion.
