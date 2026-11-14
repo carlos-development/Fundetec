@@ -349,6 +349,7 @@ class EstadoOutboxCorreoEducativo(models.TextChoices):
 
 
 class TipoEventoCorreoEducativo(models.TextChoices):
+    CONTRACTUAL_PLAN_AVAILABLE = 'CONTRACTUAL_PLAN_AVAILABLE', 'Plan contractual disponible'
     BREB_REPORT_RECEIVED = 'BREB_REPORT_RECEIVED', 'Reporte BRE-B recibido'
     BREB_INCOME_CONFIRMED = 'BREB_INCOME_CONFIRMED', 'Ingreso BRE-B confirmado'
     BREB_PAYMENT_APPLIED = 'BREB_PAYMENT_APPLIED', 'Pago BRE-B aplicado'
@@ -390,6 +391,7 @@ class TipoEventoCorreoEducativo(models.TextChoices):
 
 
 class CodigoMensajeCorreoEducativo(models.TextChoices):
+    CONTRACTUAL_PLAN_AVAILABLE = 'CONTRACTUAL_PLAN_AVAILABLE', 'Plan contractual disponible'
     BREB_REPORT_RECEIVED = 'BREB_REPORT_RECEIVED', 'Reporte BRE-B recibido'
     BREB_INCOME_CONFIRMED = 'BREB_INCOME_CONFIRMED', 'Ingreso BRE-B confirmado'
     BREB_PAYMENT_APPLIED = 'BREB_PAYMENT_APPLIED', 'Pago BRE-B aplicado'

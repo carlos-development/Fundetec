@@ -2,10 +2,9 @@
 Description=Observacion educativa cada cinco minutos, sin efectos de negocio
 
 [Timer]
-OnBootSec=2min
+OnActiveSec=1min
 OnUnitActiveSec=5min
 AccuracySec=15s
-Persistent=true
 Unit=fundetec-educational-monitor.service
 
 [Install]

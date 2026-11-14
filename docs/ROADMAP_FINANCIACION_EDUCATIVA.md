@@ -1,6 +1,6 @@
 # Roadmap de financiacion educativa
 
-Actualizado: 2026-11-13. Producto independiente de libranza y gestion_creditos.
+Actualizado: 2026-11-14. Producto independiente de libranza y gestion_creditos.
 El backlog legado se conserva en `archivo/legacy/` y no gobierna este roadmap.
 
 ## Estado y criterios de cierre
@@ -22,7 +22,7 @@ El backlog legado se conserva en `archivo/legacy/` y no gobierna este roadmap.
 | Seguimiento operativo de cartera (2026-11-12) | PR #10 integrado en f0f345d y desplegado en produccion, segun confirmacion de Carlos | Vencidas sin aplicacion, primeras cuotas vencidas, vence hoy, proximos 7/30 dias y aplicaciones persistidas. Cruce por obligacion/version con ingreso por aplicar, reporte por verificar o sin recaudo abierto; resumen sin multiplicar ingresos por cuotas. Portal del estudiante distingue vencida/hoy/proxima y movimientos abiertos no asignados. Solo lectura; no activa correo ni calcula mora/saldo/reparto. Ver `SEGUIMIENTO_CARTERA_EDUCATIVA.md`. |
 | Libro 2B, parciales, abonos y liquidacion | PR #11 integrado en 7fc3773 y desplegado en produccion, segun confirmacion de Carlos; contabilizacion desactivada | Libro aditivo e inmutable, aplicaciones integras virtuales sin backfill y netos conciliables. Piloto y politica productiva pendientes. No activa mora, reparto ni notificaciones. No constituye autorizacion para operar pagos reales. Base y decisiones: `LIBRO_PAGOS_2B.md`. |
 | Gobierno y piloto controlado del Libro 2B | PR #12 integrado en 58092ed y desplegado, segun Carlos; Libro 2B cerrado | No se activa contabilizacion, no se cargan politicas y no se comprueba configuracion remota en esta entrega. Base de gobierno y migracion 0035 preservadas. Evidencia historica del PR #12: PostgreSQL 16.13 aislado, 210/210 OK y cierre 68/68 OK, conjuntos solapados. Politica productiva y piloto siguen sujetos al procedimiento `PILOTO_LIBRO_2B.md`. |
-| Envio del plan PDF por correo | Pendiente; separado de la descarga privada | La descarga contractual se implementa en este incremento. No se incorpora envio ni evento de correo. Definir destinatario/momento y entrega idempotente por outbox antes de implementarlo; no presentar el contrato como saldo actualizado. |
+| Aviso de plan contractual disponible por correo | PR #14 integrado en d440392 y desplegado con el envio desactivado, segun Carlos | Intencion transaccional por solicitud/version al autorizar la firma por primera vez, titular adulto o tutor verificado con acceso existente, revalidacion antes de SMTP y sin backfill historico. CTA al portal autenticado, sin cifras ni adjuntos. Migracion aditiva 0036 y flag independiente de BRE-B. Evidencia, muestra y staging: `AVISO_PLAN_CONTRACTUAL.md`. |
 | Fase 2C: ePayco | Pendiente, sin adaptadores ni integracion activados | Comercio y credenciales sandbox autorizados; confirmacion servidor a servidor autenticada, importe/moneda/orden, idempotencia, ambiente y reversos. Nunca confirmar por la redireccion del navegador. |
 | Saldos y causacion de intereses | Pendiente de pagos | Saldo real y capital/intereses aplicados derivan del libro de pagos conciliados; calculos reproducibles a fecha de corte y separados del calendario programado. |
 | Mora | Pendiente de politica aprobada | Aprobar regla, tasas, base y fechas; implementar y probar sobre pagos conciliados. El dashboard inicial no calcula cargos por mora. |
@@ -30,8 +30,19 @@ El backlog legado se conserva en `archivo/legacy/` y no gobierna este roadmap.
 | Experiencia movil y revision humana | Implementada; verificacion de dispositivos pendiente | Probar Safari/iPhone y Chrome/Android, captura frente/reverso y recuperacion, permisos y revision humana con trazabilidad. |
 | E2E menor con tutor | Cubierto localmente; certificacion staging pendiente | Tutor como unico firmante, evidencias y consentimientos correctos, firma/webhook/API completos e idempotentes. |
 | Accesos individuales y notificaciones institucionales | Implementados; comprobacion operativa pendiente | Membresias explicitas y activas, aislamiento, cuentas individuales y matriz de destinatarios/outbox verificada. |
-| Respaldos, restauracion y alertas | Candidato local del 2026-11-13; instalacion y recepcion de alertas en servidor pendientes | Ensayo sintetico pg_dump/pg_restore entre PostgreSQL Docker aislados, archivo privado verificable y app restaurada en localhost. Diagnostico agregado READ ONLY de servicios, outbox y firmas; sin recuperacion automatica. Procedimiento, umbrales, responsables y evidencia: `RESPALDO_RESTAURACION_ALERTAS_EDUCATIVAS.md`. No certifica un backup ni un desastre real de produccion. |
+| Respaldos, restauracion y alertas | PR #13 actualizado sobre la base de PR #14; diagnostico inicial ensayado en staging por Carlos; instalacion y recepcion de alertas pendientes | Ensayo sintetico pg_dump/pg_restore entre PostgreSQL Docker aislados, archivo privado verificable y app restaurada en localhost. Diagnostico agregado READ ONLY de servicios, outbox y firmas; sin recuperacion automatica. Procedimiento, umbrales, responsables y evidencia: `RESPALDO_RESTAURACION_ALERTAS_EDUCATIVAS.md`. No certifica un backup ni un desastre real de produccion. |
 | Integracion y jerarquia Institucion -> Programa -> Curso | API implementada; jerarquia pendiente | Certificar integracion y replay; disenar y migrar jerarquia explicita sin inferir relaciones a partir de nombres academicos. |
+
+## Continuidad operativa (2026-11-14)
+
+El webhook educativo de ZapSign Sandbox para staging recupero la firma del
+pagare QA #19: intento 1283468, HTTP 200 `processed` tras corregir la cabecera.
+Carlos dio por cerrado el incidente. No se reabre el expediente ni se infiere
+que esta evidencia cubra un flujo nuevo de OTP por correo o produccion.
+
+El monitor distingue backlog intencionalmente pausado (plan contractual,
+BRE-B o envio de firma) de trabajo accionable, detecta tramos de automatizacion
+atrasados y conserva alertas de fallos, ambiguedad y leases vencidos.
 
 ## Politica financiera aprobada
 

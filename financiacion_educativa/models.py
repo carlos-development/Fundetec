@@ -3020,6 +3020,14 @@ class OutboxCorreoEducativo(models.Model):
         on_delete=models.PROTECT,
         related_name='correos_outbox',
     )
+    plan_contractual = models.ForeignKey(
+        'CondicionesFinancieras', on_delete=models.PROTECT,
+        null=True, blank=True, related_name='avisos_plan', editable=False,
+    )
+    plan_destinatario_usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT,
+        null=True, blank=True, related_name='+', editable=False,
+    )
     tipo_evento = models.CharField(
         max_length=40,
         choices=TipoEventoCorreoEducativo.choices,
@@ -3128,6 +3136,16 @@ class OutboxCorreoEducativo(models.Model):
                 ),
                 name='out_email_breb_reference',
             ),
+            models.UniqueConstraint(fields=['solicitud', 'plan_contractual'],
+                condition=models.Q(codigo_mensaje='CONTRACTUAL_PLAN_AVAILABLE'), name='out_email_plan_version_unico'),
+            models.CheckConstraint(condition=(
+                models.Q(codigo_mensaje='CONTRACTUAL_PLAN_AVAILABLE', tipo_evento='CONTRACTUAL_PLAN_AVAILABLE',
+                    plan_contractual__isnull=False, contexto={}, destinatarios_copia=[], correo_origen__isnull=True,
+                    entrega_invitacion__isnull=True, enlace_captura__isnull=True, decision__isnull=True)
+                | models.Q(plan_contractual__isnull=True, plan_destinatario_usuario__isnull=True)
+                & ~models.Q(codigo_mensaje='CONTRACTUAL_PLAN_AVAILABLE')
+                & ~models.Q(tipo_evento='CONTRACTUAL_PLAN_AVAILABLE')
+            ), name='out_email_plan_referencia'),
             models.UniqueConstraint(
                 fields=['evento_logico'],
                 condition=models.Q(estado=EstadoOutboxCorreoEducativo.SENT),

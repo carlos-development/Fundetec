@@ -179,11 +179,13 @@ Sin unidades emite `SERVICE_SCOPE_MISSING`, nunca un OK de disponibilidad.
 | --- | --- | --- | --- |
 | SERVICE_DOWN | Una unidad requerida no activa | Infraestructura de guardia | systemctl status y journal de esa unidad; contrastar mantenimiento autorizado |
 | SERVICE_CHECK_UNAVAILABLE | Unidad ausente, timeout o consulta no verificable | Infraestructura de guardia | Verificar nombre, permisos y systemd; no asumir que esta activa |
-| OUTBOX_OVERDUE | PENDING/RETRYING con proxima ejecucion vencida >= 15 min | Soporte APROBADO | Servicio outbox, flags observados, motivo y proxima ejecucion en Admin restringido |
+| OUTBOX_OVERDUE | PENDING/RETRYING reclamable por flags, con proxima ejecucion vencida >= 15 min | Soporte APROBADO | Servicio outbox, flags observados, motivo y proxima ejecucion en Admin restringido |
 | OUTBOX_LEASE_EXPIRED | SENDING con lease vencido, un caso | Soporte + Infraestructura | Consultar lease y registros SMTP antes de recuperar; podria haberse entregado |
 | OUTBOX_FAILED | Un FAILED, incluyendo historicos no resueltos | Soporte APROBADO | Codigo de error en Admin restringido y ticket; no reenviar ciegamente |
 | OUTBOX_AMBIGUOUS | Un AMBIGUOUS | Soporte APROBADO | Conciliar Message-ID con SMTP/proveedor; no reenviar sin resolver |
-| SIGNATURE_QUEUE_OVERDUE | PENDING >= 15 min | Operaciones APROBADO | Revisar etapa/autorizacion del expediente y cola, sin invocar envio |
+| AUTOMATION_QUEUE_OVERDUE | QUEUED/RETRYING reclamable desde hace >= 15 min | Operaciones APROBADO + Infraestructura | Contrastar worker y etapa agregada: escaneo, validacion, contrato o envio |
+| AUTOMATION_LEASE_EXPIRED | RUNNING con lease vencido | Operaciones APROBADO + Infraestructura | Revisar worker y posibles efectos externos; no recuperar a ciegas |
+| SIGNATURE_QUEUE_OVERDUE | PENDING >= 15 min, sin pausa de firma | Operaciones APROBADO | Revisar etapa/autorizacion del expediente y cola, sin invocar envio |
 | SIGNATURE_SEND_STALLED | SENDING >= 10 min | Operaciones + Infraestructura | Estado/external_id restringido y diagnostico del proveedor antes de otro envio |
 | SIGNATURE_AMBIGUOUS | FAILED con SIGNATURE_SEND_AMBIGUOUS | Operaciones APROBADO | Conciliacion externa por responsable autorizado, nunca reenvio automatico |
 | SIGNATURE_FAILED | Otro FAILED | Operaciones APROBADO | Codigo y evidencia tecnica en acceso restringido, sin regenerar contrato |
@@ -208,6 +210,29 @@ incompleto/validacion propia de argumentos**. Los errores de sintaxis del parser
 Django tambien pueden salir con 2 sin JSON: tratar ausencia de JSON como
 diagnostico incompleto, nunca como OK. La ausencia de lectura BD o de chequeo de
 servicios no se interpreta como saludable. No leer stderr sin sanitizar.
+
+### Compatibilidad con el aviso del plan y colas pausadas
+
+Desde la base `d440392` (PR #14), el diagnostico agrega
+`avisos_plan_contractual` por estado y observa los flags de plan, BRE-B,
+automatizacion y pausa de envio de firma, ademas del Libro 2B. Los pendientes
+y reintentos vencidos que el flag excluye se cuentan en `backlog_pausado`.
+La pausa BRE-B incluye las copias derivadas que tampoco podria reclamar el
+outbox. Los fallos, ambiguedades y leases vencidos siguen generando alertas,
+aunque haya una pausa actual. Un conteo de pendientes no activa envios.
+
+Cuando la automatizacion esta apagada, su cola vencida aparece como pausada.
+Si solo esta pausado el envio a firma, un escaneo o una validacion atrasados
+siguen alertando. `automatizacion_atrasada_por_etapa` desglosa la cola accionable
+sin identificar expedientes. Si se espera que el worker este activo, incluir
+su nombre real con `--servicio`; omitir la unidad no acredita su disponibilidad.
+No se inicia el worker desde el diagnostico. Tampoco se abren las pausas.
+
+Para firma, el webhook rechazado con 401 no llega a la tabla de eventos: revisar
+el HTTP de entrega en ZapSign, la ruta educativa y la cabecera configurada.
+Un `200 processed` recibido para un documento de QA acredita el procesamiento
+de ese evento; no certifica documentos nuevos ni otros ambientes. No guardar
+payloads, encabezados, enlaces firmados ni secretos como evidencia operativa.
 
 ## Programacion e instrucciones de Operaciones
 
@@ -258,8 +283,8 @@ systemctl status fundetec-educational-monitor.timer --no-pager
    durante > 10 min. Este chequeo externo evita que el monitor sea su propio
    unico vigilante. Probar recepcion con servicio ficticio solo en pruebas.
 6. Solo tras comprobar recepcion y autorizar: `systemctl enable --now
-   fundetec-educational-monitor.timer`. Cada cinco minutos activa el mismo
-   oneshot; systemd no inicia dos instancias simultaneas de esa unidad. Las
+   fundetec-educational-monitor.timer`. La primera lectura se programa un minuto despues de activar el timer; las
+   siguientes, cada cinco minutos. El timer activa el mismo oneshot; systemd no inicia dos instancias simultaneas de esa unidad. Las
    unidades existentes de negocio no se reinician ni modifican.
 
 Consulta:
@@ -315,6 +340,19 @@ repeticion final, cantidades y tiempos:
   aplicar exclusivamente las migraciones existentes en la base temporal.
   `git diff --check`: codigo 0. Tres bloques del procedimiento comprobados con
   Git Bash `bash -n` por stdin, sin ejecutarlos. No hay migraciones nuevas.
+
+### Revalidacion sobre PR #14 (2026-11-14)
+
+Se incorporo la version actual de `main` al PR #13 y se repitieron diagnostico,
+guardas de restauracion, aviso del plan, outbox y BRE-B con SQLite en memoria:
+99 casos, 86 aprobados, 13 omitidos por entorno (PostgreSQL/concurrencia,
+restauracion Docker y render de muestras opcional). El diagnostico focalizado
+fue 21/21 OK. No se repitio el ensayo PostgreSQL original; sus resultados
+arriba corresponden a la entrega del 2026-11-13.
+
+`systemd-analyze verify` paso sobre ambas unidades con rutas locales de prueba.
+`makemigrations --check --dry-run` no detecto cambios. Ninguna unidad se
+instalo o inicio, ni se cambio configuracion de staging/produccion.
 
 Limitaciones pendientes: rutas/unidades reales contrastadas por Infraestructura,
 backup cifrado externo y custodia probados con su herramienta autorizada,

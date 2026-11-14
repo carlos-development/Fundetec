@@ -638,6 +638,9 @@ def _finalizar_firma(*, evento, proceso, pdf_firmado):
                     'course_authorized': True,
                 },
             )
+            from financiacion_educativa.services.notificaciones_plan_contractual import registrar_disponibilidad_plan
+            registrar_disponibilidad_plan(solicitud_id=solicitud.pk,
+                fotografia_id=artefacto.fotografia_financiera_id)
             from financiacion_educativa.services.cola_automatizacion import (
                 completar_proceso_por_firma,
             )

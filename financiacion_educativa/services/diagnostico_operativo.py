@@ -8,7 +8,14 @@ from django.db.models import Count, Min, Q
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 
-from financiacion_educativa.models import EventoWebhookFirmaEducativa, OutboxCorreoEducativo, ProcesoFirmaEducativa
+from financiacion_educativa.choices import EtapaAutomatizacionEducativa
+from financiacion_educativa.models import (
+    EventoWebhookFirmaEducativa, OutboxCorreoEducativo, ProcesoAutomatizacionEducativa,
+    ProcesoFirmaEducativa,
+)
+from financiacion_educativa.services.cola_automatizacion import ESTADOS_RECLAMABLES as ESTADOS_RECLAMABLES_AUTOMATIZACION
+from financiacion_educativa.services.outbox_correos import CODIGO_PLAN, ESTADOS_RECLAMABLES, filtro_pausa_breb
+from financiacion_educativa.services.pausa_firma import firma_pausada
 
 
 UMBRALES = {'aviso_minutos': 15, 'firma_envio_minutos': 10, 'firma_espera_horas': 72}
@@ -63,9 +70,24 @@ def observar_base(*, umbrales=None, ahora=None):
             edad = max(0, int((ahora - resumen['primero']).total_seconds())) if resumen['primero'] else None
             alertas.append(alerta(codigo, resumen['cantidad'], severidad, responsable, paso, edad))
 
+    limite_cola = ahora - timedelta(minutes=limites['aviso_minutos'])
+    flag_breb = settings.FINANCIACION_EDUCATIVA_BREB_PAYMENT_EMAILS_ENABLED
+    flag_plan = settings.FINANCIACION_EDUCATIVA_CONTRACTUAL_PLAN_EMAILS_ENABLED
+    auto_habilitada = settings.FINANCIACION_EDUCATIVA_AUTOMATION_ENABLED
+    firma_en_pausa = firma_pausada()
+
     correos = OutboxCorreoEducativo.objects.all()
-    contar(correos.filter(estado__in=['PENDING', 'RETRYING'],
-        proxima_ejecucion_en__lte=ahora - timedelta(minutes=limites['aviso_minutos'])),
+    correos_vencidos = correos.filter(estado__in=ESTADOS_RECLAMABLES, proxima_ejecucion_en__lte=limite_cola)
+    correos_accionables = correos_vencidos
+    avisos_pausados = {}
+    if not flag_breb:
+        filtro_breb = filtro_pausa_breb()
+        avisos_pausados['breb'] = correos_vencidos.filter(filtro_breb).count()
+        correos_accionables = correos_accionables.exclude(filtro_breb)
+    if not flag_plan:
+        avisos_pausados['plan_contractual'] = correos_vencidos.filter(codigo_mensaje=CODIGO_PLAN).count()
+        correos_accionables = correos_accionables.exclude(codigo_mensaje=CODIGO_PLAN)
+    contar(correos_accionables,
         'OUTBOX_OVERDUE', 'proxima_ejecucion_en', 'WARNING', 'Soporte APROBADO',
         'Revisar servicio outbox, flags y proxima ejecucion; no reenviar ni ejecutar el procesador desde el diagnostico.')
     contar(correos.filter(estado='SENDING').filter(Q(lease_vence_en__lte=ahora) | Q(lease_vence_en__isnull=True)),
@@ -76,10 +98,31 @@ def observar_base(*, umbrales=None, ahora=None):
     contar(correos.filter(estado='AMBIGUOUS'), 'OUTBOX_AMBIGUOUS', 'actualizada_en', 'CRITICAL', 'Soporte APROBADO',
         'Conciliar Message-ID con SMTP/proveedor antes de resolver; no reintentar automaticamente.')
 
+    automatizacion = ProcesoAutomatizacionEducativa.objects.all()
+    cola = automatizacion.filter(estado__in=ESTADOS_RECLAMABLES_AUTOMATIZACION, proxima_ejecucion_en__lte=limite_cola)
+    etapa_firma = EtapaAutomatizacionEducativa.SIGNATURE_SEND
+    if not auto_habilitada:
+        automatizacion_pausada = cola.count()
+        cola_accionable = cola.none()
+    elif firma_en_pausa:
+        automatizacion_pausada = cola.filter(etapa_actual=etapa_firma).count()
+        cola_accionable = cola.exclude(etapa_actual=etapa_firma)
+    else:
+        automatizacion_pausada = 0
+        cola_accionable = cola
+    contar(cola_accionable, 'AUTOMATION_QUEUE_OVERDUE', 'proxima_ejecucion_en', 'WARNING',
+        'Operaciones APROBADO + Infraestructura',
+        'Revisar worker educativo y la etapa en cola; distinguir escaneo, validacion y contrato antes de intervenir.')
+    contar(automatizacion.filter(estado='RUNNING', lease_vence_en__lte=ahora),
+        'AUTOMATION_LEASE_EXPIRED', 'lease_vence_en', 'CRITICAL', 'Operaciones APROBADO + Infraestructura',
+        'Comprobar worker, etapa y posible efecto externo antes de recuperar el proceso.')
+
     firmas = ProcesoFirmaEducativa.objects.filter(artefacto__vigente=True)
-    contar(firmas.filter(estado='PENDING', creado_en__lte=ahora - timedelta(minutes=limites['aviso_minutos'])),
-        'SIGNATURE_QUEUE_OVERDUE', 'creado_en', 'WARNING', 'Operaciones APROBADO',
-        'Revisar etapa y autorizacion del expediente; no ejecutar envio ni reintentar firmas.')
+    firmas_vencidas = firmas.filter(estado='PENDING', creado_en__lte=limite_cola)
+    firmas_pausadas = firmas_vencidas.count() if firma_en_pausa else 0
+    if not firma_en_pausa:
+        contar(firmas_vencidas, 'SIGNATURE_QUEUE_OVERDUE', 'creado_en', 'WARNING', 'Operaciones APROBADO',
+            'Revisar etapa y autorizacion del expediente; no ejecutar envio ni reintentar firmas.')
     contar(firmas.filter(estado='SENDING').annotate(inicio=Coalesce('envio_iniciado_en', 'actualizado_en')).filter(
         inicio__lte=ahora - timedelta(minutes=limites['firma_envio_minutos'])),
         'SIGNATURE_SEND_STALLED', 'inicio', 'CRITICAL', 'Operaciones APROBADO + Infraestructura',
@@ -102,8 +145,16 @@ def observar_base(*, umbrales=None, ahora=None):
     estados = {fila['estado']: fila['cantidad'] for fila in correos.values('estado').annotate(cantidad=Count('pk'))}
     breb = list(correos.filter(tipo_evento__in=EVENTOS_BREB).values('tipo_evento', 'estado').annotate(
         cantidad=Count('pk')).order_by('tipo_evento', 'estado'))
+    planes = list(correos.filter(codigo_mensaje=CODIGO_PLAN).values('estado').annotate(
+        cantidad=Count('pk')).order_by('estado'))
+    etapas_atrasadas = list(cola_accionable.values('etapa_actual').annotate(
+        cantidad=Count('pk')).order_by('etapa_actual'))
     return {'evaluado_en': ahora.isoformat(), 'umbrales': limites, 'alertas': alertas,
-        'outbox_por_estado': estados, 'avisos_breb': breb,
+        'outbox_por_estado': estados, 'avisos_breb': breb, 'avisos_plan_contractual': planes,
+        'backlog_pausado': {'avisos': avisos_pausados, 'automatizacion': automatizacion_pausada,
+            'firmas': firmas_pausadas},
+        'automatizacion_atrasada_por_etapa': etapas_atrasadas,
         'flags_observados': {'libro': settings.FINANCIACION_EDUCATIVA_LIBRO_ENABLED,
-            'avisos_breb': settings.FINANCIACION_EDUCATIVA_BREB_PAYMENT_EMAILS_ENABLED},
+            'avisos_breb': flag_breb, 'avisos_plan_contractual': flag_plan,
+            'automatizacion': auto_habilitada, 'envio_firma_pausado': firma_en_pausa},
         'sent_no_acredita_entrega_en_buzon_ni_primer_envio_real': True}

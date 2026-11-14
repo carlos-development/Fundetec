@@ -10,17 +10,21 @@ from django.db import connection, DatabaseError
 from django.test import SimpleTestCase, TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
 
-from financiacion_educativa.models import EventoWebhookFirmaEducativa, OutboxCorreoEducativo, ProcesoFirmaEducativa
+from financiacion_educativa.models import (
+    EventoWebhookFirmaEducativa, OutboxCorreoEducativo, ProcesoAutomatizacionEducativa,
+    ProcesoFirmaEducativa,
+)
 from financiacion_educativa.services import diagnostico_operativo as monitor
 from financiacion_educativa.tests.factories import crear_solicitud
 from financiacion_educativa.tests.test_dashboard_obligaciones import DatosObligacionesMixin
 from financiacion_educativa.tests.test_recaudos_breb import AISLAMIENTO
+from financiacion_educativa.tests.test_notificaciones_pagos_breb import AISLAR_PAGOS, DatosNotificacionesPagos
 
 
-def crear_aviso(solicitud, **cambios):
-    return OutboxCorreoEducativo.objects.create(solicitud=solicitud, tipo_evento='DOSSIER_RECEIVED',
-        codigo_mensaje='DOSSIER_RECEIVED', clave_idempotencia=uuid4().hex, evento_logico='a' * 64,
-        destinatarios=['destino@example.test'], contexto={'private': 'payload-sensible-de-prueba'},
+def crear_aviso(solicitud, *, codigo='DOSSIER_RECEIVED', contexto=None, **cambios):
+    return OutboxCorreoEducativo.objects.create(solicitud=solicitud, tipo_evento=codigo,
+        codigo_mensaje=codigo, clave_idempotencia=uuid4().hex, evento_logico='a' * 64,
+        destinatarios=['destino@example.test'], contexto={'private': 'payload-sensible-de-prueba'} if contexto is None else contexto,
         message_id=uuid4().hex + '@example.test', **cambios)
 
 
@@ -70,12 +74,15 @@ class ServiciosOperativosTests(SimpleTestCase):
         self.assertIn('Unit=fundetec-educational-monitor.service', timer)
 
 
-@override_settings(**AISLAMIENTO, FINANCIACION_EDUCATIVA_LIBRO_ENABLED=False,
-    FINANCIACION_EDUCATIVA_BREB_PAYMENT_EMAILS_ENABLED=False)
+@override_settings(**{**AISLAMIENTO, "FINANCIACION_EDUCATIVA_AUTOMATION_ENABLED": True},
+    FINANCIACION_EDUCATIVA_LIBRO_ENABLED=False,
+    FINANCIACION_EDUCATIVA_BREB_PAYMENT_EMAILS_ENABLED=False,
+    FINANCIACION_EDUCATIVA_CONTRACTUAL_PLAN_EMAILS_ENABLED=False,
+    FINANCIACION_EDUCATIVA_SIGNATURE_SEND_PAUSED=False)
 class ObservacionesOperativasTests(DatosObligacionesMixin, TestCase):
     def setUp(self):
         self.preparar_datos()
-        self.solicitud, _, self.artefacto, self.firma = self.contrato()
+        self.solicitud, self.foto, self.artefacto, self.firma = self.contrato()
         self.ahora = timezone.now()
 
     def codigos(self):
@@ -89,6 +96,40 @@ class ObservacionesOperativasTests(DatosObligacionesMixin, TestCase):
         self.assertEqual(alertas['OUTBOX_OVERDUE']['antiguedad_maxima_segundos'], 900)
         OutboxCorreoEducativo.objects.filter(pk=aviso.pk).update(proxima_ejecucion_en=self.ahora - timedelta(seconds=899))
         self.assertNotIn('OUTBOX_OVERDUE', self.codigos())
+
+    def test_plan_pausado_es_visible_y_no_alerta_hasta_habilitar_entrega(self):
+        crear_aviso(self.solicitud, codigo=monitor.CODIGO_PLAN, contexto={},
+            plan_contractual=self.foto, proxima_ejecucion_en=self.ahora - timedelta(hours=1))
+        datos = monitor.observar_base(ahora=self.ahora)
+        self.assertEqual(datos['alertas'], [])
+        self.assertEqual(datos['backlog_pausado']['avisos']['plan_contractual'], 1)
+        self.assertEqual(datos['avisos_plan_contractual'], [{'estado': 'PENDING', 'cantidad': 1}])
+        with self.settings(FINANCIACION_EDUCATIVA_CONTRACTUAL_PLAN_EMAILS_ENABLED=True):
+            self.assertEqual(self.codigos()['OUTBOX_OVERDUE']['cantidad'], 1)
+
+    @override_settings(DEPLOYMENT_ENVIRONMENT='staging', FINANCIACION_EDUCATIVA_SIGNATURE_SEND_PAUSED=True)
+    def test_pausa_firma_no_oculta_escaneo_atascado_ni_lease_vencido(self):
+        vencida = self.ahora - timedelta(minutes=15)
+        for numero, etapa, estado, proxima, lease in (
+            (1, 'SECURITY_SCAN', 'QUEUED', vencida, None),
+            (2, 'SIGNATURE_SEND', 'RETRYING', vencida, None),
+            (3, 'DOCUMENT_VALIDATION', 'RUNNING', self.ahora, self.ahora),
+            (4, 'DECISION', 'QUEUED', vencida + timedelta(seconds=1), None),
+        ):
+            ProcesoAutomatizacionEducativa.objects.create(solicitud=crear_solicitud(institucion=self.institucion, referencia=f"MON-{numero}"), version_expediente=numero,
+                etapa_actual=etapa, estado=estado, proxima_ejecucion_en=proxima, lease_vence_en=lease,
+                lease_id=uuid4() if lease is not None else None)
+        ProcesoFirmaEducativa.objects.filter(pk=self.firma.pk).update(estado='PENDING', creado_en=vencida)
+        datos = monitor.observar_base(ahora=self.ahora)
+        self.assertEqual({a['codigo'] for a in datos['alertas']},
+            {'AUTOMATION_QUEUE_OVERDUE', 'AUTOMATION_LEASE_EXPIRED'})
+        self.assertEqual(datos['automatizacion_atrasada_por_etapa'], [{'etapa_actual': 'SECURITY_SCAN', 'cantidad': 1}])
+        self.assertEqual(datos['backlog_pausado']['automatizacion'], 1)
+        self.assertEqual(datos['backlog_pausado']['firmas'], 1)
+        with self.settings(FINANCIACION_EDUCATIVA_AUTOMATION_ENABLED=False):
+            datos = monitor.observar_base(ahora=self.ahora)
+        self.assertEqual(datos['backlog_pausado']['automatizacion'], 2)
+        self.assertEqual([a['codigo'] for a in datos['alertas']], ['AUTOMATION_LEASE_EXPIRED'])
 
     def test_reintento_vencido_se_observa_sin_ejecutarlo(self):
         aviso = crear_aviso(self.solicitud, estado='RETRYING', proxima_ejecucion_en=self.ahora - timedelta(hours=1), intentos=1)
@@ -156,8 +197,27 @@ class ObservacionesOperativasTests(DatosObligacionesMixin, TestCase):
             crear_aviso(self.solicitud, estado=estado, proxima_ejecucion_en=self.ahora - timedelta(days=30))
         datos = monitor.observar_base(ahora=self.ahora)
         self.assertEqual(datos['alertas'], [])
-        self.assertEqual(datos['flags_observados'], {'libro': False, 'avisos_breb': False})
+        self.assertEqual(datos['flags_observados'], {'libro': False, 'avisos_breb': False,
+            'avisos_plan_contractual': False, 'automatizacion': True, 'envio_firma_pausado': False})
         self.assertTrue(datos['sent_no_acredita_entrega_en_buzon_ni_primer_envio_real'])
+
+
+@override_settings(**AISLAR_PAGOS)
+class PausaBrebOperativaTests(DatosNotificacionesPagos, TestCase):
+    def test_pausa_separa_aviso_breb_y_copia_vencidos_del_correo_normal(self):
+        self.reporte_cuota()
+        original = self.correo('BREB_REPORT_RECEIVED')
+        vencido = timezone.now() - timedelta(hours=1)
+        OutboxCorreoEducativo.objects.filter(pk=original.pk).update(proxima_ejecucion_en=vencido)
+        crear_aviso(self.solicitud, codigo='AUDIT_COPY', contexto={}, correo_origen=original,
+            proxima_ejecucion_en=vencido)
+        crear_aviso(self.solicitud, proxima_ejecucion_en=vencido)
+        with self.settings(FINANCIACION_EDUCATIVA_BREB_PAYMENT_EMAILS_ENABLED=False):
+            datos = monitor.observar_base()
+        cantidades = {a['codigo']: a['cantidad'] for a in datos['alertas']}
+        self.assertEqual(cantidades['OUTBOX_OVERDUE'], 1)
+        self.assertEqual(datos['backlog_pausado']['avisos']['breb'], 2)
+        self.assertEqual(self.correo('BREB_REPORT_RECEIVED').estado, 'PENDING')
 
 
 @override_settings(**AISLAMIENTO)
