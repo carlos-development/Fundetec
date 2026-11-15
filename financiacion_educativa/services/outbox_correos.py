@@ -522,6 +522,11 @@ def _backoff(intentos):
     return min(base * (2 ** max(intentos - 1, 0)), maximo)
 
 
+def filtro_pausa_breb():
+    originales_pago = OutboxCorreoEducativo.objects.filter(codigo_mensaje__in=CODIGOS_PAGO).values('pk')
+    return Q(codigo_mensaje__in=CODIGOS_PAGO) | Q(correo_origen_id__in=originales_pago)
+
+
 @transaction.atomic
 def reclamar_correo_pendiente():
     ahora = timezone.now()
@@ -531,8 +536,7 @@ def reclamar_correo_pendiente():
     ).order_by('proxima_ejecucion_en', 'creada_en')
     if not settings.FINANCIACION_EDUCATIVA_BREB_PAYMENT_EMAILS_ENABLED:
         # Subquery avoids a nullable join in the FOR UPDATE claim.
-        originales_pago = OutboxCorreoEducativo.objects.filter(codigo_mensaje__in=CODIGOS_PAGO).values('pk')
-        queryset = queryset.exclude(Q(codigo_mensaje__in=CODIGOS_PAGO) | Q(correo_origen_id__in=originales_pago))
+        queryset = queryset.exclude(filtro_pausa_breb())
     if not settings.FINANCIACION_EDUCATIVA_CONTRACTUAL_PLAN_EMAILS_ENABLED:
         queryset = queryset.exclude(codigo_mensaje=CODIGO_PLAN)
     queryset = (
