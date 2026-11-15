@@ -1,0 +1,9 @@
+{% extends "admin/base_site.html" %}
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin:index' %}">Inicio</a> &rsaquo; <a href="{% url 'admin:financiacion_educativa_solicitudfinanciacioneducativa_change' original.pk %}">{{ original.referencia_externa }}</a> &rsaquo; Cancelar duplicado</div>{% endblock %}
+{% block content %}
+<p>Solicitud seleccionada: <strong>{{ original.referencia_externa }}</strong>. Instituci&oacute;n: {{ original.institucion }}.</p>
+<p>Esta acci&oacute;n cancela &uacute;nicamente este expediente pendiente de registro, revoca sus invitaciones y detiene sus correos pendientes. No borra historial ni modifica otras solicitudes de la misma persona.</p>
+{% if bloqueo %}<ul class="errorlist" role="alert">{% for error in bloqueo %}<li>{{ error }}</li>{% endfor %}</ul>
+{% else %}<form method="post">{% csrf_token %}{{ form.as_p }}<div class="submit-row"><input type="submit" value="Confirmar cancelaci&oacute;n de este duplicado"></div></form>{% endif %}
+<p><a href="{% url 'admin:financiacion_educativa_solicitudfinanciacioneducativa_change' original.pk %}">Volver sin cancelar</a></p>
+{% endblock %}

@@ -9,6 +9,7 @@ from django.urls import path, reverse
 from django.utils import timezone
 from . import admin_recaudos  # noqa: F401
 from . import admin_anexos  # noqa: F401
+from .admin_cancelacion_duplicados import CancelacionDuplicadoAdminMixin
 
 
 from .models import (
@@ -162,7 +163,7 @@ class RolParticipanteInline(admin.TabularInline):
 
 
 @admin.register(SolicitudFinanciacionEducativa)
-class SolicitudFinanciacionEducativaAdmin(admin.ModelAdmin):
+class SolicitudFinanciacionEducativaAdmin(CancelacionDuplicadoAdminMixin, admin.ModelAdmin):
     change_form_template = (
         'admin/financiacion_educativa/'
         'solicitudfinanciacioneducativa/change_form.html'
