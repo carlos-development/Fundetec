@@ -35,6 +35,15 @@ El backlog legado se conserva en `archivo/legacy/` y no gobierna este roadmap.
 
 ## Continuidad operativa (2026-11-14)
 
+Cancelacion acotada de duplicados sin registro: candidato local desde `846e147`
+(PR #13), pendiente de revision y despliegue. Solo superadministradores, una
+solicitud pendiente sin cuenta ni avance, referencia exacta, motivo, confirmacion,
+transicion auditada a CANCELLED y supresion de sus correos pendientes. Contratos,
+firmas, pagos y anulacion amplia quedan fuera. No se vuelven a operar los casos
+productivos ya resueltos. Procedimiento: `CANCELAR_DUPLICADO_SIN_REGISTRO_ADMIN.md`.
+El temporizador del monitor y la activacion de correos automaticos no forman
+parte de este cierre; no se modifica su configuracion.
+
 El webhook educativo de ZapSign Sandbox para staging recupero la firma del
 pagare QA #19: intento 1283468, HTTP 200 `processed` tras corregir la cabecera.
 Carlos dio por cerrado el incidente. No se reabre el expediente ni se infiere

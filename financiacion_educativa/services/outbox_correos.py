@@ -107,6 +107,10 @@ class EntregaCorreoAmbigua(Exception):
     codigo = 'SMTP_DELIVERY_AMBIGUOUS'
 
 
+class CorreoSolicitudCancelada(Exception):
+    codigo = 'APPLICATION_CANCELLED'
+
+
 class EntregaInvitacionNoElegible(Exception):
     codigo = 'INVITATION_NO_LONGER_ELIGIBLE'
 
@@ -748,6 +752,8 @@ def _construir_mensaje(outbox, connection_mail):
 
 
 def _entregar(outbox, lease_id):
+    if SolicitudFinanciacionEducativa.objects.filter(pk=outbox.solicitud_id, estado=EstadoSolicitudFinanciacion.CANCELLED).exists():
+        raise CorreoSolicitudCancelada()
     if outbox.codigo_mensaje == CODIGO_PLAN:
         from financiacion_educativa.services.notificaciones_plan_contractual import entregar_aviso_plan
         return entregar_aviso_plan(outbox, lease_id, lambda: _enviar_mensaje_smtp(outbox))
@@ -804,7 +810,7 @@ def _enviar_mensaje_smtp(outbox, reporte=None):
 
 def _clasificar_error(error):
     codigo = getattr(error, 'codigo', '')
-    if codigo in {'PAYMENT_NOTICE_SUPERSEDED', 'PLAN_NOTICE_SUPERSEDED'}:
+    if codigo in {'PAYMENT_NOTICE_SUPERSEDED', 'PLAN_NOTICE_SUPERSEDED', 'APPLICATION_CANCELLED'}:
         return codigo, EstadoOutboxCorreoEducativo.SUPERSEDED
     if codigo:
         if codigo in CODIGOS_TEMPORALES:
