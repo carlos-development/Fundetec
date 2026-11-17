@@ -71,6 +71,34 @@ class GobernanzaLibroTests(DatosGobierno, TestCase):
         with self.assertRaises(PermissionDenied):
             gobierno.aprobar_politica(propuesta_id=p.pk, actor=self.actor, respaldo='Intento propio')
 
+    @override_settings(DEPLOYMENT_ENVIRONMENT='staging')
+    def test_superadmin_revisa_y_aprueba_su_politica_sintetica_desde_operaciones(self):
+        p = self.propuesta(institucion=self.otra)
+        self.assertTrue(self.actor.is_superuser)
+        self.client.force_login(self.actor)
+        url = reverse('financiacion_educativa_web:operaciones:politica-detalle', args=[p.pk])
+
+        for accion in ('REVIEW', 'APPROVE'):
+            with self.subTest(accion=accion):
+                respuesta = self.client.post(url, {
+                    'accion': accion, 'respaldo': 'Piloto sintetico en staging', 'confirmar': 'on',
+                })
+                self.assertRedirects(respuesta, url, fetch_redirect_response=False)
+        self.assertEqual(p.politica_aprobada.aprobada_por_id, self.actor.pk)
+        self.assertEqual(list(p.eventos.order_by('pk').values_list('tipo', 'actor_id')), [
+            ('REVIEWED', self.actor.pk), ('APPROVED', self.actor.pk),
+        ])
+
+    @override_settings(DEPLOYMENT_ENVIRONMENT='staging')
+    def test_politica_no_sintetica_conserva_revision_y_aprobacion_independientes(self):
+        p = self.propuesta(institucion=self.otra, sintetica=False)
+        with self.assertRaises(PermissionDenied):
+            gobierno.revisar_politica(propuesta_id=p.pk, actor=self.actor, respaldo='Intento propio')
+        self.revisar(p)
+        with self.assertRaises(PermissionDenied):
+            gobierno.aprobar_politica(propuesta_id=p.pk, actor=self.actor,
+                respaldo='Intento propio', aceptar_uso_real=True)
+
     def test_rechazada_no_se_aprueba_y_todo_registro_es_inmutable(self):
         p = self.propuesta()
         gobierno.revisar_politica(propuesta_id=p.pk, actor=self.aprobador, respaldo='Falta evidencia', aceptar=False)
