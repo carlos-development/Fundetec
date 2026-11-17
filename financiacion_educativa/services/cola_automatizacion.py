@@ -186,6 +186,8 @@ def _finalizar_etapa(*, proceso_id, lease_id, salida, iniciada_en):
     codigo = _codigo_controlado(codigo_original)
     if codigo != codigo_original:
         estado = EstadoProcesoAutomatizacionEducativa.FAILED
+    if estado == EstadoProcesoAutomatizacionEducativa.COMPLETED:
+        proceso.etapa_actual = EtapaAutomatizacionEducativa.COMPLETED
     EtapaProcesoAutomatizacionEducativa.objects.create(
         proceso=proceso,
         etapa=proceso.etapa_actual,

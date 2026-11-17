@@ -104,6 +104,31 @@ class ColaAutomatizacionEducativaTests(TestCase):
         self.assertIsNone(proceso)
         self.assertFalse(creado)
 
+    @patch('financiacion_educativa.services.orquestacion_automatica._etapa_escaneo')
+    @patch('financiacion_educativa.services.orquestacion_automatica.firmas_autorizadas_reales')
+    def test_worker_cierra_cola_anterior_si_la_firma_ya_autorizo_el_curso(
+        self, firmas_autorizadas, escanear,
+    ):
+        proceso, _ = encolar_proceso_automatizacion(solicitud_id=self.solicitud.pk)
+        self.solicitud.estado = EstadoSolicitudFinanciacion.APPROVED
+        self.solicitud.save(update_fields=['estado'])
+        firmas_autorizadas.return_value.filter.return_value.exists.return_value = True
+
+        resultado = procesar_siguiente_trabajo()
+
+        proceso.refresh_from_db()
+        escanear.assert_not_called()
+        firmas_autorizadas.return_value.filter.assert_called_once_with(
+            solicitud_id=self.solicitud.pk,
+        )
+        self.assertTrue(resultado.procesado)
+        self.assertEqual(proceso.estado, EstadoProcesoAutomatizacionEducativa.COMPLETED)
+        self.assertEqual(proceso.etapa_actual, EtapaAutomatizacionEducativa.COMPLETED)
+        self.assertEqual(proceso.codigo_razon, 'SIGNED_WEBHOOK_CONFIRMED')
+        self.assertIsNotNone(proceso.finalizada_en)
+        self.assertEqual(proceso.etapas.get().etapa, EtapaAutomatizacionEducativa.COMPLETED)
+        self.assertFalse(procesar_siguiente_trabajo().procesado)
+
     @patch(
         'financiacion_educativa.services.orquestacion_automatica.'
         'ejecutar_etapa_persistente'
