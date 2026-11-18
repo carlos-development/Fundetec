@@ -295,6 +295,29 @@ systemctl status fundetec-educational-monitor.service --no-pager
 journalctl -u fundetec-educational-monitor.service --since '30 minutes ago' --no-pager
 ```
 
+### Avisos internos por correo en staging
+
+`notificar_monitor_educativo` ejecuta el diagnóstico de solo lectura y reutiliza
+el SMTP de staging para avisar a un único destinatario operativo. El drop-in
+de la unidad de staging fija `EMAIL_QA_REDIRECT_TO` mediante `/usr/bin/env` en
+su `ExecStart`, junto con el mismo valor en `--destinatario`. El comando compara
+ambos destinos cuando el modo QA está activo. La configuración se aplica al
+proceso del monitor.
+
+El correo lleva solo códigos, cantidades, responsables y pasos operativos.
+El estado persiste en `StateDirectory=fundetec-staging-educational-monitor`.
+Se avisa una vez por hallazgo activo, con distinción por unidad para servicios.
+Cuando el diagnóstico completo confirma que desapareció, puede avisarse otra
+vez si reaparece. Un rechazo SMTP explícito permite reintentar. Un resultado
+incierto requiere verificar el correo en el proveedor antes de reintentarlo.
+
+El journal registra `ALERTA_SMTP_ACEPTADA` cuando el SMTP acepta el mensaje y
+`SIN_ALERTAS_NUEVAS` en una observación posterior sin cambios. El wrapper
+mantiene los códigos de salida del diagnóstico y usa `4` si falla la entrega o
+el estado local. La confirmación de recepción corresponde al buzón. El aviso
+por correo sigue dependiendo del VPS y del SMTP. La caída del VPS completo se
+cubre con observabilidad externa.
+
 Reversion del monitor: deshabilitar/detener timer, detener oneshot, retirar SOLO
 sus dos unidades si fue primera instalacion o reponer la copia previa si fue
 actualizacion; daemon-reload. Conservar evidencia/tickets y el procedimiento.
