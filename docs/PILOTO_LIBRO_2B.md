@@ -175,6 +175,15 @@ BASH
 El script crea/elimina su propio contenedor/base, no carga staging.env y no
 arranca worker/outbox. Los tests proporcionan correo/proveedores/archivos falsos.
 Las esperas solo comprueban disponibilidad del contenedor, no resuelven carreras.
+
+Para validar la rama `consolidacion/fundetec-operacion-20261117`, ejecutar desde
+su checkout y añadir al mismo comando las pruebas de cierre de cola y monitoreo:
+
+```text
+financiacion_educativa.tests.test_cola_automatizacion
+financiacion_educativa.tests.test_orquestacion_automatica
+financiacion_educativa.tests.test_diagnostico_operativo
+```
 Si Docker o permisos de pruebas faltan, parar: no recurrir a la BD compartida.
 
 Para navegador local ya instalado, agregar `test_piloto_libro_browser` y

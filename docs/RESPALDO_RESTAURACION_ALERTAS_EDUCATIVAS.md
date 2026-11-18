@@ -304,6 +304,13 @@ su `ExecStart`, junto con el mismo valor en `--destinatario`. El comando compara
 ambos destinos cuando el modo QA está activo. La configuración se aplica al
 proceso del monitor.
 
+La plantilla `deploy/systemd/fundetec-staging-educational-monitor.alertas.conf.template`
+reproduce la configuración del VPS. Sustituir `@@DESTINATARIO@@` en ambas
+apariciones, comparar con cualquier configuración instalada y guardar el
+resultado como `/etc/systemd/system/fundetec-staging-educational-monitor.service.d/10-alertas.conf`.
+Verificar la unidad con `systemd-analyze verify`, recargar systemd y consultar el
+journal tras la ejecución del servicio.
+
 El correo lleva solo códigos, cantidades, responsables y pasos operativos.
 El estado persiste en `StateDirectory=fundetec-staging-educational-monitor`.
 Se avisa una vez por hallazgo activo, con distinción por unidad para servicios.
