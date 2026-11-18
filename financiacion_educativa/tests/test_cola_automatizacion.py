@@ -33,7 +33,10 @@ from financiacion_educativa.services.orquestacion_automatica import (
 from financiacion_educativa.services.validacion_documental_ia import (
     ErrorValidacionDocumentalIA,
 )
-from financiacion_educativa.tests.factories import crear_solicitud
+from financiacion_educativa.tests.factories import (
+    aceptar_terminos_fixture,
+    crear_solicitud,
+)
 
 
 @override_settings(
@@ -324,6 +327,7 @@ class ColaAutomatizacionEducativaTests(TestCase):
         self.assertEqual(proceso.codigo_razon, 'MAX_ATTEMPTS_EXCEEDED')
 
     def test_endpoint_progreso_es_privado_persistente_y_sin_detalles_internos(self):
+        aceptar_terminos_fixture(self.solicitud)
         proceso, _ = encolar_proceso_automatizacion(
             solicitud_id=self.solicitud.pk
         )
