@@ -409,3 +409,112 @@ curl -fsS --max-time 15 https://staging-api.aprobado.com.co/health/
    comprobantes del pagador en ingresos OPERATIONS o esconda aplicaciones. Si
    existen aplicaciones, conservar lectura compatible y escalar cualquier error;
    no existe reverso financiero en este alcance.
+
+## Cotejo de un recaudo ya aplicado en producción
+
+La captura de producción del 18/11/2026 muestra la cuota 1 de
+`JOW-88C00418-PROD` pagada con $236.607 COP ($222.894 de capital y $13.713
+de intereses). Fecha bancaria 13/11/2026. El ingreso se registró en Operaciones
+sin reporte previo del pagador.
+
+El resultado de `COTEJO_BREB` compartido por Carlos confirmó el modo
+`CUOTA_COMPLETA_HISTORICA`, la coincidencia con la cuota contractual, el cuadre
+con $0 sin destino y la presencia del pago en Aplicados. Los datos que usa el
+historial del titular coincidieron en cuota, importe y fecha bancaria.
+
+El bloque identifica ese caso por institución, referencia de obligación, fecha
+bancaria, importe, origen y cuota. Exige una coincidencia única. Usa el wrapper
+autorizado de producción. La consulta usa los selectores del tablero y del portal.
+
+```bash
+production_manage shell <<'PY'
+from json import dumps
+from datetime import date
+from decimal import Decimal
+
+from django.conf import settings
+from django.db import connection, transaction
+from django.urls import reverse
+
+from financiacion_educativa.dashboards.operaciones.cartera import obligaciones_autorizadas
+from financiacion_educativa.dashboards.operaciones.reporte_recaudos import (
+    cohorte_bancaria, construir_tablero, filtrar_segmento,
+)
+from financiacion_educativa.models_recaudos import ConciliacionRecaudoEducativo
+from financiacion_educativa.services.libro_pagos import anotar_ingresos
+from financiacion_educativa.web.portal_estudiante import contexto_financiacion_del_portal
+
+if settings.DEPLOYMENT_ENVIRONMENT != 'production' or connection.vendor != 'postgresql':
+    raise SystemExit('Se requiere PostgreSQL del entorno de produccion.')
+
+with transaction.atomic():
+    with connection.cursor() as cursor:
+        cursor.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY')
+    ingresos = ConciliacionRecaudoEducativo.objects.filter(
+        reporte__solicitud__institucion__nombre_comercial__iexact='JOWALTH ACADEMY',
+        reporte__solicitud__referencia_externa='JOW-88C00418-PROD',
+        reporte__origen='OPERATIONS',
+        fecha_efectiva=date(2026, 11, 13),
+        monto_recibido=Decimal('236607.00'),
+        aplicacion__cuota__numero=1,
+    ).select_related(
+        'aplicacion__cuota', 'reporte__solicitud',
+    )
+    try:
+        ingreso = anotar_ingresos(ingresos).get()
+    except (ConciliacionRecaudoEducativo.DoesNotExist, ConciliacionRecaudoEducativo.MultipleObjectsReturned):
+        raise SystemExit('No se obtuvo una coincidencia única para el recaudo.') from None
+
+    reporte = ingreso.reporte
+    reporte_id = reporte.pk
+    aplicacion = getattr(ingreso, 'aplicacion', None)
+    movimientos = list(ingreso.movimientos_libro.order_by('secuencia').values_list(
+        'tipo', 'actor_id',
+    ))
+    filtros = {
+        'desde': ingreso.fecha_efectiva, 'hasta': ingreso.fecha_efectiva,
+        'institucion': reporte.solicitud.institucion_id, 'estado': 'APPLIED',
+    }
+    cohorte = cohorte_bancaria(filtros)
+    totales = construir_tablero(cohorte, filtros)['totales']
+    foto = obligaciones_autorizadas().filter(solicitud_id=reporte.solicitud_id).first()
+    ruta = reverse('financiacion_educativa_web:reporte-pago', args=[reporte.solicitud_id, reporte_id])
+    historial = contexto_financiacion_del_portal(foto)['historial_portal'] if foto else []
+    fila = next((item for item in historial if item['url'] == ruta), None)
+
+    print('COTEJO_BREB', dumps({
+        'origen': reporte.origen,
+        'fecha_bancaria': ingreso.fecha_efectiva,
+        'referencia_presente': bool(ingreso.referencia_verificada),
+        'conciliador_registrado': bool(ingreso.actor_id),
+        'operador_aplicacion_registrado': bool(aplicacion.actor_id) if aplicacion
+            else bool(movimientos) and all(actor_id for _, actor_id in movimientos),
+        'modo': 'CUOTA_COMPLETA_HISTORICA' if aplicacion else [tipo for tipo, _ in movimientos],
+        'cuota': aplicacion.cuota.numero if aplicacion else None,
+        'cuota_verificada': aplicacion.cuota_verificada if aplicacion else None,
+        'cuota_contractual_coincide': (
+            aplicacion.cuota.fotografia_id == reporte.fotografia_id
+            and aplicacion.cuota.valor_cuota == ingreso.monto_recibido
+            and aplicacion.fecha_efectiva == ingreso.fecha_efectiva
+            and aplicacion.capital_aplicado == aplicacion.cuota.capital
+            and aplicacion.interes_aplicado == aplicacion.cuota.interes
+        ) if aplicacion else None,
+        'recibido': ingreso.monto_recibido,
+        'capital': ingreso.capital_neto,
+        'intereses': ingreso.interes_neto,
+        'sin_destino': ingreso.disponible_libro,
+        'ingreso_cuadra': ingreso.disponible_libro >= 0 and ingreso.monto_recibido
+            == ingreso.capital_neto + ingreso.interes_neto + ingreso.disponible_libro,
+        'tablero_en_aplicados': filtrar_segmento(cohorte, 'APPLIED').filter(pk=ingreso.pk).exists(),
+        'tablero_cuadra': totales['confirmados'] == totales['pendientes'] + totales['aplicados']
+            and totales['aplicados'] == totales['capital'] + totales['intereses'],
+        'portal_coincide': bool(fila and fila['aplicado'] and fila['monto'] == ingreso.aplicado_neto
+            and fila['fecha'] == ingreso.fecha_efectiva
+            and (aplicacion is None or fila['cuota'] == aplicacion.cuota.numero)),
+    }, default=str, ensure_ascii=False))
+PY
+```
+
+Comparte solamente la línea `COTEJO_BREB`. Si el cierre requiere evidencia
+independiente del banco o del titular autenticado, compruébala en sus
+interfaces autorizadas.

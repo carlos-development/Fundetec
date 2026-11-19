@@ -129,3 +129,85 @@ duplicado entre procesos Django cooperantes.
 - definir retencion, custodia y recuperacion operacional del firmado;
 - probar recuperacion ante el caso excepcional en que ZapSign crea el documento
   pero el proceso local termina antes de guardar su token.
+
+## Evidencia del piloto de menor con tutor
+
+El piloto `PILOTO-20261611` de staging registró firma confirmada, PDF firmado,
+autorización del curso y cierre de la cola. Este cotejo reúne la evidencia
+persistida del mismo expediente. Un contador de reusos en cero deja la prueba
+de idempotencia de ese caso pendiente.
+
+El cotejo del 18/11/2026 confirmó ambos roles del tutor, identidad y relación
+verificadas, firma, PDF registrado, webhook confirmado, resultado público
+aprobado con condiciones financieras y cola completada. Se observó un registro
+de idempotencia y cero reusos. El filtro por participante no encontró
+consentimientos directos del tutor. La aceptación web registra los términos por
+usuario de la solicitud. El cotejo complementario confirmó `TERMS`,
+`DATA_PROCESSING` y `CREDIT_AUTHORIZATION` en la cuenta de la solicitud.
+El participante tutor carece de cuenta vinculada. El envío a firma selecciona
+al responsable contractual por su rol de deudor principal y usa el correo
+del participante. El webhook y el PDF acreditan el avance de la firma en el
+expediente. Queda por definir si el flujo debe recoger también una aceptación
+de términos atribuible al tutor.
+
+```bash
+staging_manage shell <<'PY'
+from json import dumps
+
+from django.conf import settings
+from django.db import connection, transaction
+
+from financiacion_educativa.models import SolicitudFinanciacionEducativa
+from financiacion_educativa.services.estado_publico import (
+    firmas_autorizadas_reales, obtener_resultado_publico,
+)
+
+if settings.DEPLOYMENT_ENVIRONMENT != 'staging' or connection.vendor != 'postgresql':
+    raise SystemExit('Se requiere PostgreSQL de staging.')
+
+with transaction.atomic():
+    with connection.cursor() as cursor:
+        cursor.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY')
+    solicitud = SolicitudFinanciacionEducativa.objects.get(
+        pk='fe3eea89-2853-4204-9629-71a3a5e867ea',
+        referencia_externa='PILOTO-20261611',
+    )
+    roles = dict(solicitud.roles_participantes.values_list('rol', 'participante_id'))
+    tutor = solicitud.participantes.filter(pk=roles.get('GUARDIAN')).first()
+    firma = firmas_autorizadas_reales().filter(solicitud_id=solicitud.pk).first()
+    resultado = obtener_resultado_publico(solicitud, aplicar_sandbox=False)
+    cola = solicitud.procesos_automatizacion.order_by('-version_expediente').first()
+
+    print('COTEJO_MENOR_QA', dumps({
+        'estado_solicitud': solicitud.estado,
+        'roles': sorted(roles),
+        'tutor_es_deudor': bool(tutor and tutor.pk == roles.get('PRINCIPAL_DEBTOR')),
+        'tutor_identidad_verificada': bool(tutor and tutor.identidad_verificada),
+        'tutor_relacion_verificada': bool(tutor and tutor.relacion_verificada),
+        'consentimientos_tutor': sorted(set(solicitud.consentimientos.filter(
+            participante=tutor,
+        ).values_list('tipo', flat=True))) if tutor else [],
+        'consentimientos_cuenta_solicitud': sorted(set(solicitud.consentimientos.filter(
+            usuario_id=solicitud.usuario_id,
+        ).values_list('tipo', flat=True))) if solicitud.usuario_id else [],
+        'tutor_con_cuenta_vinculada': bool(tutor and tutor.usuario_id),
+        'consentimientos_cuenta_tutor': sorted(set(solicitud.consentimientos.filter(
+            usuario_id=tutor.usuario_id,
+        ).values_list('tipo', flat=True))) if tutor and tutor.usuario_id else [],
+        'firma': firma.estado if firma else None,
+        'pdf_firmado_registrado': bool(firma and firma.artefacto.archivo_firmado),
+        'webhook_confirmado': bool(firma and firma.eventos_webhook.filter(
+            estado='PROCESSED', codigo_resultado='SIGNED_CONFIRMED',
+        ).exists()),
+        'estado_publico': resultado.estado,
+        'curso_autorizado': resultado.curso_autorizado,
+        'condiciones_financieras_publicas': bool(resultado.condiciones_financieras),
+        'estado_cola': cola.estado if cola else None,
+        'motivo_cierre_cola': cola.codigo_razon if cola else None,
+        'registros_idempotencia': solicitud.registros_idempotencia.count(),
+        'claves_reutilizadas': solicitud.registros_idempotencia.filter(
+            ultimo_reuso_en__isnull=False,
+        ).count(),
+    }))
+PY
+```
