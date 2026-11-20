@@ -27,7 +27,7 @@ class SimuladorBrowserTests(StaticLiveServerTestCase):
         ConfiguracionAnexoMatriculaEducativa.objects.update_or_create(
             institucion=solicitud.institucion, defaults={'perfil': 'JOWALTH_ACADEMY', 'activa': True},
         )
-        env['EDU_SIMULATOR_PUBLIC_JOWALTH'] = self.live_server_url + reverse(
+        env['EDU_SIMULATOR_LEGACY_URL'] = self.live_server_url + reverse(
             'financiacion_educativa_web:simulador-publico-jowalth',
         )
         self.client.force_login(usuario)

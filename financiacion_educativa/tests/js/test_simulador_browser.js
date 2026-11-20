@@ -135,55 +135,47 @@ test('simulador real: responsive, recalculo, fallback y respuestas tardias', {
         assert.equal(await page.locator('[data-simulator-plan] tr').count(), 3);
     });
 
-    await t.test('Jowalth y entrada pública conservan la cabecera y el alcance de las marcas', async () => {
-        const entries = [
-            ['generica', baseURL], ['jowalth-publica', process.env.EDU_SIMULATOR_PUBLIC_JOWALTH],
-            ['jowalth', process.env.EDU_SIMULATOR_JOWALTH],
-        ];
+    await t.test('simulador público único y expediente Jowalth muestran ambas marcas', async () => {
+        const legacy = process.env.EDU_SIMULATOR_LEGACY_URL;
+        assert.equal((await page.goto(legacy)).status(), 200);
+        await page.waitForURL(baseURL);
+        const entries = [['publico', baseURL], ['expediente', process.env.EDU_SIMULATOR_JOWALTH]];
         for (const [entry, url] of entries) {
-            if (entry === 'jowalth') {
+            if (entry === 'expediente') {
                 await context.addCookies([{name: 'sessionid', value: process.env.EDU_SIMULATOR_SESSION, url: new URL(baseURL).origin}]);
             }
             for (const width of [390, 1440]) {
                 await page.setViewportSize({width, height: width === 390 ? 844 : 1000});
                 assert.equal((await page.goto(url)).status(), 200);
-                const brands = page.locator('.edu-simulator-brands[aria-label] img');
-                assert.equal(page.url(), url);
-                assert.equal(await brands.count(), entry === 'generica' ? 0 : 2);
+                await page.waitForURL(url);
+                const brands = page.locator('.edu-simulator-brands img');
+                assert.equal(await brands.count(), 2);
                 assert.equal(await brands.evaluateAll(imgs => imgs.every(img => img.complete && img.naturalWidth > 0)), true);
-                if (entry === 'generica') {
-                    const partner = page.getByRole('link', {name: /Abrir simulador de Jowalth/});
-                    assert.equal(new URL(await partner.getAttribute('href'), url).href, process.env.EDU_SIMULATOR_PUBLIC_JOWALTH);
-                    const partnerLogos = partner.locator('img');
-                    assert.equal(await partnerLogos.count(), 2);
-                    assert.equal(await partnerLogos.evaluateAll(imgs => imgs.every(img => img.complete && img.naturalWidth > 0)), true);
-                    await partner.click();
-                    assert.equal(page.url(), process.env.EDU_SIMULATOR_PUBLIC_JOWALTH);
-                    assert.equal(await brands.count(), 2);
-                    await page.goBack();
-                } else {
-                    const title = await page.locator('.edu-simulator-heading h1').boundingBox();
-                    const logos = await brands.first().boundingBox();
-                    assert.ok(width === 390 ? logos.y >= title.y + title.height : logos.x >= title.x + title.width);
-                }
+                assert.equal(await page.getByRole('link', {name: /Abrir simulador de Jowalth/}).count(), 0);
+
+                const title = await page.locator('.edu-simulator-heading h1').boundingBox();
+                const logos = await brands.first().boundingBox();
+                assert.ok(width === 390 ? logos.y >= title.y + title.height : logos.x >= title.x + title.width);
                 const rect = await page.locator('[data-simulator-result="cuota_informativa"]').boundingBox();
                 assert.ok(rect.y + rect.height < page.viewportSize().height);
                 assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
                 await capture(page, entry + '-' + width);
-                if (entry === 'jowalth-publica') {
-                    const menu = page.locator(width === 390 ? '.edu-mobile-menu' : '.edu-navbar-links');
-                    if (width === 390) await page.getByRole('button', {name: 'Abrir menú'}).click();
-                    const navSimulator = menu.getByRole('link', {name: 'Simulador', exact: true});
-                    assert.equal(new URL(await navSimulator.getAttribute('href'), url).href, url);
-                    if (width === 390) await page.locator('[data-menu-toggle]').click();
-                    const footerSimulator = page.locator('.edu-site-footer').getByRole('link', {name: 'Simulador educativo', exact: true});
-                    assert.equal(new URL(await footerSimulator.getAttribute('href'), url).href, url);
+
+                const menu = page.locator(width === 390 ? '.edu-mobile-menu' : '.edu-navbar-links');
+                if (width === 390) await page.getByRole('button', {name: 'Abrir menú'}).click();
+                const navSimulator = menu.getByRole('link', {name: 'Simulador', exact: true});
+                assert.equal(new URL(await navSimulator.getAttribute('href'), url).href, baseURL);
+                if (width === 390) await page.locator('[data-menu-toggle]').click();
+                const footerSimulator = page.locator('.edu-site-footer').getByRole('link', {name: 'Simulador educativo', exact: true});
+                assert.equal(new URL(await footerSimulator.getAttribute('href'), url).href, baseURL);
+
+                if (entry === 'publico') {
                     assert.equal((await context.cookies()).some(c => c.name === 'sessionid'), false);
                     await selectTerm(page, '3');
                     await page.waitForFunction(() => document.querySelector('[data-simulator-status]').textContent === 'Resultado actualizado.');
                     assert.equal(await page.locator('[data-simulator-plan] tr').count(), 3);
                 }
-                if (entry === 'jowalth' && width === 1440) {
+                if (entry === 'expediente' && width === 1440) {
                     await page.getByText('Ver detalle de los costos', {exact: true}).click();
                     await capture(page, entry + '-costos');
                 }
@@ -257,7 +249,7 @@ test('simulador real: responsive, recalculo, fallback y respuestas tardias', {
             try {
                 await ctx.route('**/*', r => new URL(r.request().url()).origin === new URL(baseURL).origin ? r.continue() : r.abort());
                 const tab = await ctx.newPage();
-                await tab.goto(process.env.EDU_SIMULATOR_PUBLIC_JOWALTH);
+                await tab.goto(baseURL);
                 const slider = tab.getByRole('slider', {name: 'Monto a financiar'});
                 const quote = tab.locator('[data-simulator-result="cuota_informativa"]');
                 const total = tab.locator('[data-simulator-result="total_proyectado"]');
@@ -325,33 +317,32 @@ test('simulador real: responsive, recalculo, fallback y respuestas tardias', {
         await sinJS.route('**/*', r => new URL(r.request().url()).origin === new URL(baseURL).origin ? r.continue() : r.abort());
         const pagina = await sinJS.newPage();
         await pagina.bringToFront();
-        for (const [url, expectedLogos] of [[baseURL, 0], [process.env.EDU_SIMULATOR_PUBLIC_JOWALTH, 2]]) {
-            await pagina.goto(url);
-            await pagina.locator('[name="plazo_meses"]').fill('4');
-            assert.deepEqual(await pagina.locator('[data-simulator-form] input:invalid').evaluateAll(
-                inputs => inputs.map(input => ({ name: input.name, value: input.value, message: input.validationMessage }))
-            ), []);
-            const manual = pagina.locator('[data-simulator-manual]');
-            assert.equal(await manual.isVisible(), true);
-            const point = await manual.evaluate(button => {
-                button.scrollIntoView({block: 'center', behavior: 'instant'});
-                const bounds = button.getBoundingClientRect();
-                const x = bounds.x + bounds.width / 2;
-                const y = bounds.y + bounds.height / 2;
-                return {x, y, reachable: button.contains(document.elementFromPoint(x, y))};
-            });
-            assert.equal(point.reachable, true);
-            const [posted] = await Promise.all([
-                pagina.waitForNavigation({waitUntil: 'domcontentloaded'}),
-                pagina.mouse.click(point.x, point.y),
-            ]);
-            assert.equal(posted.request().method(), 'POST');
-            assert.equal(posted.url(), url);
-            assert.equal(posted.status(), 200);
-            assert.equal(await pagina.locator('[data-simulator-plan] tr').count(), 4);
-            assert.equal(await pagina.locator('.edu-simulator-brands[aria-label] img').count(), expectedLogos);
-            await capture(pagina, expectedLogos ? 'jowalth-publica-sin-js' : 'respaldo-sin-js');
-        }
+        await pagina.goto(process.env.EDU_SIMULATOR_LEGACY_URL);
+        await pagina.waitForURL(baseURL);
+        await pagina.locator('[name="plazo_meses"]').fill('4');
+        assert.deepEqual(await pagina.locator('[data-simulator-form] input:invalid').evaluateAll(
+            inputs => inputs.map(input => ({ name: input.name, value: input.value, message: input.validationMessage }))
+        ), []);
+        const manual = pagina.locator('[data-simulator-manual]');
+        assert.equal(await manual.isVisible(), true);
+        const point = await manual.evaluate(button => {
+            button.scrollIntoView({block: 'center', behavior: 'instant'});
+            const bounds = button.getBoundingClientRect();
+            const x = bounds.x + bounds.width / 2;
+            const y = bounds.y + bounds.height / 2;
+            return {x, y, reachable: button.contains(document.elementFromPoint(x, y))};
+        });
+        assert.equal(point.reachable, true);
+        const [posted] = await Promise.all([
+            pagina.waitForNavigation({waitUntil: 'domcontentloaded'}),
+            pagina.mouse.click(point.x, point.y),
+        ]);
+        assert.equal(posted.request().method(), 'POST');
+        assert.equal(posted.url(), baseURL);
+        assert.equal(posted.status(), 200);
+        assert.equal(await pagina.locator('[data-simulator-plan] tr').count(), 4);
+        assert.equal(await pagina.locator('.edu-simulator-brands img').count(), 2);
+        await capture(pagina, 'publico-sin-js');
         await sinJS.close();
     });
     assert.deepEqual(pageErrors, []);

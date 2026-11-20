@@ -2,7 +2,7 @@
 
 ## Direcciones y selección de marca
 
-La URL para compartir después del despliegue es `https://api.aprobado.com.co/financiacion-educativa/simulador/jowalth/`. La entrada genérica es `/financiacion-educativa/simulador/`. Django elige la presentación pública al resolver la ruta. Ambas rutas usan el formulario público, el cálculo y el límite de consultas existentes. El POST HTML vuelve a su propia ruta.
+La URL para compartir es `https://api.aprobado.com.co/financiacion-educativa/simulador/`. Esta página muestra FUNDETEC y Loopiter. La dirección anterior `/financiacion-educativa/simulador/jowalth/` redirige a la página pública con un 308, que conserva el método y el cuerpo de los formularios enviados desde una pestaña antigua.
 
 El simulador del expediente y los correos dirigidos al solicitante usan el perfil `JOWALTH_ACADEMY` de la institución asociada. La identidad se conserva aunque cambie el nombre comercial. Las solicitudes sin ese perfil, los avisos internos, las copias institucionales y las de auditoría usan la presentación genérica. Se mantienen los destinatarios que cada evento ya autoriza.
 
@@ -10,7 +10,7 @@ El encabezado del correo muestra Aprobado. Los dos PNG de los aliados se muestra
 
 ## Controles y estimaciones
 
-Las dos entradas públicas convierten los controles de Django en barras de monto y plazo. Heredan sus límites y pasos, incluido el centavo del monto. El formulario del expediente define un mínimo de monto, dos decimales y una longitud máxima de almacenamiento, pero no un tope comercial para una barra. Allí se conservan los dos campos numéricos con recálculo al editar. Sin JavaScript, todas las entradas conservan los campos y el envío manual.
+La página pública ofrece barras para monto y plazo dentro de los límites de Django. La barra de monto avanza en pasos de $50.000 COP y «Escribir un monto exacto» conserva la precisión hasta el centavo. El formulario del expediente define un mínimo de monto, dos decimales y una longitud máxima de almacenamiento, pero no un tope comercial para una barra. Allí se conservan los dos campos numéricos con recálculo al editar. Sin JavaScript, todas las entradas conservan los campos y el envío manual.
 
 Al arrastrar se muestra inmediatamente el valor seleccionado. La primera muestra se solicita tras 300 ms y las siguientes se espacian al menos 2,2 s hasta soltar. Una respuesta intermedia muestra exactamente el monto y plazo consultados. Al soltar o terminar el ajuste de teclado se prioriza la selección final. Si falla la consulta, la última cuota y su escenario permanecen disponibles junto a «Reintentar».
 
@@ -23,8 +23,8 @@ Al arrastrar se muestra inmediatamente el valor seleccionado. La primera muestra
 
 ## Verificación funcional
 
-1. Abrir la URL Jowalth en una ventana privada. Confirmar ambas marcas en la primera carga. Abrir también la ruta genérica, un expediente de prueba de Jowalth y uno de otra institución. Comparar la cuota y el total entre ambas entradas públicas con el mismo monto y plazo.
-2. Cambiar el plazo con el deslizador y abrir «Ver detalle de los costos». Desactivar JavaScript y enviar el formulario Jowalth. El resultado debe seguir en la URL Jowalth y conservar los valores enviados.
+1. Abrir el simulador público en una ventana privada y confirmar ambas marcas en la primera carga. Comprobar que el enlace anterior redirige al simulador público. Abrir un expediente de prueba de Jowalth y uno de otra institución para verificar sus marcas.
+2. Cambiar el plazo con el deslizador y abrir «Ver detalle de los costos». Desactivar JavaScript y enviar el formulario público. El resultado debe seguir en la URL pública y conservar los valores enviados.
 3. En una instancia de pruebas con correo en memoria o buzón de captura, emitir una invitación y un aviso de expediente para cada perfil. Inspeccionar HTML, texto plano, remitente, destinatarios y enlaces. Repetir con decisiones, plan y pagos ya habilitados, y con copias internas. Con imágenes bloqueadas deben leerse los nombres de marca y el mensaje completo.
 4. Para revertir después de un despliegue, restaurar la versión anterior del proceso web y de los emisores. Mantener disponibles las dos URLs de imagen para los mensajes que se hayan entregado.
 

@@ -20,23 +20,13 @@
             </div>
             {% if logos_institucionales %}
                 <div class="edu-simulator-partner">
-                    <strong>Jowalth Academy</strong>
-                    <div class="edu-simulator-brands" aria-label="Aliados de Jowalth Academy">
+                    <strong>{% if simulador_publico %}Aliados de Jowalth Academy{% else %}Jowalth Academy{% endif %}</strong>
+                    <div class="edu-simulator-brands" role="group" aria-label="Logos institucionales">
                         {% for nombre, archivo, ancho in logos_institucionales %}
                             <img src="{% static archivo %}" alt="{{ nombre }}">
                         {% endfor %}
                     </div>
                 </div>
-            {% elif logos_acceso_jowalth %}
-                <a class="edu-simulator-partner edu-simulator-partner-link"
-                   href="{% url 'financiacion_educativa_web:simulador-publico-jowalth' %}">
-                    <strong>Abrir simulador de Jowalth <span aria-hidden="true">→</span></strong>
-                    <span class="edu-simulator-brands">
-                        {% for nombre, archivo, ancho in logos_acceso_jowalth %}
-                            <img src="{% static archivo %}" alt="">
-                        {% endfor %}
-                    </span>
-                </a>
             {% endif %}
         </header>
 

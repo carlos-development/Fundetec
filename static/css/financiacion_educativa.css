@@ -804,32 +804,21 @@ body.edu-camera-page {
 }
 
 .edu-simulator-partner > strong { color: var(--edu-night); }
-.edu-simulator-partner-link {
-    color: #075d79;
-    text-decoration: none;
-}
-.edu-simulator-partner-link strong { color: inherit; }
-.edu-simulator-partner-link:hover { background: #f6fbff; text-decoration: underline; }
 .edu-simulator-brands { display: flex; align-items: center; gap: 16px; }
 .edu-simulator-brands img { display: block; width: min(48%, 148px); height: auto; }
 .edu-simulator-brands img + img { width: min(44%, 128px); }
 
 .edu-simulator-overview {
-    background: linear-gradient(145deg, #124359, var(--edu-night) 80%);
-    border-color: transparent;
+    background: #f5fbff;
     border-top: 4px solid var(--edu-yellow);
-    color: #ffffff;
+    color: var(--edu-night);
 }
-.edu-simulator-overview [data-estimate-title] { color: #a8e7f4; }
-.edu-simulator-overview .edu-simulator-scenario { color: #eef8ff; }
-.edu-simulator-overview .edu-simulator-status,
-.edu-simulator-overview .edu-simulator-placeholder,
-.edu-simulator-overview .edu-simulator-disclaimer { color: #ccdeeb; }
+.edu-simulator-overview [data-estimate-title] { color: #075d79; }
 .edu-simulator-metrics { margin: 16px 0 12px; }
 .edu-simulator-metrics dd { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
-.edu-simulator-metrics dt { color: #e0edf6; }
+.edu-simulator-metrics dt { color: var(--edu-muted); }
 .edu-simulator-metrics div:first-child dd { font-size: clamp(2.4rem, 4.6vw, 4rem); line-height: 1.12; letter-spacing: -.035em; }
-.edu-simulator-metrics div + div { margin-top: 16px; padding-top: 12px; border-top: 1px solid #ffffff38; }
+.edu-simulator-metrics div + div { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--edu-line); }
 .edu-simulator-metrics div + div dd { font-size: 1.5rem; }
 .edu-simulator-placeholder { min-height: 8rem; color: var(--edu-muted); }
 .edu-simulator-plan, .edu-simulator-next { grid-column: 1 / -1; }
@@ -876,8 +865,7 @@ body.edu-camera-page {
     cursor: pointer;
 }
 .edu-simulator-presets button:focus-visible,
-.edu-simulator-edit-amount:focus-visible,
-.edu-simulator-partner-link:focus-visible {
+.edu-simulator-edit-amount:focus-visible {
     outline: 2px solid var(--edu-night);
     outline-offset: 2px;
 }

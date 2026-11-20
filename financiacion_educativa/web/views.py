@@ -1719,11 +1719,20 @@ def _simulacion_inicial(form_class, datos):
 
 @never_cache
 @require_http_methods(['GET', 'POST'])
-def simulador_publico_view(request, *, jowalth=False):
+def redirigir_simulador_jowalth_view(request):
+    return redirect(
+        'financiacion_educativa_web:simulador-publico',
+        permanent=True,
+        preserve_request=True,
+    )
+
+
+@never_cache
+@require_http_methods(['GET', 'POST'])
+def simulador_publico_view(request):
     presentacion = {
         'simulador_publico': True,
-        'logos_institucionales': LOGOS_JOWALTH if jowalth else (),
-        'logos_acceso_jowalth': () if jowalth else LOGOS_JOWALTH,
+        'logos_institucionales': LOGOS_JOWALTH,
     }
     datos = {
         'monto_solicitado': (
