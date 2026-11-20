@@ -318,18 +318,15 @@ document.addEventListener('DOMContentLoaded', function () {
             timer = window.setTimeout(calculate, delay);
         }
 
-        function showSelection(input) {
-            if (input.type !== 'range') return;
-            const value = input === amount ? labelAmount(input.value) : labelTerm(input.value);
-            form.querySelector('[data-selection="' + input.name + '"]').textContent = value;
+        function showRange(input, field, value) {
+            form.querySelector('[data-selection="' + field.name + '"]').textContent = value;
             input.setAttribute('aria-valuetext', value);
             const span = Number(input.max) - Number(input.min);
             const progress = span ? 100 * (Number(input.value) - Number(input.min)) / span : 0;
             input.style.setProperty('--range-progress', progress + '%');
         }
 
-        function changed(input) {
-            showSelection(input);
+        function changed() {
             const values = selection();
             if (same(values, selected)) return;
             selected = values;
@@ -361,27 +358,117 @@ document.addEventListener('DOMContentLoaded', function () {
             calculate();
         }
 
-        // Enhance the bound Django inputs in place. Keep both fields when an amount cap is absent.
-        const useRanges = [amount, term].every(input => input.min && input.max && input.validity.valid);
         const rangeKeys = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End'];
-        [amount, term].forEach(function (input) {
-            if (useRanges) {
-                input.type = 'range';
-                input.classList.add('edu-simulator-range');
-                form.querySelector('[data-selection="' + input.name + '"]').hidden = false;
-                showSelection(input);
-                input.addEventListener('pointerdown', () => beginGesture(input));
-                input.addEventListener('keydown', event => {
-                    if (rangeKeys.includes(event.key)) beginGesture(input);
-                });
-                input.addEventListener('keyup', event => {
-                    if (rangeKeys.includes(event.key)) finishGesture();
-                });
-                input.addEventListener('blur', finishGesture);
+
+        function bindGesture(input) {
+            input.addEventListener('pointerdown', () => beginGesture(input));
+            input.addEventListener('keydown', event => {
+                if (rangeKeys.includes(event.key)) beginGesture(input);
+            });
+            input.addEventListener('keyup', event => {
+                if (rangeKeys.includes(event.key)) finishGesture();
+            });
+            input.addEventListener('blur', finishGesture);
+        }
+
+        const amountRange = form.querySelector('[data-amount-range]');
+        const minCents = Math.round(Number(amount.min) * 100);
+        const maxCents = Math.round(Number(amount.max) * 100);
+        const useRanges = amountRange && Number.isSafeInteger(minCents) && Number.isSafeInteger(maxCents)
+            && minCents < maxCents && [amount, term].every(input => input.min && input.max && input.validity.valid);
+
+        const termOutput = form.querySelector('[data-selection="' + term.name + '"]');
+        const amountOutput = form.querySelector('[data-selection="' + amount.name + '"]');
+        let updateAmountRange = () => {};
+
+        if (useRanges) {
+            // A peso grid for navigation, with the exact Django bounds at either end.
+            // Values typed in the underlying field keep their original cent precision.
+            const stepCents = 50000 * 100;
+            const firstRound = (Math.floor(minCents / stepCents) + 1) * stepCents;
+            const interiorCount = Math.max(0, Math.ceil((maxCents - firstRound) / stepCents));
+            const lastSlot = interiorCount + 1;
+            const controls = form.querySelector('[data-amount-controls]');
+            const track = controls.querySelector('[data-amount-track]');
+            const edit = controls.querySelector('[data-edit-amount]');
+            const amountLabel = form.querySelector('[for="' + amount.id + '"]');
+
+            function centsAt(slot) {
+                if (slot === 0) return minCents;
+                if (slot === lastSlot) return maxCents;
+                return firstRound + (slot - 1) * stepCents;
             }
-            input.addEventListener('input', () => changed(input));
+
+            updateAmountRange = function () {
+                if (!amount.validity.valid) return;
+                const cents = Math.round(Number(amount.value) * 100);
+                const nearestRound = Math.round((cents - firstRound) / stepCents) + 1;
+                const slots = [0, lastSlot];
+                if (interiorCount) slots.push(Math.min(Math.max(nearestRound, 1), interiorCount));
+                amountRange.value = slots.reduce((closest, slot) =>
+                    Math.abs(centsAt(slot) - cents) < Math.abs(centsAt(closest) - cents) ? slot : closest);
+                showRange(amountRange, amount, labelAmount(amount.value));
+            };
+
+            amountRange.min = '0';
+            amountRange.max = String(lastSlot);
+            controls.querySelector('[data-amount-min]').textContent = labelAmount(amount.min);
+            controls.querySelector('[data-amount-max]').textContent = labelAmount(amount.max);
+            amount.inputMode = 'decimal';
+            amount.hidden = true;
+            amountLabel.htmlFor = amountRange.id;
+            amountOutput.hidden = false;
+            controls.hidden = false;
+            updateAmountRange();
+            bindGesture(amountRange);
+
+            amountRange.addEventListener('input', function () {
+                amount.value = String(centsAt(Number(amountRange.value)) / 100);
+                showRange(amountRange, amount, labelAmount(amount.value));
+                changed();
+            });
+            amountRange.addEventListener('change', () => {
+                if (!gesture) calculate();
+            });
+            controls.querySelectorAll('[data-amount-preset]').forEach(button => {
+                const pesos = Number(button.dataset.amountPreset);
+                if (pesos * 100 < minCents || pesos * 100 > maxCents) return;
+                button.hidden = false;
+                button.addEventListener('click', function () {
+                    amount.value = String(pesos);
+                    updateAmountRange();
+                    changed();
+                    calculate();
+                });
+            });
+            edit.addEventListener('click', function () {
+                const editing = amount.hidden;
+                if (!editing && !amount.reportValidity()) return;
+                amount.hidden = !editing;
+                track.hidden = editing;
+                amountOutput.hidden = editing;
+                amountLabel.htmlFor = editing ? amount.id : amountRange.id;
+                edit.setAttribute('aria-expanded', String(editing));
+                edit.textContent = editing ? 'Volver al deslizador' : 'Escribir un monto exacto';
+                (editing ? amount : amountRange).focus();
+            });
+
+            term.type = 'range';
+            term.classList.add('edu-simulator-range');
+            termOutput.hidden = false;
+            showRange(term, term, labelTerm(term.value));
+            bindGesture(term);
+        }
+
+        [amount, term].forEach(function (input) {
+            function update() {
+                if (input === amount) updateAmountRange();
+                else if (useRanges) showRange(term, term, labelTerm(term.value));
+                changed();
+            }
+            input.addEventListener('input', update);
             input.addEventListener('change', () => {
-                changed(input);
+                update();
                 if (!gesture) calculate();
             });
         });

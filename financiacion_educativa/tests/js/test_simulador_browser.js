@@ -147,11 +147,21 @@ test('simulador real: responsive, recalculo, fallback y respuestas tardias', {
             for (const width of [390, 1440]) {
                 await page.setViewportSize({width, height: width === 390 ? 844 : 1000});
                 assert.equal((await page.goto(url)).status(), 200);
-                const brands = page.locator('.edu-simulator-brands img');
+                const brands = page.locator('.edu-simulator-brands[aria-label] img');
                 assert.equal(page.url(), url);
                 assert.equal(await brands.count(), entry === 'generica' ? 0 : 2);
                 assert.equal(await brands.evaluateAll(imgs => imgs.every(img => img.complete && img.naturalWidth > 0)), true);
-                if (entry !== 'generica') {
+                if (entry === 'generica') {
+                    const partner = page.getByRole('link', {name: /Abrir simulador de Jowalth/});
+                    assert.equal(new URL(await partner.getAttribute('href'), url).href, process.env.EDU_SIMULATOR_PUBLIC_JOWALTH);
+                    const partnerLogos = partner.locator('img');
+                    assert.equal(await partnerLogos.count(), 2);
+                    assert.equal(await partnerLogos.evaluateAll(imgs => imgs.every(img => img.complete && img.naturalWidth > 0)), true);
+                    await partner.click();
+                    assert.equal(page.url(), process.env.EDU_SIMULATOR_PUBLIC_JOWALTH);
+                    assert.equal(await brands.count(), 2);
+                    await page.goBack();
+                } else {
                     const title = await page.locator('.edu-simulator-heading h1').boundingBox();
                     const logos = await brands.first().boundingBox();
                     assert.ok(width === 390 ? logos.y >= title.y + title.height : logos.x >= title.x + title.width);
@@ -161,6 +171,13 @@ test('simulador real: responsive, recalculo, fallback y respuestas tardias', {
                 assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
                 await capture(page, entry + '-' + width);
                 if (entry === 'jowalth-publica') {
+                    const menu = page.locator(width === 390 ? '.edu-mobile-menu' : '.edu-navbar-links');
+                    if (width === 390) await page.getByRole('button', {name: 'Abrir menú'}).click();
+                    const navSimulator = menu.getByRole('link', {name: 'Simulador', exact: true});
+                    assert.equal(new URL(await navSimulator.getAttribute('href'), url).href, url);
+                    if (width === 390) await page.locator('[data-menu-toggle]').click();
+                    const footerSimulator = page.locator('.edu-site-footer').getByRole('link', {name: 'Simulador educativo', exact: true});
+                    assert.equal(new URL(await footerSimulator.getAttribute('href'), url).href, url);
                     assert.equal((await context.cookies()).some(c => c.name === 'sessionid'), false);
                     await selectTerm(page, '3');
                     await page.waitForFunction(() => document.querySelector('[data-simulator-status]').textContent === 'Resultado actualizado.');
@@ -197,13 +214,26 @@ test('simulador real: responsive, recalculo, fallback y respuestas tardias', {
         assert.equal(await mobile.getByRole('slider').count(), 2);
         assert.equal(await mobile.getByRole('spinbutton').count(), 0);
         const amount = mobile.getByRole('slider', {name: 'Monto a financiar'});
-        assert.equal(await amount.getAttribute('step'), '0.01');
+        const exact = mobile.locator('[name="monto_solicitado"]');
         await amount.press('Home');
         await amount.press('ArrowRight');
-        assert.equal(await amount.inputValue(), '100000.01');
-        assert.match(await amount.getAttribute('aria-valuetext'), /100.000,01/);
+        assert.equal(await exact.inputValue(), '150000');
+        assert.match(await amount.getAttribute('aria-valuetext'), /150.000/);
         await mobile.waitForFunction(() => document.querySelector('[data-simulator-status]').textContent === 'Resultado actualizado.');
-        assert.match(await mobile.locator('[data-estimate-for]').innerText(), /100.000,01 a 6 meses/);
+        assert.match(await mobile.locator('[data-estimate-for]').innerText(), /150.000 a 6 meses/);
+        await amount.press('End');
+        assert.equal(await exact.inputValue(), '2000000');
+        await mobile.getByRole('button', {name: '$1.000.000', exact: true}).tap();
+        assert.equal(await exact.inputValue(), '1000000');
+        await mobile.getByRole('button', {name: 'Escribir un monto exacto'}).tap();
+        assert.equal(await amount.isVisible(), false);
+        await exact.fill('1000000.01');
+        await mobile.waitForFunction(() => document.querySelector('[data-estimate-for]').textContent.includes('1.000.000,01'));
+        await capture(mobile, 'monto-exacto-390');
+        await mobile.getByRole('button', {name: 'Volver al deslizador'}).tap();
+        assert.equal(await exact.isVisible(), false);
+        assert.equal(await exact.inputValue(), '1000000.01');
+        assert.equal(await amount.isVisible(), true);
         await slider.press('Home');
         await slider.press('ArrowRight');
         assert.equal(Number(await term.inputValue()), Number(await term.getAttribute('min')) + 1);
@@ -263,7 +293,8 @@ test('simulador real: responsive, recalculo, fallback y respuestas tardias', {
                 if (mobile) await touch('touchEnd');
                 else await tab.mouse.up();
                 await tab.waitForFunction(() => document.querySelector('[data-simulator-status]').textContent === 'Resultado actualizado.');
-                const amount = await slider.inputValue();
+                const amount = await tab.locator('[name="monto_solicitado"]').inputValue();
+                assert.equal(Number(amount) % 50000, 0);
                 const term = await tab.locator('[name="plazo_meses"]').inputValue();
                 const displayed = await tab.locator('[data-estimate-for]').innerText();
                 assert.ok(displayed.includes(await slider.getAttribute('aria-valuetext')));
@@ -318,7 +349,7 @@ test('simulador real: responsive, recalculo, fallback y respuestas tardias', {
             assert.equal(posted.url(), url);
             assert.equal(posted.status(), 200);
             assert.equal(await pagina.locator('[data-simulator-plan] tr').count(), 4);
-            assert.equal(await pagina.locator('.edu-simulator-brands img').count(), expectedLogos);
+            assert.equal(await pagina.locator('.edu-simulator-brands[aria-label] img').count(), expectedLogos);
             await capture(pagina, expectedLogos ? 'jowalth-publica-sin-js' : 'respaldo-sin-js');
         }
         await sinJS.close();

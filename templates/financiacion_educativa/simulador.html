@@ -19,11 +19,24 @@
                 <p>Ajusta el monto y el plazo para ver tu cuota mensual en pesos.</p>
             </div>
             {% if logos_institucionales %}
-                <div class="edu-simulator-brands" aria-label="Aliados de Jowalth Academy">
-                    {% for nombre, archivo, ancho in logos_institucionales %}
-                        <img src="{% static archivo %}" alt="{{ nombre }}">
-                    {% endfor %}
+                <div class="edu-simulator-partner">
+                    <strong>Jowalth Academy</strong>
+                    <div class="edu-simulator-brands" aria-label="Aliados de Jowalth Academy">
+                        {% for nombre, archivo, ancho in logos_institucionales %}
+                            <img src="{% static archivo %}" alt="{{ nombre }}">
+                        {% endfor %}
+                    </div>
                 </div>
+            {% elif logos_acceso_jowalth %}
+                <a class="edu-simulator-partner edu-simulator-partner-link"
+                   href="{% url 'financiacion_educativa_web:simulador-publico-jowalth' %}">
+                    <strong>Abrir simulador de Jowalth <span aria-hidden="true">→</span></strong>
+                    <span class="edu-simulator-brands">
+                        {% for nombre, archivo, ancho in logos_acceso_jowalth %}
+                            <img src="{% static archivo %}" alt="">
+                        {% endfor %}
+                    </span>
+                </a>
             {% endif %}
         </header>
 
@@ -34,23 +47,42 @@
         >
             <form class="edu-simulator-controls" data-simulator-form data-loader="off" method="post" action="{{ request.path }}">
                 {% csrf_token %}
+                <h2 class="edu-simulator-form-title">Configura tu financiación</h2>
                 {% if not simulador_publico %}
                     <p class="edu-simulator-request">Solicitud institucional · {{ solicitud.valor_plan|cop }} a {{ solicitud.plazo_meses }} meses</p>
                 {% endif %}
                 {% for field in form %}
                     <div class="edu-field">
                         <div class="edu-simulator-field-heading">
-                            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                            <label id="{{ field.id_for_label }}_titulo" for="{{ field.id_for_label }}">{{ field.label }}</label>
                             <span data-selection="{{ field.name }}" aria-hidden="true" hidden></span>
                         </div>
                         {{ field }}
+                        {% if simulador_publico and field.name == 'monto_solicitado' %}
+                            <div data-amount-controls hidden>
+                                <div data-amount-track>
+                                    <input id="edu-monto-barra" class="edu-simulator-range" type="range" step="1"
+                                           aria-labelledby="{{ field.id_for_label }}_titulo" data-amount-range>
+                                    <div class="edu-simulator-range-scale" aria-hidden="true">
+                                        <span data-amount-min></span>
+                                        <span data-amount-max></span>
+                                    </div>
+                                    <div class="edu-simulator-presets" aria-label="Montos frecuentes">
+                                        <button type="button" data-amount-preset="500000" hidden>$500.000</button>
+                                        <button type="button" data-amount-preset="1000000" hidden>$1.000.000</button>
+                                        <button type="button" data-amount-preset="1500000" hidden>$1.500.000</button>
+                                    </div>
+                                </div>
+                                <button type="button" class="edu-simulator-edit-amount"
+                                        aria-controls="{{ field.id_for_label }}" aria-expanded="false" data-edit-amount>Escribir un monto exacto</button>
+                            </div>
+                        {% endif %}
                         {% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}
                     </div>
                 {% endfor %}
                 <p class="edu-form-error" data-simulator-error role="alert" {% if not error %}hidden{% endif %}>{{ error }}</p>
                 <button type="button" class="edu-button-secondary" data-simulator-retry hidden>Reintentar</button>
                 <button type="submit" data-simulator-manual class="edu-button-secondary">Actualizar simulación</button>
-                <p class="edu-simulator-status" data-simulator-status aria-live="polite"></p>
             </form>
 
             <div class="edu-simulator-overview">
@@ -63,6 +95,7 @@
                     <p class="edu-simulator-scenario" data-estimate-for>{% if simulacion %}Para {{ form.monto_solicitado.value|floatformat:"-2g" }} COP a {{ form.plazo_meses.value }} {{ form.plazo_meses.value|pluralize:"mes,meses" }}{% endif %}</p>
                 </section>
                 <p class="edu-simulator-placeholder" data-simulator-placeholder {% if simulacion %}hidden{% endif %}>Completa los datos para ver tu estimación.</p>
+                <p class="edu-simulator-status" data-simulator-status aria-live="polite"></p>
                 <p class="edu-simulator-disclaimer">Estimación informativa en pesos colombianos. No constituye aprobación ni modifica tu solicitud.</p>
             </div>
             <details class="edu-simulator-plan" {% if not simulacion %}hidden{% endif %}>
@@ -123,12 +156,12 @@
             <div class="edu-simulator-next">
                 {% if simulador_publico %}
                     {% if request.user.is_authenticated %}
-                        <a class="edu-button-primary" href="{{ resume_url }}">Continuar mi solicitud</a>
+                        <a class="edu-button-primary edu-simulator-cta" href="{{ resume_url }}">Continuar mi solicitud</a>
                     {% else %}
-                        <a class="edu-button-primary" href="{% url 'account_login' %}?next={{ resume_url|urlencode }}">Continuar mi solicitud</a>
+                        <a class="edu-button-primary edu-simulator-cta" href="{% url 'account_login' %}?next={{ resume_url|urlencode }}">Continuar mi solicitud</a>
                     {% endif %}
                 {% else %}
-                    <a class="edu-button-primary" href="{% url 'financiacion_educativa_web:documentacion' solicitud.id %}">Continuar con mi expediente</a>
+                    <a class="edu-button-primary edu-simulator-cta" href="{% url 'financiacion_educativa_web:documentacion' solicitud.id %}">Continuar con mi expediente</a>
                 {% endif %}
             </div>
         </div>

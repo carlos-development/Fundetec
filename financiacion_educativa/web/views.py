@@ -1720,7 +1720,11 @@ def _simulacion_inicial(form_class, datos):
 @never_cache
 @require_http_methods(['GET', 'POST'])
 def simulador_publico_view(request, *, jowalth=False):
-    presentacion = {'simulador_publico': True, 'logos_institucionales': LOGOS_JOWALTH if jowalth else ()}
+    presentacion = {
+        'simulador_publico': True,
+        'logos_institucionales': LOGOS_JOWALTH if jowalth else (),
+        'logos_acceso_jowalth': () if jowalth else LOGOS_JOWALTH,
+    }
     datos = {
         'monto_solicitado': (
             settings.FINANCIACION_EDUCATIVA_PUBLIC_SIMULATOR_INITIAL_AMOUNT

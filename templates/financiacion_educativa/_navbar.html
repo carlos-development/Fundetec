@@ -8,7 +8,7 @@
 
         <nav class="edu-navbar-links" aria-label="Navegaci&oacute;n principal">
             <a href="{% url 'home' %}">Inicio</a>
-            <a href="{% url 'financiacion_educativa_web:simulador-publico' %}">Simulador</a>
+            <a href="{{ education_simulator_url }}">Simulador</a>
             <a href="{% url 'politica_privacidad' %}">Privacidad</a>
             <span class="edu-navbar-security"><span aria-hidden="true">&#10003;</span> Sitio seguro</span>
         </nav>
@@ -44,7 +44,7 @@
 
     <div class="edu-mobile-menu" data-mobile-menu>
         <a href="{% url 'home' %}">Inicio</a>
-        <a href="{% url 'financiacion_educativa_web:simulador-publico' %}">Simulador</a>
+        <a href="{{ education_simulator_url }}">Simulador</a>
         <a href="{% url 'politica_privacidad' %}">Privacidad</a>
         {% if request.user.is_authenticated %}
             <a href="{{ resume_url }}">Mis solicitudes</a>

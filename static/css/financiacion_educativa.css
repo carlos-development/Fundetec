@@ -610,17 +610,13 @@ body.edu-camera-page {
 /* Simulador educativo: herramienta publica o asociada, siempre no persistente. */
 .edu-simulator-band {
     min-height: calc(100vh - 160px);
-    padding: 28px 0 40px;
-    background: #eef4f7;
+    padding: clamp(28px, 5vw, 58px) 0 48px;
+    background: linear-gradient(145deg, #e5f1f7, #f3f7fa 72%);
 }
 
 .edu-simulator-shell {
-    width: min(calc(100% - 40px), 1120px);
+    width: min(calc(100% - 48px), 1120px);
     margin: 0 auto;
-}
-
-.edu-public-simulator-page .edu-simulator-shell {
-    font-size: 0.95rem;
 }
 
 .edu-simulator-heading {
@@ -628,43 +624,53 @@ body.edu-camera-page {
     align-items: center;
     justify-content: space-between;
     flex-wrap: wrap;
-    gap: 16px 32px;
-    margin-bottom: 20px;
+    gap: 16px 24px;
+    margin-bottom: 26px;
 }
 
+.edu-simulator-heading > div:first-child { flex: 1 1 22rem; }
+
 .edu-simulator-heading h1 {
-    margin: 8px 0 10px;
+    margin: 0 0 8px;
     color: var(--edu-night);
-    font-size: clamp(1.55rem, 3vw, 2.35rem);
+    font-size: clamp(1.85rem, 3.3vw, 2.8rem);
+    letter-spacing: -.025em;
     line-height: 1.08;
 }
 
 .edu-simulator-heading p:last-child {
     margin: 0;
     color: var(--edu-muted);
-    font-size: 1.05rem;
+    font-size: 1.03rem;
 }
 
 .edu-simulator-layout {
     display: grid;
-    grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
-    gap: 14px 20px;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 18px 24px;
     align-items: stretch;
 }
 
 .edu-simulator-controls,
 .edu-simulator-overview {
-    padding: 18px 22px;
-    background: var(--edu-white);
+    padding: 26px 28px;
     border: 1px solid var(--edu-line);
-    border-radius: var(--edu-radius);
+    border-radius: 16px;
     box-shadow: var(--edu-shadow);
 }
 
 .edu-simulator-controls {
     display: grid;
-    gap: 12px;
+    gap: 18px;
     align-content: start;
+    background: var(--edu-white);
+}
+
+.edu-simulator-form-title {
+    margin: 0;
+    color: var(--edu-night);
+    font-size: 1.18rem;
+    line-height: 1.25;
 }
 
 .edu-simulator-request {
@@ -787,39 +793,110 @@ body.edu-camera-page {
     border-top: 2px solid var(--edu-yellow);
 }
 
-.edu-simulator-brands {
-    display: flex;
-    align-items: center;
-    gap: 18px;
-    max-width: 100%;
+.edu-simulator-partner {
+    display: grid;
+    gap: 6px;
+    width: min(100%, 332px);
     padding: 12px 18px;
-    border: 1px solid var(--edu-line);
-    border-radius: var(--edu-radius);
-    background: white;
+    border: 1px solid #c9dde8;
+    border-radius: 12px;
+    background: var(--edu-white);
 }
 
-.edu-simulator-brands img { width: 104px; height: auto; }
-.edu-simulator-brands img + img { width: 92px; }
-.edu-simulator-overview { border-top: 4px solid var(--edu-yellow); }
-.edu-simulator-metrics { margin: 6px 0; color: var(--edu-night); }
+.edu-simulator-partner > strong { color: var(--edu-night); }
+.edu-simulator-partner-link {
+    color: #075d79;
+    text-decoration: none;
+}
+.edu-simulator-partner-link strong { color: inherit; }
+.edu-simulator-partner-link:hover { background: #f6fbff; text-decoration: underline; }
+.edu-simulator-brands { display: flex; align-items: center; gap: 16px; }
+.edu-simulator-brands img { display: block; width: min(48%, 148px); height: auto; }
+.edu-simulator-brands img + img { width: min(44%, 128px); }
+
+.edu-simulator-overview {
+    background: linear-gradient(145deg, #124359, var(--edu-night) 80%);
+    border-color: transparent;
+    border-top: 4px solid var(--edu-yellow);
+    color: #ffffff;
+}
+.edu-simulator-overview [data-estimate-title] { color: #a8e7f4; }
+.edu-simulator-overview .edu-simulator-scenario { color: #eef8ff; }
+.edu-simulator-overview .edu-simulator-status,
+.edu-simulator-overview .edu-simulator-placeholder,
+.edu-simulator-overview .edu-simulator-disclaimer { color: #ccdeeb; }
+.edu-simulator-metrics { margin: 16px 0 12px; }
 .edu-simulator-metrics dd { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
-.edu-simulator-metrics dt { color: var(--edu-muted); }
-.edu-simulator-metrics div:first-child dd { font-size: clamp(2rem, 4vw, 3.2rem); line-height: 1.2; }
-.edu-simulator-metrics div + div { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--edu-line); }
-.edu-simulator-metrics div + div dd { font-size: 1.35rem; }
+.edu-simulator-metrics dt { color: #e0edf6; }
+.edu-simulator-metrics div:first-child dd { font-size: clamp(2.4rem, 4.6vw, 4rem); line-height: 1.12; letter-spacing: -.035em; }
+.edu-simulator-metrics div + div { margin-top: 16px; padding-top: 12px; border-top: 1px solid #ffffff38; }
+.edu-simulator-metrics div + div dd { font-size: 1.5rem; }
 .edu-simulator-placeholder { min-height: 8rem; color: var(--edu-muted); }
 .edu-simulator-plan, .edu-simulator-next { grid-column: 1 / -1; }
 .edu-simulator-policy-version { margin: 1rem 0; }
 .edu-simulator-plan > summary { cursor: pointer; font-weight: 700; color: var(--edu-night); }
-.edu-simulator-controls .edu-field, .edu-simulator-field-heading label,
+.edu-simulator-controls .edu-field, .edu-simulator-controls .edu-simulator-field-heading label,
 .edu-simulator-overview .edu-eyebrow { margin: 0; }
-.edu-simulator-overview .edu-eyebrow { color: #006778; }
 .edu-simulator-field-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
-.edu-simulator-field-heading span { font-weight: 700; color: var(--edu-night); font-variant-numeric: tabular-nums; }
+.edu-simulator-field-heading span { font-weight: 700; color: #065f75; font-variant-numeric: tabular-nums; }
+.edu-simulator-controls [data-amount-controls] { display: grid; gap: 8px; }
+.edu-simulator-range-scale, .edu-simulator-presets { display: flex; gap: 6px; flex-wrap: wrap; }
+.edu-simulator-range-scale {
+    justify-content: space-between;
+    font-size: .8rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--edu-muted);
+}
+.edu-simulator-presets { margin-top: 8px; }
+.edu-simulator-presets button {
+    padding: 4px 9px;
+    border: 1px solid #b8d6e2;
+    border-radius: 6px;
+    background: #f1f8fa;
+    color: #075d79;
+    font: inherit;
+    font-size: .83rem;
+    font-weight: 700;
+    min-height: 32px;
+    cursor: pointer;
+}
+.edu-simulator-presets button:hover { background: #dff1f6; }
+.edu-simulator-edit-amount {
+    justify-self: start;
+    min-height: 30px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: #075d79;
+    font: inherit;
+    font-size: .87rem;
+    font-weight: 700;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    cursor: pointer;
+}
+.edu-simulator-presets button:focus-visible,
+.edu-simulator-edit-amount:focus-visible,
+.edu-simulator-partner-link:focus-visible {
+    outline: 2px solid var(--edu-night);
+    outline-offset: 2px;
+}
+.edu-simulator-next .edu-simulator-cta {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 10px 18px;
+    background: #075f7e;
+    border-radius: 8px;
+    color: white;
+    font-weight: 700;
+    text-decoration: none;
+}
+.edu-simulator-next .edu-simulator-cta:hover { background: #084965; }
 .edu-simulator-scenario { margin: 6px 0; font-size: .86rem; color: var(--edu-night); }
 .edu-simulator-disclaimer { margin: 6px 0 0; }
 .edu-simulator-controls .edu-field input.edu-simulator-range[type="range"] {
-    appearance: none; width: 100%; min-height: 32px; height: 32px; padding: 0; margin: 0;
+    appearance: none; width: 100%; min-height: 38px; height: 38px; padding: 0; margin: 0;
     cursor: pointer; border: 0; box-shadow: none; border-radius: 0; touch-action: pan-y;
     background: linear-gradient(to right, #078998 var(--range-progress), #d7e2e8 var(--range-progress)) center / 100% 5px no-repeat;
 }
@@ -958,13 +1035,15 @@ body.edu-camera-page {
 }
 
 @media (max-width: 820px) {
-    .edu-simulator-heading { flex-direction: column; align-items: flex-start; gap: 8px; margin-bottom: 12px; }
-    .edu-simulator-heading h1 { margin: 0 0 4px; }
-    .edu-simulator-brands { padding: 6px 12px; }
-    .edu-simulator-layout { gap: 8px; }
+    .edu-simulator-heading { align-items: flex-start; gap: 12px; margin-bottom: 16px; }
+    .edu-simulator-heading h1 { margin-bottom: 5px; }
+    .edu-simulator-partner { padding: 8px 12px; }
+    .edu-simulator-brands img { width: min(48%, 128px); }
+    .edu-simulator-brands img + img { width: min(44%, 106px); }
+    .edu-simulator-layout { gap: 12px; }
     .edu-simulator-metrics { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
     .edu-simulator-metrics dt { font-size: .82rem; }
-    .edu-simulator-metrics div:first-child dd { font-size: 1.65rem; }
+    .edu-simulator-metrics div:first-child dd { font-size: clamp(1.55rem, 7vw, 2.25rem); }
     .edu-simulator-metrics div + div { border: 0; margin: 0; padding: 0; }
     .edu-simulator-layout {
         grid-template-columns: 1fr;
@@ -982,8 +1061,11 @@ body.edu-camera-page {
 
     .edu-simulator-controls,
     .edu-simulator-overview {
-        padding: 12px 16px;
+        padding: 16px;
     }
+
+    .edu-simulator-controls { gap: 10px; }
+    .edu-simulator-metrics { margin: 8px 0; }
 
     .edu-simulator-results-heading,
     .edu-finance-simulator-link {
