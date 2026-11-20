@@ -2,7 +2,7 @@
 
 ## Direcciones y selección de marca
 
-La URL para compartir después del despliegue es `https://aprobado.com.co/financiacion-educativa/simulador/jowalth/`. La entrada genérica es `/financiacion-educativa/simulador/`. Django elige la presentación pública al resolver la ruta. Ambas rutas usan el formulario público, el cálculo y el límite de consultas existentes. El POST HTML vuelve a su propia ruta.
+La URL para compartir después del despliegue es `https://api.aprobado.com.co/financiacion-educativa/simulador/jowalth/`. La entrada genérica es `/financiacion-educativa/simulador/`. Django elige la presentación pública al resolver la ruta. Ambas rutas usan el formulario público, el cálculo y el límite de consultas existentes. El POST HTML vuelve a su propia ruta.
 
 El simulador del expediente y los correos dirigidos al solicitante usan el perfil `JOWALTH_ACADEMY` de la institución asociada. La identidad se conserva aunque cambie el nombre comercial. Las solicitudes sin ese perfil, los avisos internos, las copias institucionales y las de auditoría usan la presentación genérica. Se mantienen los destinatarios que cada evento ya autoriza.
 
