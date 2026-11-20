@@ -49,6 +49,21 @@ class SimuladorFinanciacionEducativaTests(TestCase):
         self.client.force_login(self.otro_usuario)
         self.assertEqual(self.client.get(self.pagina_url).status_code, 404)
 
+    def test_mismo_escenario_en_las_tres_entradas(self):
+        perfil = self.solicitud.institucion.configuracion_anexo_matricula
+        perfil.perfil = 'JOWALTH_ACADEMY'
+        perfil.save(update_fields=['perfil'])
+        self.client.force_login(self.usuario)
+        datos = {'monto_solicitado': '1000000', 'plazo_meses': '3'}
+        expediente = self.client.post(self.pagina_url, datos)
+        self.assertContains(expediente, 'alt="Loopiter"')
+        anonimo = Client()
+        for nombre in ('simulador-publico', 'simulador-publico-jowalth'):
+            with self.subTest(nombre=nombre):
+                publico = anonimo.post(reverse(f'financiacion_educativa_web:{nombre}'), datos)
+                self.assertEqual(expediente.context['simulacion'].resultado, publico.context['simulacion'].resultado)
+        self.assert_sin_persistencia_financiera()
+
     def test_pagina_muestra_todos_los_componentes_sin_persistir(self):
         self.client.force_login(self.usuario)
 
@@ -56,6 +71,8 @@ class SimuladorFinanciacionEducativaTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Simulador de cr&eacute;dito educativo')
+        self.assertNotContains(response, 'images/simulador/')
+        self.assertContains(response, 'Ver detalle de los costos')
         self.assertContains(response, 'Originaci&oacute;n')
         self.assertContains(response, 'IVA sobre originaci&oacute;n')
         self.assertContains(response, 'Figarantias')
@@ -63,7 +80,7 @@ class SimuladorFinanciacionEducativaTests(TestCase):
         self.assertContains(response, 'Capital financiado')
         self.assertContains(response, 'Intereses proyectados')
         self.assertContains(response, 'Cuota mensual estimada')
-        self.assertContains(response, 'Total proyectado')
+        self.assertContains(response, 'Total estimado por pagar')
         self.assertContains(response, '1 % mensual')
         self.assertNotContains(response, 'M&eacute;todo de c&aacute;lculo')
         self.assertNotContains(response, 'Anualidad francesa')
@@ -96,6 +113,24 @@ class SimuladorPublicoFinanciacionEducativaTests(TestCase):
             'financiacion_educativa_web:simulador-publico-calcular'
         )
 
+    def test_ruta_jowalth_comparte_calculo_limites_csrf_y_cupo(self):
+        jowalth = reverse('financiacion_educativa_web:simulador-publico-jowalth')
+        datos = {'monto_solicitado': '1000000', 'plazo_meses': '3'}
+        self.assertContains(self.client.get(jowalth), 'alt="Loopiter"')
+        self.assertNotContains(self.client.get(self.pagina_url, {'jowalth': '1'}), 'alt="Loopiter"')
+        self.assertEqual(Client(enforce_csrf_checks=True).post(jowalth, datos).status_code, 403)
+        invalida = self.client.post(jowalth, {**datos, 'plazo_meses': '121'})
+        self.assertContains(invalida, 'alt="FUNDETEC"')
+        self.assertIsNone(invalida.context['simulacion'])
+        cache.clear()
+        with override_settings(FINANCIACION_EDUCATIVA_PUBLIC_SIMULATOR_RATE_LIMIT_REQUESTS=2):
+            generica = self.client.post(self.pagina_url, datos)
+            marca = self.client.post(jowalth, datos)
+            self.assertEqual(marca.context['simulacion'].resultado, generica.context['simulacion'].resultado)
+            limitada = self.client.post(jowalth, datos)
+            self.assertContains(limitada, 'alt="Loopiter"', status_code=429)
+            self.assertEqual(self.client.post(self.calcular_url, datos).status_code, 429)
+
     def test_pagina_es_publica_y_muestra_desglose_plan_y_enlaces(self):
         response = self.client.get(self.pagina_url)
 
@@ -104,8 +139,8 @@ class SimuladorPublicoFinanciacionEducativaTests(TestCase):
         self.assertContains(response, 'Figarantias')
         self.assertContains(response, 'SURA')
         self.assertContains(response, 'Capital financiado')
-        self.assertContains(response, 'Total por pagar')
-        self.assertContains(response, 'Cuota aproximada')
+        self.assertContains(response, 'Total estimado por pagar')
+        self.assertContains(response, 'Cuota mensual estimada')
         self.assertNotContains(response, 'M&eacute;todo de c&aacute;lculo')
         self.assertNotContains(response, 'Anualidad francesa')
         self.assertContains(response, 'edu-public-simulator-page')

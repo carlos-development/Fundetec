@@ -3,6 +3,7 @@ from django.core.mail import EmailMultiAlternatives
 from django.template.loader import render_to_string
 
 from financiacion_educativa.services.correos import obtener_email_logo_url
+from financiacion_educativa.services.marca_institucional import logos_correo_de_solicitud
 from financiacion_educativa.templatetags.recaudo_format import cop_recaudo
 
 
@@ -39,6 +40,7 @@ def construir_correo_pago(*, outbox, connection=None):
     contexto = {**PRESENTACIONES_PAGO[codigo], 'brand_name': 'Aprobado',
         'referencia': reporte.solicitud.referencia_externa, 'importe': cop_recaudo(importe),
         'cuota': aplicacion.cuota.numero if codigo == 'BREB_PAYMENT_APPLIED' else None,
+        'logos_institucionales': logos_correo_de_solicitud(reporte.solicitud),
         'email_logo_url': obtener_email_logo_url()}
     mensaje = EmailMultiAlternatives(subject=contexto['titulo'] + ' | Aprobado',
         body=render_to_string('emails/financiacion_educativa/pago_breb.txt', contexto),

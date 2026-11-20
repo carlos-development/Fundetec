@@ -29,6 +29,7 @@ urlpatterns = [
         ),
     ),
     path('simulador/', views.simulador_publico_view, name='simulador-publico'),
+    path('simulador/jowalth/', views.simulador_publico_view, {'jowalth': True}, name='simulador-publico-jowalth'),
     path(
         'simulador/calcular/',
         views.calcular_simulacion_publica_view,

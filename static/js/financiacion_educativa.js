@@ -148,7 +148,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
 
     const simulator = document.querySelector('[data-education-simulator]');
-    if (simulator) {
+    if (simulator && window.fetch && window.AbortController) {
         const form = simulator.querySelector('[data-simulator-form]');
         const amount = form.querySelector('[name="monto_solicitado"]');
         const term = form.querySelector('[name="plazo_meses"]');
@@ -156,24 +156,57 @@ document.addEventListener('DOMContentLoaded', function () {
         const status = simulator.querySelector('[data-simulator-status]');
         const results = simulator.querySelector('.edu-simulator-results');
         const version = simulator.querySelector('[data-simulator-version]');
+        const retry = form.querySelector('[data-simulator-retry]');
+        const manual = form.querySelector('[data-simulator-manual]');
+        const heading = simulator.querySelector('[data-estimate-title]');
+        const scenario = simulator.querySelector('[data-estimate-for]');
+        const placeholder = simulator.querySelector('[data-simulator-placeholder]');
         const csrf = form.querySelector('[name="csrfmiddlewaretoken"]').value;
         const cop = new Intl.NumberFormat('es-CO', {
             style: 'currency',
             currency: 'COP',
             maximumFractionDigits: 0
         });
-        let timer = null;
-        let activeRequest = null;
-        let revision = 0;
-        const planSection = document.querySelector('.edu-simulator-plan');
+        const amountFormat = new Intl.NumberFormat('es-CO', {
+            style: 'currency', currency: 'COP', minimumFractionDigits: 0, maximumFractionDigits: 2
+        });
+        const planSection = simulator.querySelector('.edu-simulator-plan');
+        const detailScenario = planSection.querySelector('[data-detail-scenario]');
+        let timer;
+        let request;
+        let gesture = null;
+        let lastSample = 0;
+        let selected = selection();
+        let shown = results.hidden ? null : selected;
 
-        function invalidate() {
-            revision += 1;
-            if (activeRequest) activeRequest.abort();
+        function selection() {
+            return {amount: amount.value, term: term.value};
+        }
+
+        function same(a, b) {
+            return a && b && a.amount === b.amount && a.term === b.term;
+        }
+
+        function labelAmount(value) {
+            return amountFormat.format(Number(value));
+        }
+
+        function labelTerm(value) {
+            return value + (Number(value) === 1 ? ' mes' : ' meses');
+        }
+
+        function describeEstimate() {
+            if (!shown) return;
+            const current = same(selected, shown);
+            heading.textContent = current ? 'Resultado informativo' : 'Última estimación';
+            scenario.textContent = 'Para ' + labelAmount(shown.amount) + ' a ' + labelTerm(shown.term);
+            detailScenario.textContent = heading.textContent + ' · ' + scenario.textContent;
+        }
+
+        function cancelRequest() {
+            if (request) request.controller.abort();
+            request = null;
             results.setAttribute('aria-busy', 'false');
-            results.hidden = true;
-            if (planSection) planSection.hidden = true;
-            status.textContent = 'Cambios pendientes de calcular.';
         }
 
         function percent(value) {
@@ -220,60 +253,151 @@ document.addEventListener('DOMContentLoaded', function () {
 
         async function calculate() {
             window.clearTimeout(timer);
-            invalidate();
-            const currentRevision = revision;
+            timer = null;
+            if (same(request?.values, selected)) return;
+            cancelRequest();
             if (!amount.checkValidity() || !term.checkValidity()) {
                 error.textContent = 'Revisa el monto y el plazo indicados.';
                 error.hidden = false;
+                status.textContent = '';
                 return;
             }
-            if (activeRequest) activeRequest.abort();
-            activeRequest = new AbortController();
+            if (same(shown, selected)) {
+                status.textContent = 'Resultado actualizado.';
+                return;
+            }
+            const pending = {values: selected, gesture: gesture, controller: new AbortController()};
+            request = pending;
+            lastSample = performance.now();
             results.setAttribute('aria-busy', 'true');
-            status.textContent = 'Actualizando resultado...';
+            status.textContent = 'Calculando…';
+            retry.hidden = true;
             error.hidden = true;
-            const data = new FormData(form);
             try {
                 const response = await fetch(simulator.dataset.calculateUrl, {
-                    method: 'POST',
-                    body: data,
-                    credentials: 'same-origin',
-                    headers: {'X-CSRFToken': csrf},
-                    signal: activeRequest.signal
+                    method: 'POST', body: new FormData(form), credentials: 'same-origin',
+                    headers: {'X-CSRFToken': csrf}, signal: pending.controller.signal
                 });
                 const payload = await response.json();
-                if (currentRevision !== revision) return;
+                if (request !== pending) return;
+                const current = same(selected, pending.values);
+                // During one drag a completed sample may be shown with its own inputs.
+                // A release or a newer request retires that sample.
+                if (!current && (!gesture || gesture !== pending.gesture || same(shown, selected))) return;
                 if (!response.ok || !payload.ok) {
-                    throw new Error(payload.error || 'No fue posible actualizar la simulacion.');
+                    throw new Error(payload.error || 'No fue posible actualizar la simulación.');
                 }
                 showSimulation(payload.simulation);
+                shown = pending.values;
+                describeEstimate();
                 results.hidden = false;
-                if (planSection) planSection.hidden = false;
-                status.textContent = 'Resultado actualizado.';
+                placeholder.hidden = true;
+                planSection.hidden = false;
+                status.textContent = current ? 'Resultado actualizado.' : 'Calculando…';
             } catch (requestError) {
-                if (requestError.name === 'AbortError' || currentRevision !== revision) return;
-                error.textContent = requestError.message || 'No fue posible actualizar la simulacion.';
+                if (request !== pending || !same(selected, pending.values)) return;
+                error.textContent = requestError instanceof TypeError || requestError instanceof SyntaxError
+                    ? 'No se pudo consultar la cuota. Revisa tu conexión y vuelve a intentar.'
+                    : requestError.message;
+                retry.hidden = false;
                 error.hidden = false;
                 status.textContent = '';
             } finally {
-                if (currentRevision === revision) results.setAttribute('aria-busy', 'false');
+                if (request === pending) {
+                    request = null;
+                    results.setAttribute('aria-busy', 'false');
+                    if (gesture && !same(selected, pending.values)) queueSample();
+                }
             }
         }
 
-        function scheduleCalculation() {
-            invalidate();
-            window.clearTimeout(timer);
-            timer = window.setTimeout(calculate, 300);
+        function queueSample() {
+            if (request || timer != null) return;
+            // Allow a slow intermediate request to finish. Release flushes the final selection.
+            const delay = lastSample ? Math.max(0, 2200 - (performance.now() - lastSample)) : 300;
+            timer = window.setTimeout(calculate, delay);
         }
 
-        amount.addEventListener('input', scheduleCalculation);
-        term.addEventListener('input', scheduleCalculation);
-        amount.addEventListener('change', scheduleCalculation);
-        term.addEventListener('change', scheduleCalculation);
+        function showSelection(input) {
+            if (input.type !== 'range') return;
+            const value = input === amount ? labelAmount(input.value) : labelTerm(input.value);
+            form.querySelector('[data-selection="' + input.name + '"]').textContent = value;
+            input.setAttribute('aria-valuetext', value);
+            const span = Number(input.max) - Number(input.min);
+            const progress = span ? 100 * (Number(input.value) - Number(input.min)) / span : 0;
+            input.style.setProperty('--range-progress', progress + '%');
+        }
+
+        function changed(input) {
+            showSelection(input);
+            const values = selection();
+            if (same(values, selected)) return;
+            selected = values;
+            describeEstimate();
+            error.hidden = true;
+            retry.hidden = true;
+            status.textContent = 'Calculando…';
+            if (gesture) {
+                queueSample();
+            } else {
+                cancelRequest();
+                window.clearTimeout(timer);
+                timer = window.setTimeout(calculate, 300);
+            }
+        }
+
+        function beginGesture(input) {
+            if (gesture?.input === input) return;
+            window.clearTimeout(timer);
+            timer = null;
+            cancelRequest();
+            gesture = {input: input};
+            lastSample = 0;
+        }
+
+        function finishGesture() {
+            if (!gesture) return;
+            gesture = null;
+            calculate();
+        }
+
+        // Enhance the bound Django inputs in place. Keep both fields when an amount cap is absent.
+        const useRanges = [amount, term].every(input => input.min && input.max && input.validity.valid);
+        const rangeKeys = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End'];
+        [amount, term].forEach(function (input) {
+            if (useRanges) {
+                input.type = 'range';
+                input.classList.add('edu-simulator-range');
+                form.querySelector('[data-selection="' + input.name + '"]').hidden = false;
+                showSelection(input);
+                input.addEventListener('pointerdown', () => beginGesture(input));
+                input.addEventListener('keydown', event => {
+                    if (rangeKeys.includes(event.key)) beginGesture(input);
+                });
+                input.addEventListener('keyup', event => {
+                    if (rangeKeys.includes(event.key)) finishGesture();
+                });
+                input.addEventListener('blur', finishGesture);
+            }
+            input.addEventListener('input', () => changed(input));
+            input.addEventListener('change', () => {
+                changed(input);
+                if (!gesture) calculate();
+            });
+        });
+        window.addEventListener('pointerup', finishGesture);
+        window.addEventListener('pointercancel', finishGesture);
+        describeEstimate();
+        retry.addEventListener('click', calculate);
+        if (results.hidden && !error.hidden && form.checkValidity()) retry.hidden = false;
+        manual.hidden = true;
         window.addEventListener('pagehide', function () {
             window.clearTimeout(timer);
-            revision += 1;
-            if (activeRequest) activeRequest.abort();
+            cancelRequest();
+            gesture = null;
+        });
+        window.addEventListener('pageshow', event => {
+            if (event.persisted && !same(shown, selected)) calculate();
         });
         form.addEventListener('submit', function (event) {
             event.preventDefault();

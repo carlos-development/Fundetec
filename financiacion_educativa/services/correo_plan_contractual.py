@@ -6,6 +6,7 @@ from django.template.loader import render_to_string
 from django.urls import reverse
 
 from .correos import ConfiguracionSMTPInvalida, obtener_email_logo_url
+from financiacion_educativa.services.marca_institucional import logos_correo_de_solicitud
 
 
 def construir_correo_plan(*, outbox, connection=None):
@@ -16,6 +17,7 @@ def construir_correo_plan(*, outbox, connection=None):
             or partes.query or partes.fragment or partes.path not in ('', '/') or not logo):
         raise ConfiguracionSMTPInvalida('El aviso requiere portal HTTPS y logo oficial configurados.')
     contexto = {'brand_name': 'Aprobado', 'email_logo_url': logo,
+        'logos_institucionales': logos_correo_de_solicitud(outbox.solicitud),
         'portal_url': base + reverse('financiacion_educativa_web:finanzas', args=[outbox.solicitud_id])}
     mensaje = EmailMultiAlternatives(subject='Tu plan contractual est\u00e1 disponible | Aprobado',
         body=render_to_string('emails/financiacion_educativa/plan_contractual_disponible.txt', contexto),

@@ -253,7 +253,7 @@ def emitir_enlace_captura_movil(*, solicitud, persona, actor):
 
 class DjangoEmailMobileCaptureDeliveryBackend:
     def deliver(
-        self, *, recipient, continuation_url, expires_at, message_id=None
+        self, *, recipient, continuation_url, expires_at, message_id=None, email_context=None
     ):
         if settings.EMAIL_BACKEND in SMTP_BACKENDS:
             validar_configuracion_smtp()
@@ -264,6 +264,7 @@ class DjangoEmailMobileCaptureDeliveryBackend:
         timeout = int(getattr(settings, 'EMAIL_TIMEOUT', 10))
         connection = get_connection(timeout=max(1, timeout))
         message = construir_correo_captura_movil(
+            logos_institucionales=(email_context or {}).get('logos_institucionales', ()),
             recipient=recipient,
             continuation_url=continuation_url,
             expires_at=expires_at,

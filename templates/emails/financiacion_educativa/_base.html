@@ -34,7 +34,16 @@
         <tr><td class="fluid-pad" style="padding:28px 40px 8px;" align="left">
           {% if email_logo_url %}<img src="{{ email_logo_url }}" width="160" alt="Aprobado" style="display:block;width:160px;max-width:100%;height:auto;">{% else %}<strong style="display:inline-block;font-size:22px;line-height:28px;color:#0B2E59;letter-spacing:0;font-family:'Segoe UI',Helvetica,Arial,sans-serif;">APROBADO</strong>{% endif %}
         </td></tr>
-        <tr><td class="fluid-pad" style="padding:20px 40px 32px;">{% block content %}{% endblock %}</td></tr>
+        <tr><td class="fluid-pad" style="padding:20px 40px {% if logos_institucionales %}12px{% else %}32px{% endif %};">{% block content %}{% endblock %}</td></tr>
+        {% if logos_institucionales %}
+        <tr><td class="fluid-pad" align="center" style="padding:0 40px 18px;background-color:#FFFFFF;" bgcolor="#FFFFFF">
+          <table role="presentation" align="center" cellspacing="0" cellpadding="0" border="0"><tr>
+            {% for nombre, url, ancho in logos_institucionales %}
+            <td valign="middle" {% if not forloop.last %}style="padding-right:48px;"{% endif %}><img src="{{ url }}" width="{{ ancho }}" alt="{{ nombre }}" style="display:block;width:{{ ancho }}px;height:auto;color:#0B2E59;font:14px/20px Arial,sans-serif;"></td>
+            {% endfor %}
+          </tr></table>
+        </td></tr>
+        {% endif %}
         <tr><td class="fluid-pad" align="center" style="padding:22px 40px 28px;background-color:#F5F8FC;border-top:1px solid #E6EBF2;">
           <p style="margin:0 0 8px;font-size:11px;line-height:16px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#8A97A8;">Aprobado</p>
           <p style="margin:0;font-size:12px;line-height:18px;color:#8A97A8;">Mensaje enviado por <strong style="color:#5B6B82;">{{ brand_name }}</strong>. No respondas con documentos, contrase&ntilde;as ni informaci&oacute;n sensible.</p>

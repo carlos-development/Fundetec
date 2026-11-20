@@ -104,6 +104,7 @@ from financiacion_educativa.services.proyecciones_financieras import (
 from financiacion_educativa.services.simulacion import (
     simular_financiacion_educativa,
 )
+from financiacion_educativa.services.marca_institucional import LOGOS_JOWALTH, logos_de_solicitud
 from financiacion_educativa.services.simulador_publico import (
     limite_simulador_publico_excedido,
 )
@@ -1718,7 +1719,8 @@ def _simulacion_inicial(form_class, datos):
 
 @never_cache
 @require_http_methods(['GET', 'POST'])
-def simulador_publico_view(request):
+def simulador_publico_view(request, *, jowalth=False):
+    presentacion = {'simulador_publico': True, 'logos_institucionales': LOGOS_JOWALTH if jowalth else ()}
     datos = {
         'monto_solicitado': (
             settings.FINANCIACION_EDUCATIVA_PUBLIC_SIMULATOR_INITIAL_AMOUNT
@@ -1731,7 +1733,7 @@ def simulador_publico_view(request):
         if limite_simulador_publico_excedido(request):
             return render(request, 'financiacion_educativa/simulador.html', {
                 'form': SimulacionPublicaFinanciacionEducativaForm(request.POST),
-                'simulador_publico': True,
+                **presentacion,
                 'error': 'Se alcanzo el limite temporal de simulaciones. Intenta de nuevo en un momento.',
             }, status=429)
         datos = request.POST
@@ -1750,7 +1752,7 @@ def simulador_publico_view(request):
             'form': form,
             'simulacion': simulacion,
             'error': error,
-            'simulador_publico': True,
+            **presentacion,
         },
     )
 
@@ -1805,6 +1807,7 @@ def simulador_view(request, solicitud_id):
         'financiacion_educativa/simulador.html',
         {
             'solicitud': solicitud,
+            'logos_institucionales': logos_de_solicitud(solicitud),
             'form': form,
             'simulacion': simulacion,
             'error': error,

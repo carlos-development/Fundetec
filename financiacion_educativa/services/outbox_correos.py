@@ -50,6 +50,7 @@ from financiacion_educativa.services.correos import (
     normalizar_destinatario,
     validar_configuracion_smtp,
 )
+from financiacion_educativa.services.marca_institucional import logos_correo_de_solicitud
 from financiacion_educativa.services.notificaciones_pagos import CODIGOS_PAGO
 from financiacion_educativa.services.notificaciones_plan_contractual import CODIGO_PLAN
 
@@ -712,6 +713,7 @@ def _construir_mensaje(outbox, connection_mail):
         )
     elif outbox.codigo_mensaje == CodigoMensajeCorreoEducativo.DOSSIER_RECEIVED:
         mensaje = construir_correo_expediente_recibido(
+            solicitud=outbox.solicitud,
             recipient=outbox.destinatarios[0],
             referencia_externa=outbox.solicitud.referencia_externa,
             program_name=outbox.solicitud.institucion.nombre_comercial,
@@ -726,6 +728,7 @@ def _construir_mensaje(outbox, connection_mail):
         )
     elif outbox.codigo_mensaje == CodigoMensajeCorreoEducativo.AUTOMATIC_CORRECTION:
         mensaje = construir_correo_correccion_automatica(
+            solicitud=outbox.solicitud,
             recipient=outbox.destinatarios[0],
             requisitos=outbox.contexto.get('requirements', []),
             razones=outbox.contexto.get('reasons', {}),
@@ -733,6 +736,7 @@ def _construir_mensaje(outbox, connection_mail):
         )
     elif outbox.codigo_mensaje == CodigoMensajeCorreoEducativo.AUTOMATIC_CONTINUATION:
         mensaje = construir_correo_continuacion_automatica(
+            solicitud=outbox.solicitud,
             recipient=outbox.destinatarios[0],
             connection=connection_mail,
         )
@@ -782,6 +786,7 @@ def _entregar(outbox, lease_id):
             continuation_url=url,
             expires_at=vence_en,
             email_context={
+                'logos_institucionales': logos_correo_de_solicitud(outbox.solicitud),
                 'event_type': outbox.tipo_evento,
                 'first_name': (
                     str(outbox.solicitud.nombres or '').strip().split(' ')[0]

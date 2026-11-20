@@ -1,5 +1,5 @@
 {% extends "financiacion_educativa/_base.html" %}
-{% load financiacion_format %}
+{% load financiacion_format static %}
 
 {% block title %}Simulador educativo | {{ education_brand.name|default:"Aprobado" }}{% endblock %}
 {% block body_class %}{% if simulador_publico %}edu-public-simulator-page{% endif %}{% endblock %}
@@ -9,14 +9,22 @@
 <section class="edu-simulator-band">
     <div class="edu-simulator-shell">
         <header class="edu-simulator-heading">
-            {% if not simulador_publico %}
-                <a class="edu-inline-link" href="{% url 'financiacion_educativa_web:documentacion' solicitud.id %}">
-                    <i class="bi bi-arrow-left" aria-hidden="true"></i> Volver al expediente
-                </a>
+            <div>
+                {% if not simulador_publico %}
+                    <a class="edu-inline-link" href="{% url 'financiacion_educativa_web:documentacion' solicitud.id %}">
+                        <i class="bi bi-arrow-left" aria-hidden="true"></i> Volver al expediente
+                    </a>
+                {% endif %}
+                <h1>Simulador de cr&eacute;dito educativo</h1>
+                <p>Ajusta el monto y el plazo para ver tu cuota mensual en pesos.</p>
+            </div>
+            {% if logos_institucionales %}
+                <div class="edu-simulator-brands" aria-label="Aliados de Jowalth Academy">
+                    {% for nombre, archivo, ancho in logos_institucionales %}
+                        <img src="{% static archivo %}" alt="{{ nombre }}">
+                    {% endfor %}
+                </div>
             {% endif %}
-            <p class="edu-eyebrow">Financiaci&oacute;n educativa</p>
-            <h1>Simulador de cr&eacute;dito educativo</h1>
-            <p>Explora una cuota estimada con la pol&iacute;tica financiera vigente. Los datos originales enviados por la instituci&oacute;n no se modifican.</p>
         </header>
 
         <div
@@ -26,57 +34,46 @@
         >
             <form class="edu-simulator-controls" data-simulator-form data-loader="off" method="post" action="{{ request.path }}">
                 {% csrf_token %}
-                {% if simulador_publico %}
-                    <div class="edu-simulator-request">
-                        <span>Escenario p&uacute;blico</span>
-                        <strong>Sin registro y sin modificar solicitudes</strong>
-                    </div>
-                {% else %}
-                    <div class="edu-simulator-request">
-                        <span>Solicitud institucional</span>
-                        <strong>{{ solicitud.valor_plan|cop }} a {{ solicitud.plazo_meses }} meses</strong>
-                    </div>
+                {% if not simulador_publico %}
+                    <p class="edu-simulator-request">Solicitud institucional · {{ solicitud.valor_plan|cop }} a {{ solicitud.plazo_meses }} meses</p>
                 {% endif %}
-
-                <div class="edu-field">
-                    <label for="{{ form.monto_solicitado.id_for_label }}">{{ form.monto_solicitado.label }}</label>
-                    <div class="edu-money-input">
-                        <span aria-hidden="true">$</span>
-                        {{ form.monto_solicitado }}
+                {% for field in form %}
+                    <div class="edu-field">
+                        <div class="edu-simulator-field-heading">
+                            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                            <span data-selection="{{ field.name }}" aria-hidden="true" hidden></span>
+                        </div>
+                        {{ field }}
+                        {% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}
                     </div>
-                    <small>Valor del escenario informativo en pesos colombianos.</small>
-                </div>
-
-                <div class="edu-field">
-                    <label for="{{ form.plazo_meses.id_for_label }}">{{ form.plazo_meses.label }}</label>
-                    {{ form.plazo_meses }}
-                    <small>{{ form.plazo_meses.help_text }}</small>
-                </div>
-
-                <div class="edu-simulator-policy" aria-label="Pol&iacute;tica aplicada">
-                    <i class="bi bi-shield-check" aria-hidden="true"></i>
-                    <div>
-                        <strong>Motor financiero educativo</strong>
-                        <span>M&eacute;todo franc&eacute;s, cargos financiados y redondeo final al peso.</span>
-                    </div>
-                </div>
-
+                {% endfor %}
                 <p class="edu-form-error" data-simulator-error role="alert" {% if not error %}hidden{% endif %}>{{ error }}</p>
-                <button type="submit" class="edu-button-primary"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i> Actualizar simulación</button>
+                <button type="button" class="edu-button-secondary" data-simulator-retry hidden>Reintentar</button>
+                <button type="submit" data-simulator-manual class="edu-button-secondary">Actualizar simulación</button>
                 <p class="edu-simulator-status" data-simulator-status aria-live="polite"></p>
             </form>
 
-            <section class="edu-simulator-results" aria-labelledby="simulation-results-title" aria-busy="false" aria-live="polite" {% if not simulacion %}hidden{% endif %}>
-                <div class="edu-simulator-results-heading">
+            <div class="edu-simulator-overview">
+                <p class="edu-eyebrow" data-estimate-title>Resultado informativo</p>
+                <section class="edu-simulator-results" aria-label="Estimación del crédito" aria-busy="false" aria-live="polite" {% if not simulacion %}hidden{% endif %}>
+                    <dl class="edu-simulator-metrics">
+                        <div><dt>Cuota mensual estimada</dt><dd data-simulator-result="cuota_informativa">{% if simulacion %}{{ simulacion.resultado.cuota_informativa|cop }}{% endif %}</dd></div>
+                        <div><dt>Total estimado por pagar</dt><dd data-simulator-result="total_proyectado">{% if simulacion %}{{ simulacion.resultado.total_proyectado|cop }}{% endif %}</dd></div>
+                    </dl>
+                    <p class="edu-simulator-scenario" data-estimate-for>{% if simulacion %}Para {{ form.monto_solicitado.value|floatformat:"-2g" }} COP a {{ form.plazo_meses.value }} {{ form.plazo_meses.value|pluralize:"mes,meses" }}{% endif %}</p>
+                </section>
+                <p class="edu-simulator-placeholder" data-simulator-placeholder {% if simulacion %}hidden{% endif %}>Completa los datos para ver tu estimación.</p>
+                <p class="edu-simulator-disclaimer">Estimación informativa en pesos colombianos. No constituye aprobación ni modifica tu solicitud.</p>
+            </div>
+            <details class="edu-simulator-plan" {% if not simulacion %}hidden{% endif %}>
+                <summary>Ver detalle de los costos</summary>
+                <p class="edu-simulator-scenario" data-detail-scenario></p>
+                <div class="edu-simulator-policy edu-simulator-policy-version">
                     <div>
-                        <p class="edu-eyebrow">Resultado informativo</p>
-                        <h2 id="simulation-results-title">Detalle de la financiaci&oacute;n</h2>
+                        <strong>Política financiera <span class="edu-badge" data-simulator-version>{% if simulacion %}{{ simulacion.configuracion.codigo }} v{{ simulacion.configuracion.version }}{% endif %}</span></strong>
+                        <span>Método francés, cargos financiados y redondeo final al peso.</span>
                     </div>
-                    <span class="edu-badge" data-simulator-version>
-                        {% if simulacion %}{{ simulacion.configuracion.codigo }} v{{ simulacion.configuracion.version }}{% else %}Sin pol&iacute;tica{% endif %}
-                    </span>
                 </div>
-
                 <dl class="edu-simulator-breakdown">
                     <div><dt>Monto solicitado</dt><dd data-simulator-result="monto_solicitado">{% if simulacion %}{{ simulacion.resultado.monto_solicitado|cop }}{% else %}&mdash;{% endif %}</dd></div>
                     <div><dt>Originaci&oacute;n <span data-simulator-rate="porcentaje_originacion">{% if simulacion %}({{ simulacion.configuracion.porcentaje_originacion|porcentaje }} %){% endif %}</span></dt><dd data-simulator-result="valor_originacion">{% if simulacion %}{{ simulacion.resultado.valor_originacion|cop }}{% else %}&mdash;{% endif %}</dd></div>
@@ -85,11 +82,45 @@
                     <div><dt>Seguro de vida &middot; <span data-simulator-provider="proveedor_seguro_vida">{% if simulacion %}{{ simulacion.configuracion.proveedor_seguro_vida }}{% else %}Proveedor{% endif %}</span> <span data-simulator-rate="porcentaje_seguro_vida">{% if simulacion %}({{ simulacion.configuracion.porcentaje_seguro_vida|porcentaje }} %){% endif %}</span></dt><dd data-simulator-result="valor_seguro_vida">{% if simulacion %}{{ simulacion.resultado.valor_seguro_vida|cop }}{% else %}&mdash;{% endif %}</dd></div>
                     <div class="is-subtotal"><dt>Capital financiado</dt><dd data-simulator-result="capital_total_financiado">{% if simulacion %}{{ simulacion.resultado.capital_total_financiado|cop }}{% else %}&mdash;{% endif %}</dd></div>
                     <div><dt>Intereses proyectados <span data-simulator-rate="tasa_interes_mensual">{% if simulacion %}({{ simulacion.configuracion.tasa_interes_mensual|porcentaje }} % mensual){% endif %}</span></dt><dd data-simulator-result="intereses_totales">{% if simulacion %}{{ simulacion.resultado.intereses_totales|cop }}{% else %}&mdash;{% endif %}</dd></div>
-                    <div><dt>{% if simulador_publico %}Total por pagar{% else %}Total proyectado{% endif %}</dt><dd data-simulator-result="total_proyectado">{% if simulacion %}{{ simulacion.resultado.total_proyectado|cop }}{% else %}&mdash;{% endif %}</dd></div>
-                    <div class="is-installment"><dt>{% if simulador_publico %}Cuota aproximada{% else %}Cuota mensual estimada{% endif %}</dt><dd data-simulator-result="cuota_informativa">{% if simulacion %}{{ simulacion.resultado.cuota_informativa|cop }}{% else %}&mdash;{% endif %}</dd></div>
                 </dl>
-
-                <p class="edu-simulator-disclaimer">Esta simulaci&oacute;n no constituye aprobaci&oacute;n, no crea condiciones contractuales y no guarda escenarios alternativos.</p>
+                <div class="edu-simulator-results-heading">
+                    <div>
+                        <p class="edu-eyebrow">Plan estimado</p>
+                        <h2 id="simulation-plan-title">Plan completo de pagos</h2>
+                    </div>
+                </div>
+                <div class="edu-table-scroll" role="region" aria-label="Plan de pagos" tabindex="0">
+                    <table class="edu-table">
+                        <thead>
+                            <tr>
+                                <th>Cuota</th>
+                                <th>Vencimiento</th>
+                                <th>Saldo inicial</th>
+                                <th>Inter&eacute;s</th>
+                                <th>Capital</th>
+                                <th>Valor cuota</th>
+                                <th>Saldo final</th>
+                            </tr>
+                        </thead>
+                        <tbody data-simulator-plan>
+                            {% for cuota in simulacion.resultado.plan %}
+                                <tr>
+                                    <td>{{ cuota.numero }}</td>
+                                    <td>{{ cuota.fecha_vencimiento|date:"d/m/Y" }}</td>
+                                    <td>{{ cuota.saldo_inicial|cop }}</td>
+                                    <td>{{ cuota.interes|cop }}</td>
+                                    <td>{{ cuota.capital|cop }}</td>
+                                    <td>{{ cuota.valor_cuota|cop }}</td>
+                                    <td>{{ cuota.saldo_final|cop }}</td>
+                                </tr>
+                            {% empty %}
+                                <tr><td colspan="7">El plan estar&aacute; disponible cuando exista una pol&iacute;tica financiera activa.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </details>
+            <div class="edu-simulator-next">
                 {% if simulador_publico %}
                     {% if request.user.is_authenticated %}
                         <a class="edu-button-primary" href="{{ resume_url }}">Continuar mi solicitud</a>
@@ -99,47 +130,8 @@
                 {% else %}
                     <a class="edu-button-primary" href="{% url 'financiacion_educativa_web:documentacion' solicitud.id %}">Continuar con mi expediente</a>
                 {% endif %}
-            </section>
+            </div>
         </div>
-
-        <section class="edu-simulator-plan" aria-labelledby="simulation-plan-title" {% if not simulacion %}hidden{% endif %}>
-            <div class="edu-simulator-results-heading">
-                <div>
-                    <p class="edu-eyebrow">Plan estimado</p>
-                    <h2 id="simulation-plan-title">Plan completo de pagos</h2>
-                </div>
-            </div>
-            <div class="edu-table-scroll" role="region" aria-label="Plan de pagos" tabindex="0">
-                <table class="edu-table">
-                    <thead>
-                        <tr>
-                            <th>Cuota</th>
-                            <th>Vencimiento</th>
-                            <th>Saldo inicial</th>
-                            <th>Inter&eacute;s</th>
-                            <th>Capital</th>
-                            <th>Valor cuota</th>
-                            <th>Saldo final</th>
-                        </tr>
-                    </thead>
-                    <tbody data-simulator-plan>
-                        {% for cuota in simulacion.resultado.plan %}
-                            <tr>
-                                <td>{{ cuota.numero }}</td>
-                                <td>{{ cuota.fecha_vencimiento|date:"d/m/Y" }}</td>
-                                <td>{{ cuota.saldo_inicial|cop }}</td>
-                                <td>{{ cuota.interes|cop }}</td>
-                                <td>{{ cuota.capital|cop }}</td>
-                                <td>{{ cuota.valor_cuota|cop }}</td>
-                                <td>{{ cuota.saldo_final|cop }}</td>
-                            </tr>
-                        {% empty %}
-                            <tr><td colspan="7">El plan estar&aacute; disponible cuando exista una pol&iacute;tica financiera activa.</td></tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </section>
     </div>
 </section>
 {% endblock %}

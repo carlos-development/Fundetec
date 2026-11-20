@@ -12,6 +12,7 @@ from django.template.loader import render_to_string
 from django.urls import reverse
 
 from financiacion_educativa.choices import TipoDecisionRevisionEducativa
+from financiacion_educativa.services.marca_institucional import logos_correo_de_solicitud
 from financiacion_educativa.services.mensajes_correccion import (
     CONTINUIDAD_CORRECCION, CTA_CORRECCION, TITULO_CORRECCION,
     resolver_mensaje_correccion,
@@ -174,6 +175,7 @@ def construir_correo_captura_movil(
     expires_at,
     connection=None,
     es_prueba=False,
+    logos_institucionales=(),
 ):
     recipient = normalizar_destinatario(recipient)
     contexto = {
@@ -181,6 +183,7 @@ def construir_correo_captura_movil(
         'continuation_url': continuation_url,
         'expires_at': expires_at,
         'es_prueba': es_prueba,
+        'logos_institucionales': logos_institucionales,
         'email_logo_url': obtener_email_logo_url(),
     }
     texto = render_to_string(
@@ -208,6 +211,7 @@ def construir_correo_correccion_automatica(
     recipient,
     requisitos,
     razones=None,
+    solicitud=None,
     connection=None,
 ):
     recipient = normalizar_destinatario(recipient)
@@ -218,6 +222,7 @@ def construir_correo_correccion_automatica(
     )
     contexto = {
         'brand_name': 'Aprobado',
+        'logos_institucionales': logos_correo_de_solicitud(solicitud),
         'decision_type': TipoDecisionRevisionEducativa.CORRECTION_REQUESTED,
         'title': titulo,
         'message': detalle,
@@ -248,11 +253,12 @@ def construir_correo_correccion_automatica(
     return mensaje
 
 
-def construir_correo_continuacion_automatica(*, recipient, connection=None):
+def construir_correo_continuacion_automatica(*, recipient, solicitud=None, connection=None):
     recipient = normalizar_destinatario(recipient)
     titulo = 'Tu expediente educativo esta listo para continuar a firma'
     contexto = {
         'brand_name': 'Aprobado',
+        'logos_institucionales': logos_correo_de_solicitud(solicitud),
         'decision_type': TipoDecisionRevisionEducativa.APPROVED,
         'title': titulo,
         'message': (
@@ -301,6 +307,7 @@ def construir_correo_decision_educativa(
     }
     contexto = {
         'brand_name': 'Aprobado',
+        'logos_institucionales': logos_correo_de_solicitud(getattr(decision, 'solicitud', None)),
         'decision_type': decision.tipo,
         'title': titulos[decision.tipo],
         'message': decision.mensaje_solicitante,
@@ -333,6 +340,7 @@ def construir_correo_expediente_recibido(
     referencia_externa,
     program_name='',
     course_name='',
+    solicitud=None,
     cc=None,
     connection=None,
 ):
@@ -345,6 +353,7 @@ def construir_correo_expediente_recibido(
 
     contexto = {
         'brand_name': 'Aprobado',
+        'logos_institucionales': logos_correo_de_solicitud(solicitud),
         'referencia_externa': str(referencia_externa or '').strip(),
         'program_name': str(program_name or '').strip(),
         'course_name': str(course_name or '').strip(),
