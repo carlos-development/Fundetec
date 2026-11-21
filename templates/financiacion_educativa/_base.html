@@ -1,9 +1,5 @@
 {% load static %}
-{% if simulador_publico and logos_institucionales %}
-    {% url 'financiacion_educativa_web:simulador-publico-jowalth' as education_simulator_url %}
-{% else %}
-    {% url 'financiacion_educativa_web:simulador-publico' as education_simulator_url %}
-{% endif %}
+{% url 'financiacion_educativa_web:simulador-publico' as education_simulator_url %}
 <!DOCTYPE html>
 <html lang="es">
 <head>
