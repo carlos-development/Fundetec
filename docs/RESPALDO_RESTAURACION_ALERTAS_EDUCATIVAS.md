@@ -61,60 +61,6 @@ Un backup sin restauracion comprobada, archivos o claves recuperables no es
 una restauracion certificada. La ejecucion anterior es un procedimiento futuro,
 no una afirmacion de que ya existen backups cifrados programados en produccion.
 
-Para identificar el mecanismo instalado en el VPS, consultar timers y los
-nombres de los archivos de cron que contienen referencias a respaldos.
-Si la programación vive en el panel del proveedor, contrastar allí la última
-ejecución. Para cerrar el inventario hace falta evidencia de fecha y resultado,
-cobertura de PostgreSQL y archivos privados, y destino de la copia.
-
-El inventario del VPS del 19/11/2026 mostró los timers de recordatorios
-educativos de ambos entornos, el monitor de staging y el respaldo de la base
-de paquetes de `dpkg`. El filtro de cron solo identificó `/etc/cron.daily/dpkg`.
-Queda confirmar si existe un respaldo recurrente en el panel del proveedor
-o en el sistema de respaldos de Infraestructura.
-
-```bash
-systemctl list-timers --all --no-pager |
-  awk 'NR == 1 || tolower($0) ~ /fundetec|backup|respaldo|snapshot|restic|borg|pgbackrest/'
-grep -Eil 'fundetec|backup|respaldo|snapshot|restic|borg|pgbackrest|pg_dump' \
-  /etc/crontab /etc/cron.d/* /etc/cron.daily/* /etc/cron.weekly/* \
-  /var/spool/cron/crontabs/* 2>/dev/null || true
-```
-
-### Copia en línea de producción del 19/11/2026
-
-Carlos confirmó `RESPALDO_OK` en el VPS. La captura inició a las 12:50:07 de
-Colombia y generó
-`/var/backups/fundetec-production/fundetec-produccion-20261119T175007Z-weuqD1NX.tar.gpg`
-con 100.252.915 bytes y SHA-256
-`034bfb5b7c51aa7fac8c778d90764fd184c23b1c896bf132a67be26defd1ea7c`.
-Incluye el dump PostgreSQL de la aplicación, archivos privados y media. El
-script comprobó la lectura del dump y la apertura del paquete cifrado.
-La base y los archivos se copiaron en línea en momentos distintos. Carlos
-confirmó en Windows, fuera del VPS, el mismo SHA-256 con `Get-FileHash`.
-
-### Restauración de la copia de producción
-
-El 19/11/2026 Carlos informó que la copia quedó restaurada. Quedan por
-incorporar al registro el entorno utilizado y el resultado de las
-comprobaciones de base y archivos que aparecen a continuación.
-
-Usar un entorno aislado con almacenamiento protegido y acceso autorizado
-a datos reales. Conservar el archivo cifrado y la frase por separado. El
-ensayo debe producir la siguiente evidencia, sin publicar los datos restaurados.
-
-| Comprobación | Evidencia esperada |
-| --- | --- |
-| Integridad del paquete | SHA-256 igual al registrado, apertura con GPG y todos los hashes internos de `SHA256SUMS` correctos. |
-| Restauración de la base | PostgreSQL de versión compatible y base vacía dedicada a la prueba. `pg_restore --exit-on-error --no-owner --no-privileges` finaliza sin errores. |
-| Restauración de archivos | Extraer `privados.tar` y `media.tar` en raíces nuevas. Revisar que las rutas de los archivos educativos en la base estén en la raíz privada restaurada. Comparar tamaño y SHA-256 de pagarés firmados y comprobantes con los valores registrados. |
-| Trazabilidad financiera | Verificar en la base restaurada que la cuota 1 de `JOW-88C00418-PROD` conserva $236.607 aplicados, con $222.894 de capital y $13.713 de intereses. |
-| Cierre | Registrar resultados, duración y discrepancias. Retirar la base y los archivos descifrados de prueba conforme al procedimiento de Infraestructura. |
-
-La prueba puede ejecutarse sin arrancar Django, Celery ni conectores
-externos. Una referencia ausente o un hash distinto exige revisar la copia
-en línea antes de dar por verificada la restauración conjunta.
-
 ## Ensayo reproducible: solo datos sinteticos
 
 Se utilizan las fixtures existentes de recaudos/aplicacion integra y PDF
@@ -215,38 +161,6 @@ informa tipo de excepcion y linea del verificador, no payloads completos.
 No es una validacion juridica/criptografica de una firma real ni un RTO productivo.
 
 ## Alertas accionables
-
-El diagnóstico manual en producción del 18/11/2026 a las 23:03 de Colombia
-confirmó web, worker educativo, outbox y escáner activos, sin etapas de
-automatización atrasadas. El cotejo del outbox confirmó que los dos fallos
-BRE-B corresponden al pago aplicado de Jowalth: `BREB_INCOME_CONFIRMED` y
-`BREB_PAYMENT_APPLIED`, ambos con `PAYMENT_RECIPIENT_UNVERIFIED`, cero intentos
-y destinatario vacío. El cotejo del destinatario confirmó una titular adulta,
-cuenta activa y correo coincidente registrado, con `EmailAddress.verified=False`.
-La titular debe confirmar el correo existente desde la gestión de correo de su
-cuenta. El servidor SMTP aceptó el aviso individual el 19/11/2026. La
-confirmación de la titular sigue pendiente. Una vez verificado el correo,
-revisar únicamente el aviso de pago aplicado
-para una recuperación puntual. El aviso de ingreso confirmado quedó superado
-por la aplicación. El recordatorio `CONTINUATION_REMINDER_1H` separado quedó
-`AMBIGUOUS` tras un intento y requiere conciliación por Message-ID desde el acceso
-restringido de Soporte. El cotejo del 19/11/2026 de la firma que superó las
-72 h mostró `pending` en ZapSign y ningún webhook asociado en el expediente.
-La acción pendiente corresponde al firmante.
-En esa lectura, los avisos BRE-B estaban habilitados y los avisos del plan
-contractual y el Libro 2B estaban deshabilitados.
-
-Para revisar `SIGNATURE_WAIT_OVERDUE`, en el Admin restringido abrir Procesos
-de firma educativa, filtrar por Pendiente de firma (`SENT`) y revisar los expedientes cuyo
-artefacto sigue vigente y cuyo envío superó las 72 h. Ubicar el documento en
-ZapSign por el `external_id` del proceso.
-
-- Si ZapSign indica pendiente, registrar que sigue en espera del firmante.
-- Si ZapSign indica firmado, revisar el último evento asociado en Eventos
-  webhook de firma educativa y anotar su estado y código de resultado. Si
-  falta el evento, registrar esa ausencia para revisar la entrega del webhook.
-- Si ZapSign indica rechazo o vencimiento, registrar el estado exacto y
-  contrastarlo con el expediente antes de decidir la recuperación.
 
 Comando, sin procesamiento ni efectos secundarios:
 
@@ -380,36 +294,6 @@ systemctl list-timers fundetec-educational-monitor.timer --all
 systemctl status fundetec-educational-monitor.service --no-pager
 journalctl -u fundetec-educational-monitor.service --since '30 minutes ago' --no-pager
 ```
-
-### Avisos internos por correo en staging
-
-`notificar_monitor_educativo` ejecuta el diagnóstico de solo lectura y reutiliza
-el SMTP de staging para avisar a un único destinatario operativo. El drop-in
-de la unidad de staging fija `EMAIL_QA_REDIRECT_TO` mediante `/usr/bin/env` en
-su `ExecStart`, junto con el mismo valor en `--destinatario`. El comando compara
-ambos destinos cuando el modo QA está activo. La configuración se aplica al
-proceso del monitor.
-
-La plantilla `deploy/systemd/fundetec-staging-educational-monitor.alertas.conf.template`
-reproduce la configuración del VPS. Sustituir `@@DESTINATARIO@@` en ambas
-apariciones, comparar con cualquier configuración instalada y guardar el
-resultado como `/etc/systemd/system/fundetec-staging-educational-monitor.service.d/10-alertas.conf`.
-Verificar la unidad con `systemd-analyze verify`, recargar systemd y consultar el
-journal tras la ejecución del servicio.
-
-El correo lleva solo códigos, cantidades, responsables y pasos operativos.
-El estado persiste en `StateDirectory=fundetec-staging-educational-monitor`.
-Se avisa una vez por hallazgo activo, con distinción por unidad para servicios.
-Cuando el diagnóstico completo confirma que desapareció, puede avisarse otra
-vez si reaparece. Un rechazo SMTP explícito permite reintentar. Un resultado
-incierto requiere verificar el correo en el proveedor antes de reintentarlo.
-
-El journal registra `ALERTA_SMTP_ACEPTADA` cuando el SMTP acepta el mensaje y
-`SIN_ALERTAS_NUEVAS` en una observación posterior sin cambios. El wrapper
-mantiene los códigos de salida del diagnóstico y usa `4` si falla la entrega o
-el estado local. La confirmación de recepción corresponde al buzón. El aviso
-por correo sigue dependiendo del VPS y del SMTP. La caída del VPS completo se
-cubre con observabilidad externa.
 
 Reversion del monitor: deshabilitar/detener timer, detener oneshot, retirar SOLO
 sus dos unidades si fue primera instalacion o reponer la copia previa si fue

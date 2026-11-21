@@ -15,16 +15,12 @@ hay politica comercial por defecto. Una propuesta es inmutable: para corregir
 reglas, respaldo, fechas o clasificacion se prepara otra version.
 
 1. Preparador registra reglas y respaldo.
-2. Un revisor registra una decision favorable o rechaza la propuesta.
-3. Un aprobador confirma con respaldo. Puede ser el mismo revisor. Una politica
-   no sintetica exige ademas confirmar respaldo comercial y uso real.
+2. Otro usuario revisa favorablemente o rechaza la propuesta.
+3. Un aprobador distinto del preparador confirma con respaldo. Puede ser el
+   mismo revisor, pero nunca el preparador. Una politica no sintetica exige
+   ademas confirmar expresamente respaldo comercial y uso real.
 4. La aprobacion crea la version operable y un evento inmutable. La consulta
    muestra propuesta, reglas y eventos/autores. Admin permanece de solo lectura.
-
-En staging, un superusuario con los alcances institucionales vigentes puede
-revisar y aprobar su propia propuesta sintetica. La revision y la aprobacion
-quedan como eventos separados. Las demas propuestas requieren que ambos roles
-sean ejercidos por usuarios distintos del preparador.
 
 Fecha de seleccion: **fecha efectiva bancaria del ingreso**, no fecha de registro
 ni fecha de confirmacion. Desde/hasta son inclusivas; hasta vacio es indefinido.
@@ -175,15 +171,6 @@ BASH
 El script crea/elimina su propio contenedor/base, no carga staging.env y no
 arranca worker/outbox. Los tests proporcionan correo/proveedores/archivos falsos.
 Las esperas solo comprueban disponibilidad del contenedor, no resuelven carreras.
-
-Para validar la rama `consolidacion/fundetec-operacion-20261117`, ejecutar desde
-su checkout y añadir al mismo comando las pruebas de cierre de cola y monitoreo:
-
-```text
-financiacion_educativa.tests.test_cola_automatizacion
-financiacion_educativa.tests.test_orquestacion_automatica
-financiacion_educativa.tests.test_diagnostico_operativo
-```
 Si Docker o permisos de pruebas faltan, parar: no recurrir a la BD compartida.
 
 Para navegador local ya instalado, agregar `test_piloto_libro_browser` y
