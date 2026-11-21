@@ -681,8 +681,7 @@ body.edu-camera-page {
     border-bottom: 1px solid var(--edu-line);
 }
 
-.edu-simulator-request span,
-.edu-simulator-policy span {
+.edu-simulator-request span {
     color: var(--edu-muted);
     font-size: 0.84rem;
 }
@@ -720,24 +719,6 @@ body.edu-camera-page {
 
 .edu-simulator-controls .edu-field > input {
     width: 100%;
-}
-
-.edu-simulator-policy {
-    display: flex;
-    gap: 12px;
-    padding: 14px;
-    background: #edf8fc;
-    border-left: 3px solid var(--edu-cyan);
-}
-
-.edu-simulator-policy i {
-    color: var(--edu-cyan-dark);
-    font-size: 1.25rem;
-}
-
-.edu-simulator-policy div {
-    display: grid;
-    gap: 2px;
 }
 
 .edu-simulator-status {
@@ -822,7 +803,6 @@ body.edu-camera-page {
 .edu-simulator-metrics div + div dd { font-size: 1.5rem; }
 .edu-simulator-placeholder { min-height: 8rem; color: var(--edu-muted); }
 .edu-simulator-plan, .edu-simulator-next { grid-column: 1 / -1; }
-.edu-simulator-policy-version { margin: 1rem 0; }
 .edu-simulator-plan > summary { cursor: pointer; font-weight: 700; color: var(--edu-night); }
 .edu-simulator-controls .edu-field, .edu-simulator-controls .edu-simulator-field-heading label,
 .edu-simulator-overview .edu-eyebrow { margin: 0; }

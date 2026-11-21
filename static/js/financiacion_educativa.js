@@ -155,7 +155,6 @@ document.addEventListener('DOMContentLoaded', function () {
         const error = simulator.querySelector('[data-simulator-error]');
         const status = simulator.querySelector('[data-simulator-status]');
         const results = simulator.querySelector('.edu-simulator-results');
-        const version = simulator.querySelector('[data-simulator-version]');
         const retry = form.querySelector('[data-simulator-retry]');
         const manual = form.querySelector('[data-simulator-manual]');
         const heading = simulator.querySelector('[data-estimate-title]');
@@ -248,7 +247,6 @@ document.addEventListener('DOMContentLoaded', function () {
                     plan.appendChild(row);
                 });
             }
-            version.textContent = data.codigo_configuracion + ' v' + data.version_configuracion;
         }
 
         async function calculate() {
