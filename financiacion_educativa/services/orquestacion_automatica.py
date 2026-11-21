@@ -33,6 +33,7 @@ from financiacion_educativa.services.artefactos_contractuales import (
 from financiacion_educativa.services.escaneo_documentos import (
     procesar_escaneo_documento,
 )
+from financiacion_educativa.services.estado_publico import firmas_autorizadas_reales
 from financiacion_educativa.services.estados import transicionar_solicitud
 from financiacion_educativa.services.firma_zapsign import (
     FirmaEducativaError,
@@ -672,6 +673,14 @@ def _etapa_decision(solicitud):
 
 def ejecutar_etapa_persistente(*, solicitud_id, etapa):
     solicitud = SolicitudFinanciacionEducativa.objects.get(pk=solicitud_id)
+    if (
+        solicitud.estado == EstadoSolicitudFinanciacion.APPROVED
+        and firmas_autorizadas_reales().filter(solicitud_id=solicitud_id).exists()
+    ):
+        return SalidaEtapaPersistente(
+            estado=EstadoProcesoAutomatizacionEducativa.COMPLETED,
+            codigo='SIGNED_WEBHOOK_CONFIRMED',
+        )
     if etapa == EtapaAutomatizacionEducativa.SECURITY_SCAN:
         return _etapa_escaneo(solicitud)
     if etapa == EtapaAutomatizacionEducativa.DOCUMENT_VALIDATION:

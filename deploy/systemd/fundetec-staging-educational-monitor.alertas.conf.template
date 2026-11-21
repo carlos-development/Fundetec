@@ -1,0 +1,8 @@
+# Configuración de staging para fundetec-staging-educational-monitor.service.
+# Sustituir @@DESTINATARIO@@ por la dirección operativa antes de instalar.
+[Service]
+SuccessExitStatus=2
+StateDirectory=fundetec-staging-educational-monitor
+StateDirectoryMode=0700
+ExecStart=
+ExecStart=/usr/bin/env EMAIL_QA_REDIRECT_TO=@@DESTINATARIO@@ /var/www/fundetec-staging/shared/venv/bin/python manage.py notificar_monitor_educativo --destinatario @@DESTINATARIO@@ --servicio fundetec-staging.service --servicio fundetec-staging-educational-worker.service --servicio fundetec-staging-receipts-scan.service --servicio fundetec-staging-email-outbox.service

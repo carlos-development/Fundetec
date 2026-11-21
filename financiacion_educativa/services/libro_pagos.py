@@ -7,7 +7,7 @@ from uuid import UUID
 
 from django.core import signing
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.db import transaction
+from django.db import connections, transaction
 from django.db.models import Case, DecimalField, F, JSONField, OuterRef, Subquery, Sum, Value, When
 from django.db.models.functions import Coalesce
 from django.utils import timezone
@@ -23,6 +23,7 @@ from . import gobernanza_libro as gobierno
 
 
 CERO = Decimal('0.00')
+CENTAVO = Decimal('0.01')
 SALT = 'educational-ledger-preview-v1'
 MAX_AGE = 900
 MODOS = (('FULL', 'Cuota completa'), ('PARTIAL', 'Pago parcial'), ('PRINCIPAL', 'Abono a capital'), ('PAYOFF', 'Pago total'))
@@ -51,9 +52,12 @@ def _hash(datos):
 
 def _dinero(valor):
     valor = Decimal(str(valor))
-    if not valor.is_finite() or valor < 0 or valor != valor.quantize(Decimal('0.01')):
+    if not valor.is_finite() or valor < 0:
         raise ValidationError('Importe no valido; no se redondea el dinero bancario.')
-    return valor
+    centavos = valor.quantize(CENTAVO)
+    if valor != centavos:
+        raise ValidationError('Importe no valido; no se redondea el dinero bancario.')
+    return centavos
 
 
 def _signo():
@@ -74,10 +78,14 @@ def anotar_ingresos(consulta):
 
 
 def resumen_ingresos(consulta):
-    return anotar_ingresos(consulta).aggregate(
+    totales = anotar_ingresos(consulta).aggregate(
         recibido=Sum('monto_recibido', default=CERO), capital=Sum('capital_neto', default=CERO),
         intereses=Sum('interes_neto', default=CERO), sin_destino=Sum('disponible_libro', default=CERO),
     )
+    if connections[consulta.db].vendor == 'sqlite':
+        # Las expresiones de SQLite pueden sumar columnas monetarias en punto flotante.
+        return {campo: total.quantize(CENTAVO) for campo, total in totales.items()}
+    return totales
 
 
 def anotar_reportes(consulta):

@@ -103,6 +103,7 @@ class LibroPagosTests(DatosLibro, TestCase):
         reglas = {**libro.REGLAS_SINTETICAS, 'imputacion': 'CAPITAL_FIRST'}
         resultado = libro.calcular_distribucion(foto=self.fotografia, estado=estado,
             recibido='10000', fecha=self.fecha, modo='PARTIAL', reglas=reglas)
+        self.assertEqual(resultado['importe'], '10000.00')
         self.assertEqual(Decimal(resultado['capital']), 10000)
         self.assertEqual(Decimal(resultado['intereses']), 0)
         self.assertEqual(resultado['despues']['plan'][0]['interes'], str(self.cuota.interes))
@@ -172,6 +173,7 @@ class LibroPagosTests(DatosLibro, TestCase):
         self.assertEqual(m.sin_destino, Decimal('5500.01'))
         self.assertEqual(m.importe, m.capital + m.intereses + m.sin_destino)
         resumen = libro.resumen_ingresos(ConciliacionRecaudoEducativo.objects.filter(pk=ingreso.pk))
+        self.assertEqual(resumen['sin_destino'], Decimal('5500.01'))
         self.assertEqual(resumen['recibido'], resumen['capital'] + resumen['intereses'] + resumen['sin_destino'])
 
     def test_falta_un_centavo_no_liquida_ni_redondea_banco(self):
