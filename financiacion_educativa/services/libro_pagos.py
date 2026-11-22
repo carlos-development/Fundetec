@@ -27,6 +27,7 @@ CENTAVO = Decimal('0.01')
 SALT = 'educational-ledger-preview-v1'
 MAX_AGE = 900
 MODOS = (('FULL', 'Cuota completa'), ('PARTIAL', 'Pago parcial'), ('PRINCIPAL', 'Abono a capital'), ('PAYOFF', 'Pago total'))
+MODALIDAD_CUOTA_CONTRACTUAL = 'FULL_CONTRACTUAL'
 # These are named simulation scenarios, never a fallback policy for posting.
 REGLAS_SINTETICAS = {
     'imputacion': 'INTEREST_FIRST', 'vencidos': 'OLDEST_FIRST',
@@ -37,7 +38,16 @@ REGLAS_SINTETICAS = {
 }
 
 
+def es_cuota_contractual(reglas):
+    return isinstance(reglas, dict) and reglas.get('modalidad') == MODALIDAD_CUOTA_CONTRACTUAL
+
+
 def validar_reglas(reglas):
+    if es_cuota_contractual(reglas):
+        maximo = reglas.get('max_cuotas_vencidas')
+        if set(reglas) != {'modalidad', 'max_cuotas_vencidas'} or type(maximo) is not int or maximo not in (0, 1):
+            raise ValidationError('La cuota contractual completa admite un máximo de cero o una cuota vencida.')
+        return
     if not isinstance(reglas, dict) or set(reglas) != set(REGLAS_SINTETICAS):
         raise ValidationError('La politica debe definir todas las decisiones del libro.')
     for campo, valor in reglas.items():
@@ -164,6 +174,44 @@ def _politica(ingreso, politica_id):
     return politica, politica.reglas, politica.version
 
 
+def _distribuir_cuota_contractual(*, foto, estado, recibido, fecha, maximo_vencidas):
+    plan = estado['plan']
+    if estado['proyectado'] or foto.es_legado or not plan:
+        raise ValidationError('Se requiere una cuota pendiente de la amortización contractual guardada.',
+                              code='SAVED_INSTALLMENT_REQUIRED')
+    if sum(date.fromisoformat(fila['fecha']) < fecha for fila in plan) > maximo_vencidas:
+        raise ValidationError('Se superó el máximo de cuotas vencidas. El ingreso requiere revisión.',
+                              code='OVERDUE_INSTALLMENT_LIMIT')
+    primera = plan[0]
+    cuota = foto.cuotas.filter(pk=primera['cuota'], numero=primera['numero']).first()
+    if not cuota or (
+        cuota.fecha_vencimiento.isoformat(), _dinero(cuota.capital), _dinero(cuota.interes)
+    ) != (primera['fecha'], _dinero(primera['capital']), _dinero(primera['interes'])):
+        raise ValidationError('La primera cuota pendiente ya no coincide con la amortización guardada.',
+                              code='SAVED_INSTALLMENT_REQUIRED')
+    capital, intereses = _dinero(cuota.capital), _dinero(cuota.interes)
+    importe = _dinero(recibido)
+    if _dinero(cuota.valor_cuota) != capital + intereses:
+        raise ValidationError('Los componentes guardados no cuadran con el importe contractual.',
+                              code='SAVED_INSTALLMENT_REQUIRED')
+    if importe != _dinero(cuota.valor_cuota):
+        raise ValidationError('La cuota contractual completa exige coincidencia exacta al centavo.',
+                              code='INSTALLMENT_AMOUNT_MISMATCH')
+    lineas = [
+        {'cuota': str(cuota.pk), 'concepto': concepto, 'importe': str(monto), 'periodo': primera['fecha']}
+        for concepto, monto in (('CAPITAL', capital), ('INTEREST', intereses)) if monto
+    ]
+    restante = plan[1:]
+    despues = {**estado, 'plan': restante, 'capital': str(_dinero(estado['capital']) - capital),
+               'ultima_fecha': fecha.isoformat()}
+    ultima = restante[-1] if restante else None
+    return {'capital': str(capital), 'intereses': str(intereses), 'sin_destino': str(CERO),
+            'importe': str(importe), 'lineas': lineas, 'despues': despues,
+            'cuota_programada': str(foto.valor_cuota_estimada),
+            'ultima_cuota': str(_dinero(ultima['capital']) + _dinero(ultima['interes'])) if ultima else str(CERO),
+            'intereses_futuros_excluidos': str(CERO)}
+
+
 def calcular_distribucion(*, foto, estado, recibido, fecha, modo, reglas):
     """Pure Decimal engine over remaining saved schedule, not operator-paid counts."""
     validar_reglas(reglas)
@@ -171,6 +219,12 @@ def calcular_distribucion(*, foto, estado, recibido, fecha, modo, reglas):
         raise ValidationError('Tipo de aplicacion no permitido.')
     if fecha < date.fromisoformat(estado['ultima_fecha']):
         raise ValidationError('Fecha retroactiva anterior al ultimo corte contabilizado; requiere revision.', code='RETROACTIVE_REVIEW_REQUIRED')
+    if es_cuota_contractual(reglas):
+        if modo != 'FULL':
+            raise ValidationError('Esta política solo admite la cuota contractual completa.',
+                                  code='CONTRACTUAL_INSTALLMENT_MODE_REQUIRED')
+        return _distribuir_cuota_contractual(foto=foto, estado=estado, recibido=recibido, fecha=fecha,
+                                           maximo_vencidas=reglas['max_cuotas_vencidas'])
     if foto.politica_causacion != 'DAILY_30' or foto.es_legado:
         raise ValidationError('La version contractual no admite esta causacion.')
     plan = json.loads(json.dumps(estado['plan']))
@@ -288,6 +342,9 @@ def preparar_preview(*, ingreso_id, actor, modo, politica_id=None):
     if hasattr(ingreso, 'aplicacion'):
         raise ValidationError('Este ingreso ya tiene una aplicacion integra historica; se consulta sin copiarla al libro.')
     politica, reglas, version = _politica(ingreso, politica_id)
+    if es_cuota_contractual(reglas) and MovimientoLibroEducativo.objects.filter(ingreso=ingreso).exists():
+        raise ValidationError('La cuota contractual requiere un ingreso nuevo sin movimientos previos.',
+                              code='NEW_INCOME_REQUIRED')
     estado = estado_libro(ingreso.reporte.fotografia)
     disponible = anotar_ingresos(ConciliacionRecaudoEducativo.objects.filter(pk=ingreso.pk)).get().disponible_libro
     if disponible <= 0:

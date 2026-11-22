@@ -11,7 +11,7 @@ from financiacion_educativa.models_gobernanza_libro import (
     PropuestaPoliticaLibro, EventoAlcanceLibro, ControlPilotoLibro,
 )
 from financiacion_educativa.models_libro import PoliticaLibroEducativo
-from financiacion_educativa.services import gobernanza_libro as gobierno
+from financiacion_educativa.services import gobernanza_libro as gobierno, libro_pagos as libro
 from financiacion_educativa.web.recaudos import _contexto
 from .permissions import requiere_permisos_operativos
 
@@ -55,11 +55,30 @@ class PrepararForm(InstitucionForm):
     vigente_hasta = forms.DateField(required=False, label='Fecha bancaria hasta (inclusive)', widget=forms.DateInput(attrs={'type': 'date'}))
     es_sintetica = forms.BooleanField(required=False, initial=True, label='Politica exclusivamente sintetica de piloto')
     respaldo = forms.CharField(max_length=1000, widget=forms.Textarea(attrs={'rows': 2}), label='Respaldo documental o referencia verificable')
+    modalidad = forms.ChoiceField(required=False, initial='GENERAL', label='Modalidad de la política',
+        choices=[('GENERAL', 'Política general'), (libro.MODALIDAD_CUOTA_CONTRACTUAL, 'Cuota contractual completa')])
+    max_cuotas_vencidas = forms.IntegerField(required=False, initial=1, min_value=0, max_value=1,
+        label='Máximo de cuotas vencidas', help_text='Aplica a la cuota contractual completa.')
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         for clave, (etiqueta, opciones) in REGLAS.items():
-            self.fields[clave] = forms.ChoiceField(label=etiqueta, choices=[('', 'Seleccionar explicitamente'), *opciones])
+            self.fields[clave] = forms.ChoiceField(required=False, label=etiqueta,
+                help_text='Aplica a la política general.', choices=[('', 'Seleccionar explícitamente'), *opciones])
+
+    def clean(self):
+        datos = super().clean()
+        if datos.get('modalidad') == libro.MODALIDAD_CUOTA_CONTRACTUAL:
+            maximo = datos.get('max_cuotas_vencidas')
+            if maximo is None and 'max_cuotas_vencidas' not in self.errors:
+                self.add_error('max_cuotas_vencidas', 'Indica el máximo de cuotas vencidas.')
+            datos['reglas'] = {'modalidad': libro.MODALIDAD_CUOTA_CONTRACTUAL, 'max_cuotas_vencidas': maximo}
+        else:
+            for campo in REGLAS:
+                if not datos.get(campo) and campo not in self.errors:
+                    self.add_error(campo, 'Selecciona la regla para la política general.')
+            datos['reglas'] = {campo: datos.get(campo) for campo in REGLAS}
+        return datos
 
 
 class DecisionForm(forms.Form):
@@ -93,12 +112,11 @@ def listado_view(request):
     selector = InstitucionForm(request.GET or None, actor=request.user)
     form = PrepararForm(request.POST or None, actor=request.user)
     if request.method == 'POST' and form.is_valid():
-        datos = form.cleaned_data.copy()
-        datos.pop('confirmar', None)
-        reglas = {c: datos.pop(c) for c in REGLAS}
-        institucion = datos.pop('institucion')
+        datos = form.cleaned_data
         try:
-            propuesta = gobierno.preparar_politica(institucion_id=institucion.pk, reglas=reglas, actor=request.user, **datos)
+            propuesta = gobierno.preparar_politica(institucion_id=datos['institucion'].pk, reglas=datos['reglas'],
+                version=datos['version'], vigente_desde=datos['vigente_desde'], vigente_hasta=datos['vigente_hasta'],
+                es_sintetica=datos['es_sintetica'], respaldo=datos['respaldo'], actor=request.user)
         except ValidationError as exc:
             form.add_error(None, exc)
         else:
@@ -143,7 +161,13 @@ def detalle_view(request, propuesta_id):
             form.add_error(None, exc)
         else:
             return redirect('financiacion_educativa_web:operaciones:politica-detalle', propuesta_id=propuesta.pk)
-    filas = [(REGLAS[k][0], dict(REGLAS[k][1])[v]) for k, v in propuesta.reglas.items()]
+    if libro.es_cuota_contractual(propuesta.reglas):
+        filas = [
+            ('Modalidad', 'Cuota contractual completa'),
+            ('Máximo de cuotas vencidas', propuesta.reglas['max_cuotas_vencidas']),
+        ]
+    else:
+        filas = [(REGLAS[k][0], dict(REGLAS[k][1])[v]) for k, v in propuesta.reglas.items()]
     return render(request, 'financiacion_educativa/recaudos/politica_detalle.html',
         _contexto(request, propuesta=propuesta, reglas=filas, eventos=propuesta.eventos.select_related('actor').order_by('pk'), form=form))
 

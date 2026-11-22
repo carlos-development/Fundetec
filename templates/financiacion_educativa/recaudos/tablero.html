@@ -1,60 +1,240 @@
 {% extends "financiacion_educativa/dashboards/operaciones/_base.html" %}
 {% load static recaudo_format %}
-{% block extra_head %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/financiacion_educativa_recaudos.css' %}">{% endblock %}
+
+{% block title %}Recaudos y aplicaciones | Aprobado{% endblock %}
+{% block extra_head %}
+    {{ block.super }}
+    <link rel="stylesheet" href="{% static 'css/financiacion_educativa_recaudos.css' %}">
+    <link rel="stylesheet" href="{% static 'css/financiacion_educativa_tablero_recaudos.css' %}">
+{% endblock %}
+{% block body_class %}{{ block.super }} education-collections-shell{% endblock %}
+{% block navbar %}
+<header class="edu-navbar collections-navbar">
+    <div class="edu-navbar-inner">
+        <a class="edu-navbar-logo" href="{% url 'financiacion_educativa_web:operaciones:inicio' %}" aria-label="Aprobado, panel operativo">
+            <img src="{% static education_brand.logo|default:'images/logo-dark.png' %}" alt="Aprobado">
+        </a>
+        <span class="collections-module">Operaciones Aprobado</span>
+        <details class="collections-account">
+            <summary>
+                <span class="collections-avatar" aria-hidden="true">{{ request.user.get_short_name|default:request.user.get_username|first|upper }}</span>
+                <span class="collections-account-name">{{ request.user.get_short_name|default:request.user.get_username }}</span>
+            </summary>
+            <form method="post" action="{% url 'account_logout' %}">
+                {% csrf_token %}
+                <button type="submit"><svg class="collections-icon" aria-hidden="true" focusable="false"><use href="{% static 'images/recaudos/tablero-iconos.svg' %}#box-arrow-right"></use></svg> Cerrar sesión</button>
+            </form>
+        </details>
+    </div>
+</header>
+{% endblock %}
+{% block operations_navigation %}
+    {{ block.super }}
+    <details class="collections-mobile-nav">
+        <summary><svg class="collections-icon" aria-hidden="true" focusable="false"><use href="{% static 'images/recaudos/tablero-iconos.svg' %}#list"></use></svg> Menú de Operaciones</summary>
+        {% include "financiacion_educativa/dashboards/operaciones/_sidebar.html" %}
+    </details>
+{% endblock %}
+
 {% block operations_content %}
-<div class="edu-recaudos-workspace edu-ops-workspace edu-collections-board">
-    <header class="edu-dashboard-heading">
-        <h1>Recaudos y aplicaciones</h1>
-        <p>Ingresos confirmados en banco y su aplicaci&oacute;n a cuotas.</p>
-        <a href="{% url 'financiacion_educativa_web:operaciones:recaudos' %}">Ir a las bandejas de trabajo</a>
+<div class="collections-page">
+    <header class="collections-heading">
+        <div>
+            <h1>Recaudos y aplicaciones</h1>
+            <p>Ingresos confirmados en banco y su aplicación a cuotas.</p>
+        </div>
+        <a class="collections-button" href="{% url 'financiacion_educativa_web:operaciones:recaudos' %}">
+            <svg class="collections-icon" aria-hidden="true" focusable="false"><use href="{% static 'images/recaudos/tablero-iconos.svg' %}#inboxes"></use></svg> Bandejas de trabajo
+        </a>
     </header>
-    <form method="get" class="edu-recaudos-form edu-recaudos-filters" aria-label="Filtros del tablero">
-        {% include "financiacion_educativa/recaudos/_campos.html" %}
-        <div class="edu-recaudos-actions"><button type="submit"><i class="bi bi-search" aria-hidden="true"></i> Consultar</button><a href="{% url 'financiacion_educativa_web:operaciones:tablero-recaudos' %}">Limpiar</a></div>
+
+    <form method="get" class="edu-recaudos-form collections-filters" aria-labelledby="collection-filters-title"
+          data-loader-text="Consultando recaudos…">
+        <div class="collections-filters-heading">
+            <h2 id="collection-filters-title"><svg class="collections-icon" aria-hidden="true" focusable="false"><use href="{% static 'images/recaudos/tablero-iconos.svg' %}#funnel"></use></svg> Filtros de consulta</h2>
+            <p>Fecha efectiva bancaria · Ambas fechas incluidas · COP</p>
+        </div>
+        {% include "financiacion_educativa/recaudos/_errores.html" %}
+        <div class="collections-filter-controls">
+            {% include "financiacion_educativa/recaudos/_campo.html" with field=form.institucion %}
+            <div class="collections-date-range" role="group" aria-label="Rango de fechas efectivas">
+                {% include "financiacion_educativa/recaudos/_campo.html" with field=form.desde %}
+                {% include "financiacion_educativa/recaudos/_campo.html" with field=form.hasta %}
+            </div>
+            <div class="collections-list-filter">
+                {% include "financiacion_educativa/recaudos/_campo.html" with field=form.estado %}
+                <p class="collections-note">Solo cambia la tabla de movimientos.</p>
+            </div>
+            <div class="collections-filter-actions">
+                <button type="submit" class="collections-button collections-primary">Consultar</button>
+                <a href="{% url 'financiacion_educativa_web:operaciones:tablero-recaudos' %}">Limpiar</a>
+            </div>
+        </div>
     </form>
-    {% if form.errors %}
-        <p class="edu-recaudos-caption">No se muestran importes ni movimientos con un filtro inv&aacute;lido.</p>
-    {% else %}
-        <p class="edu-recaudos-caption">Fecha efectiva bancaria: {{ form.cleaned_data.desde|date:"d/m/Y" }} &ndash; {{ form.cleaned_data.hasta|date:"d/m/Y" }} (ambos d&iacute;as incluidos). Importes en COP.</p>
-        <div class="edu-collections-indicators" aria-label="Importes de la cohorte bancaria">
+
+    {% if not form.errors %}
+    <section class="collections-overview" aria-labelledby="collections-overview-title">
+        <div class="collections-section-heading">
+            <h2 id="collections-overview-title">Resumen del periodo</h2>
+            <p><time datetime="{{ form.cleaned_data.desde|date:'Y-m-d' }}">{{ form.cleaned_data.desde|date:"d/m/Y" }}</time>
+                – <time datetime="{{ form.cleaned_data.hasta|date:'Y-m-d' }}">{{ form.cleaned_data.hasta|date:"d/m/Y" }}</time></p>
+        </div>
+        <div class="collections-indicators">
             {% for indicador in indicadores %}
-            <a class="edu-collections-indicator" data-indicador="{{ indicador.codigo }}" href="{{ indicador.url }}"{% if indicador.activo %} aria-current="true"{% endif %}>
-                <span>{{ indicador.etiqueta }}</span>
-                <strong>{{ indicador.importe|cop_recaudo }}</strong>
-                <small>{{ indicador.cantidad }} movimiento{{ indicador.cantidad|pluralize:"s" }} &middot; Ver respaldo <span aria-hidden="true">&rarr;</span></small>
-            </a>
+                <a class="collections-indicator" data-indicador="{{ indicador.codigo }}" href="{{ indicador.url }}"{% if indicador.activo %} aria-current="true"{% endif %}>
+                    <span class="collections-indicator-heading">
+                        <span class="collections-indicator-icon" aria-hidden="true">
+                            {% if indicador.codigo == 'CONFIRMED' %}<svg class="collections-icon" aria-hidden="true" focusable="false"><use href="{% static 'images/recaudos/tablero-iconos.svg' %}#bank"></use></svg>
+                            {% elif indicador.codigo == 'TO_APPLY' %}<svg class="collections-icon" aria-hidden="true" focusable="false"><use href="{% static 'images/recaudos/tablero-iconos.svg' %}#hourglass-split"></use></svg>
+                            {% else %}<svg class="collections-icon" aria-hidden="true" focusable="false"><use href="{% static 'images/recaudos/tablero-iconos.svg' %}#check2-circle"></use></svg>{% endif %}
+                        </span>
+                        <span>{{ indicador.etiqueta }}</span>
+                    </span>
+                    <strong>{{ indicador.importe|cop_recaudo }}</strong>
+                    <span class="collections-indicator-footer">
+                        <small>{{ indicador.cantidad }} movimiento{{ indicador.cantidad|pluralize:"s" }}</small>
+                        <span>Ver respaldo</span>
+                    </span>
+                </a>
             {% endfor %}
         </div>
-        <section class="edu-collections-split" aria-labelledby="applied-split-title">
-            <h2 id="applied-split-title">Desglose de lo aplicado</h2>
-            <dl class="edu-recaudos-summary"><div><dt>Capital aplicado</dt><dd>{{ totales.capital|cop_recaudo }}</dd></div><div><dt>Intereses aplicados</dt><dd>{{ totales.intereses|cop_recaudo }}</dd></div></dl>
-            <p class="edu-recaudos-caption">Solo aplicaciones registradas. Los ingresos por aplicar a&uacute;n no tienen desglose de capital e intereses. No son saldos de deuda ni un reparto entre partes.</p>
+    </section>
+
+    <div class="collections-analysis">
+        <section class="collections-panel collections-breakdown" aria-labelledby="applied-split-title">
+            <div class="collections-section-heading">
+                <h2 id="applied-split-title">Desglose de lo aplicado</h2>
+                <p>Aplicaciones registradas</p>
+            </div>
+            {% if totales.aplicados > 0 and totales.capital >= 0 and totales.intereses >= 0 %}
+                {% widthratio totales.capital totales.aplicados 1000 as participacion_capital %}
+                <div class="collections-breakdown-bar" aria-hidden="true">
+                    <span style="--capital-permille: {{ participacion_capital }}"></span>
+                </div>
+            {% endif %}
+            <dl class="collections-breakdown-values">
+                <div><dt>Capital aplicado</dt><dd>{{ totales.capital|cop_recaudo }}</dd></div>
+                <div><dt>Intereses aplicados</dt><dd id="interes-aplicado-periodo">{{ totales.intereses|cop_recaudo }}</dd></div>
+            </dl>
+            <p class="collections-note">Los ingresos por aplicar a&uacute;n no tienen desglose de capital e intereses.</p>
         </section>
-        <details class="edu-recaudos-disclosure">
-            <summary>Ver importes por mes bancario</summary>
-            <div class="edu-dashboard-table-wrap" tabindex="0" role="region" aria-label="Importes por mes"><table class="edu-dashboard-table edu-recaudos-table">
-                <thead><tr><th scope="col">Mes</th><th scope="col">Confirmados</th><th scope="col">Por aplicar</th><th scope="col">Aplicados</th><th scope="col">Capital aplicado</th><th scope="col">Intereses aplicados</th></tr></thead>
-                <tbody>{% for mes in meses %}<tr><th scope="row">{{ mes.mes|date:"m/Y" }}</th><td>{{ mes.confirmados|cop_recaudo }}</td><td>{{ mes.pendientes|cop_recaudo }}</td><td>{{ mes.aplicados|cop_recaudo }}</td><td>{{ mes.capital|cop_recaudo }}</td><td>{{ mes.intereses|cop_recaudo }}</td></tr>{% empty %}<tr><td colspan="6">Sin ingresos confirmados en este rango.</td></tr>{% endfor %}</tbody>
-            </table></div>
-        </details>
-        <section id="movimientos" aria-labelledby="movements-title" tabindex="-1">
-            <h2 id="movements-title">{{ etiqueta_listado }}</h2>
-            <p id="movements-total">{{ pagina.paginator.count }} movimiento{{ pagina.paginator.count|pluralize:"s" }} &middot; {{ total_listado|cop_recaudo }}</p>
-            <p class="edu-recaudos-caption">Respaldo completo del indicador seleccionado, no solo de esta p&aacute;gina. Mismo rango bancario e instituci&oacute;n.</p>
-            <div class="edu-dashboard-table-wrap" tabindex="0" role="region" aria-label="Movimientos de respaldo"><table class="edu-dashboard-table edu-recaudos-table edu-ops-inbox">
-                <thead><tr><th scope="col">Obligaci&oacute;n / Instituci&oacute;n</th><th scope="col">Fecha efectiva</th><th scope="col">Recibido</th><th scope="col">Capital aplicado</th><th scope="col">Intereses aplicados</th><th scope="col">Aplicaci&oacute;n</th></tr></thead>
-                <tbody>{% for ingreso in pagina %}<tr>
-                    <td data-label="Obligaci&oacute;n / Instituci&oacute;n"><a href="{% url 'financiacion_educativa_web:operaciones:recaudo-detalle' ingreso.reporte_id %}">{{ ingreso.reporte.solicitud.referencia_externa }}</a><small>{{ ingreso.reporte.solicitud.institucion.nombre_comercial }}</small></td>
-                    <td data-label="Fecha efectiva">{{ ingreso.fecha_efectiva|date:"d/m/Y" }}</td>
-                    <td data-label="Recibido">{{ ingreso.monto_recibido|cop_recaudo }}</td>
-                    <td data-label="Capital aplicado">{{ ingreso.capital_neto|cop_recaudo }}</td>
-                    <td data-label="Intereses aplicados">{{ ingreso.interes_neto|cop_recaudo }}</td>
-                    <td data-label="Aplicaci&oacute;n">{% if ingreso.aplicacion %}<span class="edu-recaudos-badge is-safe">Aplicado &middot; Cuota {{ ingreso.aplicacion.cuota.numero }}</span>{% elif ingreso.aplicado_neto %}<span class="edu-recaudos-badge is-safe">Aplicacion contabilizada</span>{% endif %}{% if ingreso.disponible_libro %}<p>Sin destino {{ ingreso.disponible_libro|cop_recaudo }}</p>{% endif %}<a href="{% url 'financiacion_educativa_web:operaciones:libro-ingreso' ingreso.pk %}">Ver libro</a></td>
-                </tr>{% empty %}<tr><td colspan="6">Sin movimientos en este listado. Cambia los filtros o consulta otra categor&iacute;a.</td></tr>{% endfor %}</tbody>
-            </table></div>
-            <nav class="edu-recaudos-actions" aria-label="Paginaci&oacute;n de movimientos">{% if pagina.has_previous %}<a href="?{{ querystring }}&page={{ pagina.previous_page_number }}#movimientos">Anterior</a>{% endif %}<span>{{ pagina.number }} / {{ pagina.paginator.num_pages }}</span>{% if pagina.has_next %}<a href="?{{ querystring }}&page={{ pagina.next_page_number }}#movimientos">Siguiente</a>{% endif %}</nav>
+        <section class="collections-panel collections-distribution" aria-labelledby="interest-distribution-title">
+            <h2 id="interest-distribution-title">Distribución de intereses</h2>
+            <dl>
+                <div><dt>Parte de Aprobado</dt><dd>Sin política aprobada</dd></div>
+                <div><dt>Parte de la institución</dt><dd>Sin política aprobada</dd></div>
+            </dl>
         </section>
-        <p class="edu-recaudos-notice">Confirmar una transferencia no paga una cuota. Solo una aplicaci&oacute;n registrada permite mostrarla como aplicada.</p>
+    </div>
+
+    <details class="collections-panel collections-history">
+        <summary>
+            <span class="collections-history-icon" aria-hidden="true"><svg class="collections-icon" aria-hidden="true" focusable="false"><use href="{% static 'images/recaudos/tablero-iconos.svg' %}#calendar3"></use></svg></span>
+            <span>
+                <span class="collections-history-title">Histórico mensual</span>
+                <span class="collections-history-label">Ver importes por mes bancario</span>
+                {% with ultimo=meses|last %}
+                    {% if ultimo %}
+                        <span class="collections-history-period">{{ ultimo.mes|date:"F Y"|capfirst }} · {{ ultimo.confirmados|cop_recaudo }} confirmados</span>
+                    {% endif %}
+                {% endwith %}
+            </span>
+            <span class="collections-chevron" aria-hidden="true"></span>
+        </summary>
+        <div class="collections-table-scroll" tabindex="0" role="region" aria-label="Importes por mes bancario">
+            <table class="collections-table collections-monthly-table">
+                <thead>
+                    <tr>
+                        <th scope="col">Mes</th>
+                        <th scope="col" class="collections-amount">Confirmados</th>
+                        <th scope="col" class="collections-amount">Por aplicar</th>
+                        <th scope="col" class="collections-amount">Aplicados</th>
+                        <th scope="col" class="collections-amount">Capital aplicado</th>
+                        <th scope="col" class="collections-amount">Intereses aplicados</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for mes in meses %}
+                    <tr>
+                        <th scope="row">{{ mes.mes|date:"m/Y" }}</th>
+                        <td class="collections-amount">{{ mes.confirmados|cop_recaudo }}</td>
+                        <td class="collections-amount">{{ mes.pendientes|cop_recaudo }}</td>
+                        <td class="collections-amount">{{ mes.aplicados|cop_recaudo }}</td>
+                        <td class="collections-amount">{{ mes.capital|cop_recaudo }}</td>
+                        <td class="collections-amount">{{ mes.intereses|cop_recaudo }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="6">Sin ingresos confirmados en este rango.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </details>
+
+    <section id="movimientos" class="collections-panel collections-movements" aria-labelledby="movements-title" tabindex="-1">
+        <header class="collections-section-heading">
+            <div>
+                <h2 id="movements-title">Movimientos de respaldo</h2>
+                <p>{{ etiqueta_listado }}</p>
+            </div>
+            <p id="movements-total">{{ pagina.paginator.count }} movimiento{{ pagina.paginator.count|pluralize:"s" }} · <strong>{{ total_listado|cop_recaudo }}</strong></p>
+        </header>
+        <div class="collections-table-scroll" tabindex="0" role="region" aria-label="Movimientos de respaldo">
+            <table class="collections-table collections-movements-table">
+                <thead>
+                    <tr>
+                        <th scope="col">Obligación / Institución</th>
+                        <th scope="col">Fecha efectiva</th>
+                        <th scope="col" class="collections-amount">Recibido</th>
+                        <th scope="col" class="collections-amount">Capital aplicado</th>
+                        <th scope="col" class="collections-amount">Intereses aplicados</th>
+                        <th scope="col">Aplicación</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for ingreso in pagina %}
+                    <tr>
+                        <td data-label="Obligación / Institución">
+                            <a class="collections-reference" href="{% url 'financiacion_educativa_web:operaciones:recaudo-detalle' ingreso.reporte_id %}">{{ ingreso.reporte.solicitud.referencia_externa }}</a>
+                            <small>{{ ingreso.reporte.solicitud.institucion.nombre_comercial }}</small>
+                        </td>
+                        <td data-label="Fecha efectiva"><time datetime="{{ ingreso.fecha_efectiva|date:'Y-m-d' }}">{{ ingreso.fecha_efectiva|date:"d/m/Y" }}</time></td>
+                        <td data-label="Recibido" class="collections-amount collections-received">{{ ingreso.monto_recibido|cop_recaudo }}</td>
+                        <td data-label="Capital aplicado" class="collections-amount">{{ ingreso.capital_neto|cop_recaudo }}</td>
+                        <td data-label="Intereses aplicados" class="collections-amount">{{ ingreso.interes_neto|cop_recaudo }}</td>
+                        <td data-label="Aplicación">
+                            {% if ingreso.aplicacion %}
+                                <span class="collections-status is-applied">Aplicado &middot; Cuota {{ ingreso.aplicacion.cuota.numero }}</span>
+                            {% elif ingreso.aplicado_neto %}
+                                <span class="collections-status is-applied">Aplicación contabilizada</span>
+                            {% endif %}
+                            {% if ingreso.disponible_libro %}
+                                <span class="collections-status is-pending">Sin destino {{ ingreso.disponible_libro|cop_recaudo }}</span>
+                            {% endif %}
+                            <a class="collections-book" href="{% url 'financiacion_educativa_web:operaciones:libro-ingreso' ingreso.pk %}">Ver libro</a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr class="collections-empty">
+                        <td colspan="6">
+                            <svg class="collections-icon" aria-hidden="true" focusable="false"><use href="{% static 'images/recaudos/tablero-iconos.svg' %}#inbox"></use></svg>
+                            <strong>Sin movimientos en este listado</strong>
+                            <span>Cambia el rango, la institución o el listado de respaldo.</span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div class="collections-movements-footer">
+            <p class="collections-note">El total incluye todos los movimientos del listado seleccionado.</p>
+            <nav aria-label="Paginación de movimientos">
+                {% if pagina.has_previous %}<a class="collections-button" href="?{{ querystring }}&page={{ pagina.previous_page_number }}#movimientos">Anterior</a>{% endif %}
+                <span>Página {{ pagina.number }} de {{ pagina.paginator.num_pages }}</span>
+                {% if pagina.has_next %}<a class="collections-button" href="?{{ querystring }}&page={{ pagina.next_page_number }}#movimientos">Siguiente</a>{% endif %}
+            </nav>
+        </div>
+    </section>
     {% endif %}
 </div>
 {% endblock %}

@@ -9,6 +9,7 @@ from django.test import Client, override_settings
 
 from financiacion_educativa.tests.test_recaudos_breb import AISLAMIENTO
 from financiacion_educativa.tests.test_tablero_recaudos import DatosTableroRecaudos
+from financiacion_educativa.templatetags.recaudo_format import cop_recaudo
 
 
 @skipUnless(os.environ.get('EDU_PLAYWRIGHT_MODULE'), 'Requiere Playwright local para capturas.')
@@ -27,8 +28,12 @@ class TableroRecaudosBrowserTests(DatosTableroRecaudos, StaticLiveServerTestCase
             'EDU_COLLECTIONS_PATH': self.ruta_tablero(),
             'EDU_COLLECTIONS_URL': self.ruta_tablero() + '?' + urlencode(self.rango),
             'EDU_COLLECTIONS_INSTITUTION': str(self.institucion.pk),
+            'EDU_COLLECTIONS_APPLIED_INTEREST': cop_recaudo(sum(
+                ingreso.aplicacion.interes_aplicado
+                for ingreso in (self.aplicado, self.aplicado_segundo, self.aplicado_ajeno)
+            )),
         }
         result = subprocess.run(['node', '--test', str(Path(__file__).parent / 'js/test_tablero_recaudos_browser.js')],
             env=env, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=180)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        print('Tablero: filtros, importes/listados y capturas 375/390/1440 px sin JavaScript OK.')
+        print('Tablero: filtros, importes/listados y capturas 320/375/390/1440 px sin JavaScript OK.')

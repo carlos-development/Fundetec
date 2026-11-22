@@ -15,6 +15,7 @@ from financiacion_educativa.models_recaudos import AplicacionCuotaEducativa, Con
 from financiacion_educativa.services import aplicacion_cuotas, recaudos
 from financiacion_educativa.tests.test_ingreso_operaciones import DatosIngresoOperaciones
 from financiacion_educativa.tests.test_recaudos_breb import AISLAMIENTO
+from financiacion_educativa.templatetags.recaudo_format import cop_recaudo
 
 
 class DatosTableroRecaudos(DatosIngresoOperaciones):
@@ -90,6 +91,14 @@ class TableroRecaudosTests(DatosTableroRecaudos, TestCase):
                     self.assertEqual(indicador['cantidad'], respaldo.context['pagina'].paginator.count)
                     self.assertEqual(indicador['importe'], respaldo.context['total_listado'])
                     self.assertEqual(indicador['importe'], sum(i.monto_recibido for i in respaldo.context['pagina']))
+
+    def test_interes_aplicado_y_partes_sin_politica_de_reparto(self):
+        respuesta = self.consultar(institucion=self.institucion.pk, estado='TO_APPLY')
+        esperado = self.aplicado.aplicacion.interes_aplicado + self.aplicado_segundo.aplicacion.interes_aplicado
+        self.assertGreater(esperado, 0)
+        self.assertContains(respuesta, f'<dd id="interes-aplicado-periodo">{cop_recaudo(esperado)}</dd>', html=True)
+        self.assertContains(respuesta, '<dt>Parte de Aprobado</dt><dd>Sin política aprobada</dd>', html=True)
+        self.assertContains(respuesta, '<dt>Parte de la institución</dt><dd>Sin política aprobada</dd>', html=True)
 
     def test_institucion_limita_todas_las_cifras_meses_y_listado(self):
         respuesta = self.consultar(institucion=self.institucion.pk)
