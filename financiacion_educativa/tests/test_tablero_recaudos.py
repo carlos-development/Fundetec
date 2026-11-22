@@ -100,6 +100,14 @@ class TableroRecaudosTests(DatosTableroRecaudos, TestCase):
         self.assertContains(respuesta, '<dt>Parte de Aprobado</dt><dd>Sin política aprobada</dd>', html=True)
         self.assertContains(respuesta, '<dt>Parte de la institución</dt><dd>Sin política aprobada</dd>', html=True)
 
+    def test_partes_por_cuota_aplicada_historica_y_ausentes_en_pendientes(self):
+        aplicada = self.consultar(institucion=self.institucion.pk, estado='APPLIED')
+        self.assertEqual({tuple(i.cuotas_aplicadas) for i in aplicada.context['pagina']}, {(1,), (2,)})
+        self.assertContains(aplicada, 'class="collections-installment-shares"', count=2)
+        self.assertContains(aplicada, 'Sin política aprobada', count=6)
+        pendiente = self.consultar(institucion=self.institucion.pk, estado='TO_APPLY')
+        self.assertNotContains(pendiente, 'class="collections-installment-shares"')
+
     def test_institucion_limita_todas_las_cifras_meses_y_listado(self):
         respuesta = self.consultar(institucion=self.institucion.pk)
         ids = {i.pk for i in respuesta.context['pagina']}

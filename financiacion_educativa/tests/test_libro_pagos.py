@@ -110,12 +110,22 @@ class LibroPagosTests(DatosLibro, TestCase):
 
     def test_parcial_cruza_cuotas_vencidas_y_solo_cubre_la_primera(self):
         ingreso = self.nuevo_ingreso(self.cuota.valor_cuota + Decimal('100'), fecha=date(2026, 10, 5))
-        self.registrar(ingreso)
+        movimiento = self.registrar(ingreso)
         cuotas = libro.anotar_cuotas(self.fotografia.cuotas.all()).order_by('numero')
         self.assertTrue(cuotas[0].cubierta_libro)
         self.assertFalse(cuotas[1].cubierta_libro)
         self.assertEqual(cuotas[1].interes_cubierto, 100)
         self.assertEqual(libro.estado_libro(self.fotografia)['plan'][0]['numero'], 2)
+        self.client.force_login(self.actor)
+        ruta = reverse('financiacion_educativa_web:operaciones:tablero-recaudos')
+        filtros = {'desde': '2026-10-05', 'hasta': '2026-10-05', 'estado': 'CONFIRMED'}
+        aplicado = self.client.get(ruta, filtros)
+        self.assertContains(aplicado, 'class="collections-installment-shares"', count=2)
+        self.assertEqual(aplicado.context['pagina'][0].cuotas_aplicadas, [1, 2])
+        libro.compensar(**self.datos_compensacion(movimiento))
+        compensado = self.client.get(ruta, filtros)
+        self.assertEqual(compensado.context['pagina'][0].cuotas_aplicadas, [])
+        self.assertNotContains(compensado, 'class="collections-installment-shares"')
 
     def test_interes_anticipado_no_se_pierde_al_reproyectar(self):
         self.registrar(self.nuevo_ingreso())

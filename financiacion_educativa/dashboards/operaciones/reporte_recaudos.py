@@ -1,12 +1,14 @@
 """Read-only bank-date cohort; no projections or allocation of unapplied money."""
 
+from collections import defaultdict
 from decimal import Decimal
 
-from django.db.models import Count, Q, Sum
+from django.db.models import Case, Count, F, Q, Sum, Value, When
 from django.db.models.functions import TruncMonth
 from django.http import QueryDict
 from django.urls import reverse
 
+from financiacion_educativa.models_libro import LineaLibroEducativo
 from financiacion_educativa.models_recaudos import ConciliacionRecaudoEducativo
 from financiacion_educativa.services.libro_pagos import anotar_ingresos
 
@@ -18,6 +20,26 @@ SEGMENTOS = (
 )
 OPCIONES_SEGMENTO = [(codigo, etiqueta) for codigo, etiqueta, _ in SEGMENTOS]
 CERO = Decimal('0.00')
+
+
+def detallar_cuotas_aplicadas(pagina):
+    ingresos = list(pagina)
+    cuotas = defaultdict(list)
+    lineas = (LineaLibroEducativo.objects.filter(
+        movimiento__ingreso_id__in=[ingreso.pk for ingreso in ingresos],
+        cuota__isnull=False,
+    ).values('movimiento__ingreso_id', 'cuota__numero').annotate(
+        aplicado=Sum(F('importe') * Case(
+            When(movimiento__tipo='COMPENSATION', then=Value(-1)), default=Value(1),
+        )),
+    ).filter(aplicado__gt=0).order_by('cuota__numero'))
+    for linea in lineas:
+        cuotas[linea['movimiento__ingreso_id']].append(linea['cuota__numero'])
+    for ingreso in ingresos:
+        if hasattr(ingreso, 'aplicacion'):
+            ingreso.cuotas_aplicadas = [ingreso.aplicacion.cuota.numero]
+        else:
+            ingreso.cuotas_aplicadas = cuotas[ingreso.pk]
 
 
 def cohorte_bancaria(datos):

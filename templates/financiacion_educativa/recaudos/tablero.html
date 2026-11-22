@@ -203,11 +203,17 @@
                         <td data-label="Capital aplicado" class="collections-amount">{{ ingreso.capital_neto|cop_recaudo }}</td>
                         <td data-label="Intereses aplicados" class="collections-amount">{{ ingreso.interes_neto|cop_recaudo }}</td>
                         <td data-label="Aplicación">
-                            {% if ingreso.aplicacion %}
-                                <span class="collections-status is-applied">Aplicado &middot; Cuota {{ ingreso.aplicacion.cuota.numero }}</span>
-                            {% elif ingreso.aplicado_neto %}
+                            {% for numero in ingreso.cuotas_aplicadas %}
+                                <div class="collections-applied-installment">
+                                    <span class="collections-status is-applied">Aplicado &middot; Cuota {{ numero }}</span>
+                                    <dl class="collections-installment-shares">
+                                        <div><dt>Parte de Aprobado</dt><dd>Sin política aprobada</dd></div>
+                                        <div><dt>Parte de la institución</dt><dd>Sin política aprobada</dd></div>
+                                    </dl>
+                                </div>
+                            {% empty %}{% if ingreso.aplicado_neto %}
                                 <span class="collections-status is-applied">Aplicación contabilizada</span>
-                            {% endif %}
+                            {% endif %}{% endfor %}
                             {% if ingreso.disponible_libro %}
                                 <span class="collections-status is-pending">Sin destino {{ ingreso.disponible_libro|cop_recaudo }}</span>
                             {% endif %}

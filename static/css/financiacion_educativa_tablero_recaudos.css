@@ -608,6 +608,19 @@
 .collections-status.is-pending { background: var(--edu-warning-soft); color: #735300; }
 .collections-status + .collections-status { margin-top: 3px; }
 
+.collections-applied-installment { margin-bottom: 6px; }
+
+.collections-installment-shares {
+    display: grid;
+    gap: 4px;
+    margin: 6px 0 0;
+    font-size: .8125rem;
+    line-height: 1.35;
+}
+
+.collections-installment-shares dt { font-weight: 600; }
+.collections-installment-shares dd { margin: 0; color: var(--edu-muted); }
+
 .collections-book { display: inline-block; margin-top: 4px; }
 
 .collections-empty td {
