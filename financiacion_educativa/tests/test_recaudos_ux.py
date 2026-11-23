@@ -9,6 +9,7 @@ from django.test import RequestFactory, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
+from financiacion_educativa.models import ProcesoFirmaEducativa
 from financiacion_educativa.models_recaudos import ArchivoRecaudoEducativo, IntentoEscaneoRecaudo, ConciliacionRecaudoEducativo, ReporteRecaudoEducativo
 from financiacion_educativa.services import recaudos as servicios
 from financiacion_educativa.web.forms_recaudos import ConfirmarRecaudoForm
@@ -358,15 +359,28 @@ class RecaudosUXTests(DatosRecaudosMixin, TestCase):
         self.assertTrue(actualizada.context['confirmar_form'].fields['evidencia_id'].queryset.filter(pk=pendiente.pk).exists())
         self.assertEqual(ArchivoRecaudoEducativo.objects.count(), total)
 
-    def test_finanzas_enlaza_pagos_solo_para_obligacion_real_y_flag_activo(self):
+    def test_finanzas_condiciona_enlace_de_pagos_al_estado_y_la_disponibilidad(self):
         self.client.force_login(self.pagador)
         url = reverse('financiacion_educativa_web:finanzas', args=[self.solicitud.pk])
         pagos = reverse('financiacion_educativa_web:pagos', args=[self.solicitud.pk])
+        seguimiento = reverse(
+            'financiacion_educativa_web:reporte-pago',
+            args=[self.solicitud.pk, self.reporte.pk],
+        )
+        en_revision = self.client.get(url)
+        self.assertContains(en_revision, 'Reporte en revisi&oacute;n')
+        self.assertContains(en_revision, f'href="{seguimiento}"')
+        self.assertNotContains(en_revision, f'href="{pagos}"')
+
+        servicios.rechazar_reporte(
+            reporte_id=self.reporte.pk,
+            actor=self.actor,
+            motivo='El banco no confirmó el movimiento de prueba.',
+        )
         self.assertContains(self.client.get(url), f'href="{pagos}"')
         with override_settings(FINANCIACION_EDUCATIVA_RECAUDOS_ENABLED=False):
             self.assertNotContains(self.client.get(url), f'href="{pagos}"')
             self.assertEqual(self.client.get(pagos).status_code, 404)
-        from financiacion_educativa.models import ProcesoFirmaEducativa
 
         ProcesoFirmaEducativa.objects.filter(solicitud=self.solicitud).update(estado='SENT')
         self.assertNotContains(self.client.get(url), f'href="{pagos}"')
