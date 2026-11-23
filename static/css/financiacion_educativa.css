@@ -777,7 +777,7 @@ body.edu-camera-page {
 .edu-simulator-partner {
     display: grid;
     gap: 6px;
-    width: min(100%, 332px);
+    width: min(100%, 368px);
     padding: 12px 18px;
     border: 1px solid #c9dde8;
     border-radius: 12px;
@@ -785,9 +785,13 @@ body.edu-camera-page {
 }
 
 .edu-simulator-partner > strong { color: var(--edu-night); }
-.edu-simulator-brands { display: flex; align-items: center; gap: 16px; }
-.edu-simulator-brands img { display: block; width: min(48%, 148px); height: auto; }
-.edu-simulator-brands img + img { width: min(44%, 128px); }
+.edu-simulator-brands {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, .9fr) minmax(0, 1.15fr);
+    align-items: center;
+    gap: 10px;
+}
+.edu-simulator-brands img { display: block; width: 100%; height: auto; }
 
 .edu-simulator-overview {
     background: #f5fbff;
@@ -1006,8 +1010,6 @@ body.edu-camera-page {
     .edu-simulator-heading { align-items: flex-start; gap: 12px; margin-bottom: 16px; }
     .edu-simulator-heading h1 { margin-bottom: 5px; }
     .edu-simulator-partner { padding: 8px 12px; }
-    .edu-simulator-brands img { width: min(48%, 128px); }
-    .edu-simulator-brands img + img { width: min(44%, 106px); }
     .edu-simulator-layout { gap: 12px; }
     .edu-simulator-metrics { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
     .edu-simulator-metrics dt { font-size: .82rem; }

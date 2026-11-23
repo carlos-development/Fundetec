@@ -57,6 +57,7 @@ class SimuladorFinanciacionEducativaTests(TestCase):
         datos = {'monto_solicitado': '1000000', 'plazo_meses': '3'}
         expediente = self.client.post(self.pagina_url, datos)
         self.assertContains(expediente, 'alt="Loopiter"')
+        self.assertContains(expediente, 'alt="Jowalth Academy"')
         anonimo = Client()
         publico = anonimo.post(reverse('financiacion_educativa_web:simulador-publico'), datos)
         self.assertEqual(expediente.context['simulacion'].resultado, publico.context['simulacion'].resultado)
@@ -122,14 +123,16 @@ class SimuladorPublicoFinanciacionEducativaTests(TestCase):
         self.assertEqual(redirigida.redirect_chain, [(self.pagina_url, 308)])
         self.assertEqual(redirigida.context['simulacion'].resultado, directa.context['simulacion'].resultado)
 
-    def test_simulador_publico_muestra_ambas_marcas_tambien_en_errores_y_limites(self):
+    def test_simulador_publico_muestra_las_tres_marcas_tambien_en_errores_y_limites(self):
         self.assertEqual(Client(enforce_csrf_checks=True).post(self.pagina_url, {}).status_code, 403)
         invalida = self.client.post(self.pagina_url, {'monto_solicitado': '1000000', 'plazo_meses': '121'})
         self.assertContains(invalida, 'alt="FUNDETEC"')
+        self.assertContains(invalida, 'alt="Jowalth Academy"')
         self.assertIsNone(invalida.context['simulacion'])
         with override_settings(FINANCIACION_EDUCATIVA_PUBLIC_SIMULATOR_RATE_LIMIT_REQUESTS=1):
             limitada = self.client.post(self.pagina_url, {})
             self.assertContains(limitada, 'alt="Loopiter"', status_code=429)
+            self.assertContains(limitada, 'alt="Jowalth Academy"', status_code=429)
             self.assertEqual(self.client.post(self.calcular_url, {}).status_code, 429)
 
     def test_pagina_es_publica_y_muestra_desglose_plan_y_enlaces(self):
@@ -145,8 +148,10 @@ class SimuladorPublicoFinanciacionEducativaTests(TestCase):
         self.assertNotContains(response, 'M&eacute;todo de c&aacute;lculo')
         self.assertNotContains(response, 'Anualidad francesa')
         self.assertContains(response, 'edu-public-simulator-page')
+        self.assertContains(response, '<strong>Aliados</strong>', html=True)
         self.assertContains(response, 'alt="FUNDETEC"')
         self.assertContains(response, 'alt="Loopiter"')
+        self.assertContains(response, 'alt="Jowalth Academy"')
         self.assertNotContains(response, 'Política financiera')
         self.assertNotContains(response, 'redondeo final al peso')
         self.assertNotContains(response, 'data-simulator-version')
