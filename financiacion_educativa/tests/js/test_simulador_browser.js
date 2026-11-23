@@ -344,7 +344,7 @@ test('simulador real: responsive, recalculo, fallback y respuestas tardias', {
         assert.equal(posted.url(), baseURL);
         assert.equal(posted.status(), 200);
         assert.equal(await pagina.locator('[data-simulator-plan] tr').count(), 4);
-        assert.equal(await pagina.locator('.edu-simulator-brands img').count(), 2);
+        assert.equal(await pagina.locator('.edu-simulator-brands img').count(), 3);
         await capture(pagina, 'publico-sin-js');
         await sinJS.close();
     });
