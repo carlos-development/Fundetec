@@ -135,7 +135,7 @@ test('simulador real: responsive, recalculo, fallback y respuestas tardias', {
         assert.equal(await page.locator('[data-simulator-plan] tr').count(), 3);
     });
 
-    await t.test('simulador público único y expediente Jowalth muestran ambas marcas', async () => {
+    await t.test('simulador público único y expediente Jowalth muestran las tres marcas', async () => {
         const legacy = process.env.EDU_SIMULATOR_LEGACY_URL;
         assert.equal((await page.goto(legacy)).status(), 200);
         await page.waitForURL(baseURL);
@@ -149,7 +149,10 @@ test('simulador real: responsive, recalculo, fallback y respuestas tardias', {
                 assert.equal((await page.goto(url)).status(), 200);
                 await page.waitForURL(url);
                 const brands = page.locator('.edu-simulator-brands img');
-                assert.equal(await brands.count(), 2);
+                assert.deepEqual(
+                    await brands.evaluateAll(imgs => imgs.map(img => img.alt)),
+                    ['FUNDETEC', 'Loopiter', 'Jowalth Academy'],
+                );
                 assert.equal(await brands.evaluateAll(imgs => imgs.every(img => img.complete && img.naturalWidth > 0)), true);
                 assert.equal(await page.getByRole('link', {name: /Abrir simulador de Jowalth/}).count(), 0);
 

@@ -5,8 +5,9 @@ from django.conf import settings
 
 # Nombre accesible, archivo estático y ancho en píxeles para correo.
 LOGOS_JOWALTH = (
-    ('FUNDETEC', 'images/simulador/Fundetec_logo.png', 96),
-    ('Loopiter', 'images/simulador/Loopiter_logo.png', 88),
+    ('FUNDETEC', 'images/simulador/Fundetec_logo.png', 88),
+    ('Loopiter', 'images/simulador/Loopiter_logo.png', 76),
+    ('Jowalth Academy', 'images/simulador/Jowalth_logo.png', 96),
 )
 
 

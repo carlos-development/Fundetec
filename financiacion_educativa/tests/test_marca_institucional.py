@@ -34,16 +34,21 @@ class MarcaCorreoTests(TestCase):
 
     def verificar_logos(self, mensaje, jowalth):
         html = mensaje.alternatives[0].content
-        for nombre in ('Fundetec', 'Loopiter'):
-            url = f'https://aprobado.com.co/static/images/simulador/{nombre}_logo.png'
+        for nombre, archivo in (
+            ('FUNDETEC', 'Fundetec_logo.png'),
+            ('Loopiter', 'Loopiter_logo.png'),
+            ('Jowalth Academy', 'Jowalth_logo.png'),
+        ):
+            url = f'https://aprobado.com.co/static/images/simulador/{archivo}'
             self.assertEqual(html.count(f'src="{url}"'), int(jowalth))
             self.assertNotIn(url, mensaje.body)
             if jowalth:
-                self.assertIn(f'alt="{nombre.upper() if nombre == "Fundetec" else nombre}"', html)
+                self.assertIn(f'alt="{nombre}"', html)
         if jowalth:
             self.assertLess(html.index('alt="Aprobado"'), html.index('<h1'))
             self.assertLess(html.index('<h1'), html.index('alt="FUNDETEC"'))
-            self.assertLess(html.index('alt="Loopiter"'), html.index('Mensaje enviado por'))
+            self.assertLess(html.index('alt="Loopiter"'), html.index('alt="Jowalth Academy"'))
+            self.assertLess(html.index('alt="Jowalth Academy"'), html.index('Mensaje enviado por'))
         self.assertIn('Aprobado', html)
 
     def test_cada_aviso_conserva_datos_y_solo_cambia_la_presentacion_html(self):

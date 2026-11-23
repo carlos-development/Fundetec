@@ -13,6 +13,7 @@
       .email-shell { width:100% !important; max-width:100% !important; }
       .outer-pad { padding:16px 8px !important; }
       .fluid-pad { padding-left:22px !important; padding-right:22px !important; }
+      .email-partners { padding-left:8px !important; padding-right:8px !important; }
       .email-title { font-size:23px !important; line-height:29px !important; }
       .stack-cell { display:block !important; width:100% !important; box-sizing:border-box !important; }
       .cta-link { display:block !important; text-align:center !important; }
@@ -36,10 +37,10 @@
         </td></tr>
         <tr><td class="fluid-pad" style="padding:20px 40px {% if logos_institucionales %}12px{% else %}32px{% endif %};">{% block content %}{% endblock %}</td></tr>
         {% if logos_institucionales %}
-        <tr><td class="fluid-pad" align="center" style="padding:0 40px 18px;background-color:#FFFFFF;" bgcolor="#FFFFFF">
+        <tr><td class="email-partners" align="center" style="padding:0 40px 18px;background-color:#FFFFFF;" bgcolor="#FFFFFF">
           <table role="presentation" align="center" cellspacing="0" cellpadding="0" border="0"><tr>
             {% for nombre, url, ancho in logos_institucionales %}
-            <td valign="middle" {% if not forloop.last %}style="padding-right:48px;"{% endif %}><img src="{{ url }}" width="{{ ancho }}" alt="{{ nombre }}" style="display:block;width:{{ ancho }}px;height:auto;color:#0B2E59;font:14px/20px Arial,sans-serif;"></td>
+            <td valign="middle" {% if not forloop.last %}style="padding-right:10px;"{% endif %}><img src="{{ url }}" width="{{ ancho }}" alt="{{ nombre }}" style="display:block;width:{{ ancho }}px;height:auto;color:#0B2E59;font:14px/20px Arial,sans-serif;"></td>
             {% endfor %}
           </tr></table>
         </td></tr>
