@@ -102,7 +102,8 @@ class TableroRecaudosTests(DatosTableroRecaudos, TestCase):
 
     def test_partes_por_cuota_aplicada_historica_y_ausentes_en_pendientes(self):
         aplicada = self.consultar(institucion=self.institucion.pk, estado='APPLIED')
-        self.assertEqual({tuple(i.cuotas_aplicadas) for i in aplicada.context['pagina']}, {(1,), (2,)})
+        self.assertContains(aplicada, 'Cuota 1 cubierta')
+        self.assertContains(aplicada, 'Cuota 2 cubierta')
         self.assertContains(aplicada, 'class="collections-installment-shares"', count=2)
         self.assertContains(aplicada, 'Sin política aprobada', count=6)
         pendiente = self.consultar(institucion=self.institucion.pk, estado='TO_APPLY')
@@ -137,7 +138,7 @@ class TableroRecaudosTests(DatosTableroRecaudos, TestCase):
     def test_pendiente_no_fabrica_capital_intereses_ni_cuota_pagada(self):
         respuesta = self.consultar(estado='TO_APPLY')
         self.assertEqual({i.pk for i in respuesta.context['pagina']}, {self.pendiente.pk, self.pendiente_ajeno.pk})
-        self.assertNotContains(respuesta, 'Aplicado &middot; Cuota')
+        self.assertNotContains(respuesta, 'class="collections-installment-shares"')
         self.assertContains(respuesta, 'a&uacute;n no tienen desglose')
         self.assertEqual(respuesta.context['total_listado'], Decimal('100000'))
 

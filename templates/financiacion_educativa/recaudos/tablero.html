@@ -203,9 +203,13 @@
                         <td data-label="Capital aplicado" class="collections-amount">{{ ingreso.capital_neto|cop_recaudo }}</td>
                         <td data-label="Intereses aplicados" class="collections-amount">{{ ingreso.interes_neto|cop_recaudo }}</td>
                         <td data-label="Aplicación">
-                            {% for numero in ingreso.cuotas_aplicadas %}
+                            {% for cuota in ingreso.cuotas_aplicadas %}
                                 <div class="collections-applied-installment">
-                                    <span class="collections-status is-applied">Aplicado &middot; Cuota {{ numero }}</span>
+                                    {% if cuota.cubierta %}
+                                        <span class="collections-status is-applied">Cuota {{ cuota.numero }} cubierta</span>
+                                    {% else %}
+                                        <span class="collections-status is-pending">Abono parcial &middot; Cuota {{ cuota.numero }}</span>
+                                    {% endif %}
                                     <dl class="collections-installment-shares">
                                         <div><dt>Parte de Aprobado</dt><dd>Sin política aprobada</dd></div>
                                         <div><dt>Parte de la institución</dt><dd>Sin política aprobada</dd></div>

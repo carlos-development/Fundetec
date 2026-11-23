@@ -8,9 +8,10 @@ from django.db.models.functions import TruncMonth
 from django.http import QueryDict
 from django.urls import reverse
 
+from financiacion_educativa.models import CuotaAmortizacionEducativa
 from financiacion_educativa.models_libro import LineaLibroEducativo
 from financiacion_educativa.models_recaudos import ConciliacionRecaudoEducativo
-from financiacion_educativa.services.libro_pagos import anotar_ingresos
+from financiacion_educativa.services.libro_pagos import anotar_cuotas, anotar_ingresos
 
 
 SEGMENTOS = (
@@ -25,19 +26,26 @@ CERO = Decimal('0.00')
 def detallar_cuotas_aplicadas(pagina):
     ingresos = list(pagina)
     cuotas = defaultdict(list)
-    lineas = (LineaLibroEducativo.objects.filter(
+    lineas = list(LineaLibroEducativo.objects.filter(
         movimiento__ingreso_id__in=[ingreso.pk for ingreso in ingresos],
         cuota__isnull=False,
-    ).values('movimiento__ingreso_id', 'cuota__numero').annotate(
+    ).values('movimiento__ingreso_id', 'cuota_id', 'cuota__numero').annotate(
         aplicado=Sum(F('importe') * Case(
             When(movimiento__tipo='COMPENSATION', then=Value(-1)), default=Value(1),
         )),
     ).filter(aplicado__gt=0).order_by('cuota__numero'))
+    # La cobertura de la cuota incluye abonos de otros ingresos y sus compensaciones.
+    cubiertas = set(anotar_cuotas(CuotaAmortizacionEducativa.objects.filter(
+        pk__in={linea['cuota_id'] for linea in lineas},
+    )).filter(cubierta_libro=True).values_list('pk', flat=True))
     for linea in lineas:
-        cuotas[linea['movimiento__ingreso_id']].append(linea['cuota__numero'])
+        cuotas[linea['movimiento__ingreso_id']].append({
+            'numero': linea['cuota__numero'],
+            'cubierta': linea['cuota_id'] in cubiertas,
+        })
     for ingreso in ingresos:
         if hasattr(ingreso, 'aplicacion'):
-            ingreso.cuotas_aplicadas = [ingreso.aplicacion.cuota.numero]
+            ingreso.cuotas_aplicadas = [{'numero': ingreso.aplicacion.cuota.numero, 'cubierta': True}]
         else:
             ingreso.cuotas_aplicadas = cuotas[ingreso.pk]
 
