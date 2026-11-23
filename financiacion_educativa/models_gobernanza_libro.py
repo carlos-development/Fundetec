@@ -78,6 +78,11 @@ class ControlPilotoLibro(models.Model):
     id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
     institucion = models.ForeignKey('instituciones.Institucion', on_delete=models.PROTECT, null=True, blank=True)
     activo = models.BooleanField(default=False)
+    caso_unico = models.BooleanField(default=False)
+    ingreso_designado = models.ForeignKey(
+        'financiacion_educativa.ConciliacionRecaudoEducativo',
+        on_delete=models.PROTECT, null=True, blank=True, related_name='+',
+    )
     revision = models.PositiveIntegerField(default=0)
 
     class Meta:
@@ -85,6 +90,11 @@ class ControlPilotoLibro(models.Model):
         constraints = [
             models.CheckConstraint(condition=models.Q(id=1), name='libro_control_unico'),
             models.CheckConstraint(condition=models.Q(activo=False) | models.Q(institucion__isnull=False), name='libro_piloto_requiere_institucion'),
+            models.CheckConstraint(
+                condition=(models.Q(caso_unico=False, ingreso_designado__isnull=True) |
+                           models.Q(caso_unico=True, ingreso_designado__isnull=False)),
+                name='libro_piloto_ingreso_designado',
+            ),
         ]
 
     def save(self, *args, **kwargs):
@@ -101,6 +111,11 @@ class EventoControlPilotoLibro(EvidenciaInmutable):
     institucion = models.ForeignKey('instituciones.Institucion', on_delete=models.PROTECT)
     revision = models.PositiveIntegerField(unique=True)
     activo = models.BooleanField()
+    caso_unico = models.BooleanField(default=False)
+    ingreso_designado = models.ForeignKey(
+        'financiacion_educativa.ConciliacionRecaudoEducativo',
+        on_delete=models.PROTECT, null=True, blank=True, related_name='+',
+    )
     actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
     motivo = models.CharField(max_length=1000)
     creado_en = models.DateTimeField(auto_now_add=True)

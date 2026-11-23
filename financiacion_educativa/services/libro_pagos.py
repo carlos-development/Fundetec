@@ -334,10 +334,16 @@ def calcular_distribucion(*, foto, estado, recibido, fecha, modo, reglas):
 
 
 def preparar_preview(*, ingreso_id, actor, modo, politica_id=None):
+    from financiacion_educativa.models_gobernanza_libro import ControlPilotoLibro
+
     habilitados()
     exigir_operador(actor)
     ingreso = ConciliacionRecaudoEducativo.objects.get(pk=ingreso_id)
-    alcance = gobierno.exigir_alcance(actor, ingreso.reporte.solicitud.institucion_id, 'POST')
+    institucion_id = ingreso.reporte.solicitud.institucion_id
+    alcance = gobierno.exigir_alcance(actor, institucion_id, 'POST')
+    control = ControlPilotoLibro.objects.get(pk=1)
+    if control.activo and control.institucion_id == institucion_id:
+        gobierno.exigir_ingreso_designado(control, ingreso.pk)
     _validar_ingreso(ingreso)
     if hasattr(ingreso, 'aplicacion'):
         raise ValidationError('Este ingreso ya tiene una aplicacion integra historica; se consulta sin copiarla al libro.')
@@ -351,8 +357,6 @@ def preparar_preview(*, ingreso_id, actor, modo, politica_id=None):
         raise ValidationError('El ingreso no tiene dinero sin destino.')
     resultado = calcular_distribucion(foto=ingreso.reporte.fotografia, estado=estado,
         recibido=disponible, fecha=ingreso.fecha_efectiva, modo=modo, reglas=reglas)
-    from financiacion_educativa.models_gobernanza_libro import ControlPilotoLibro
-    control = ControlPilotoLibro.objects.get(pk=1)
     snapshot = {'motor': 'EDU_LEDGER_V1', 'ingreso': str(ingreso.pk), 'actor': str(actor.pk), 'modo': modo,
                 'control_revision': control.revision, 'alcance': alcance.pk,
                 'politica': politica.pk if politica else None, 'reglas': reglas, 'version': version,
@@ -386,7 +390,7 @@ def contabilizar(*, ingreso_id, actor, token, clave, motivo, confirmar=False):
     institucion_id = ingreso_base.reporte.solicitud.institucion_id
     control = gobierno.bloquear_piloto(institucion_id)
     gobierno.exigir_contabilizacion(actor=actor, institucion_id=institucion_id,
-        fecha=ingreso_base.fecha_efectiva, politica_id=snapshot['politica'], control=control)
+        ingreso_id=ingreso_base.pk, fecha=ingreso_base.fecha_efectiva, politica_id=snapshot['politica'], control=control)
     # Same global order as the existing complete application; no nullable joined locks.
     SolicitudFinanciacionEducativa.objects.select_for_update().get(pk=ingreso_base.reporte.solicitud_id)
     ingreso = ConciliacionRecaudoEducativo.objects.select_for_update().get(pk=ingreso_id)
@@ -432,7 +436,7 @@ def preparar_compensacion(*, movimiento_id, actor):
     exigir_permiso(actor, PERMISO_CONSULTAR)
     politica, revision, alcance = gobierno.exigir_contabilizacion(actor=actor,
         institucion_id=original.fotografia.solicitud.institucion_id,
-        fecha=original.fecha_bancaria, accion='COMPENSATE')
+        ingreso_id=original.ingreso_id, fecha=original.fecha_bancaria, accion='COMPENSATE')
     if actor.pk == original.actor_id:
         raise PermissionDenied('La compensacion requiere un autorizante distinto del operador original.')
     ultimo = MovimientoLibroEducativo.objects.filter(fotografia=original.fotografia).order_by('-secuencia').first()
@@ -457,7 +461,8 @@ def compensar(*, movimiento_id, actor, clave, motivo, secuencia_esperada, token=
     institucion_id = original.fotografia.solicitud.institucion_id
     control = gobierno.bloquear_piloto(institucion_id)
     politica, _, _ = gobierno.exigir_contabilizacion(actor=actor, institucion_id=institucion_id,
-        fecha=original.fecha_bancaria, politica_id=snapshot['politica'], accion='COMPENSATE', control=control)
+        ingreso_id=original.ingreso_id, fecha=original.fecha_bancaria, politica_id=snapshot['politica'],
+        accion='COMPENSATE', control=control)
     if actor.pk == original.actor_id:
         raise PermissionDenied('La compensacion requiere autorizacion independiente.')
     SolicitudFinanciacionEducativa.objects.select_for_update().get(pk=original.fotografia.solicitud_id)

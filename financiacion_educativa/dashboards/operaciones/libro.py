@@ -90,7 +90,7 @@ def preview_view(request, ingreso_id):
         try:
             gobierno.exigir_contabilizacion(actor=request.user,
                 institucion_id=ingreso.reporte.solicitud.institucion_id,
-                fecha=ingreso.fecha_efectiva, politica_id=resultado['politica'])
+                ingreso_id=ingreso.pk, fecha=ingreso.fecha_efectiva, politica_id=resultado['politica'])
         except ValidationError as exc:
             bloqueo = exc.messages
         else:

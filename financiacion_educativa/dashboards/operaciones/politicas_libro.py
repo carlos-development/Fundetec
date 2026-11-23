@@ -93,8 +93,19 @@ class DecisionForm(forms.Form):
 
 class ControlForm(InstitucionForm):
     activo = forms.ChoiceField(choices=[('OFF', 'Detener nuevas escrituras'), ('ON', 'Activar piloto limitado')])
+    modalidad = forms.ChoiceField(required=False, label='Modalidad del piloto',
+        choices=[('', 'Seleccionar modalidad'), ('INSTITUCION', 'Alcance institucional'), ('CASO_UNICO', 'Caso único')],
+        help_text='En caso único, solo la conciliación designada admite contabilización y compensación.')
+    ingreso_designado = forms.UUIDField(required=False, label='ID de la conciliación designada',
+        help_text='Para caso único, copia el identificador al final de la ruta «Ver libro» de la conciliación.')
     motivo = forms.CharField(max_length=1000, widget=forms.Textarea(attrs={'rows': 2}))
     confirmar = forms.BooleanField(label='Confirmo el cambio del piloto')
+
+    def clean(self):
+        datos = super().clean()
+        if datos.get('activo') == 'ON' and not datos.get('modalidad') and 'modalidad' not in self.errors:
+            self.add_error('modalidad', 'Selecciona la modalidad para activar el piloto.')
+        return datos
 
 
 class AlcanceForm(InstitucionForm):
@@ -181,7 +192,8 @@ def control_view(request):
         datos = form.cleaned_data
         try:
             gobierno.controlar_piloto(institucion_id=datos['institucion'].pk,
-                activo=datos['activo'] == 'ON', actor=request.user, motivo=datos['motivo'])
+                activo=datos['activo'] == 'ON', actor=request.user, motivo=datos['motivo'],
+                caso_unico=datos['modalidad'] == 'CASO_UNICO', ingreso_designado_id=datos['ingreso_designado'])
         except ValidationError as exc:
             form.add_error(None, exc)
         else:

@@ -67,7 +67,7 @@ class Command(BaseCommand):
                 try:
                     if actor:
                         gobierno.exigir_contabilizacion(actor=actor, institucion_id=institucion.pk,
-                            fecha=ingreso.fecha_efectiva)
+                            ingreso_id=ingreso.pk, fecha=ingreso.fecha_efectiva)
                     if ingreso.disponible_libro <= 0:
                         codigo = 'HISTORICAL_COUNTED_ONCE' if hasattr(ingreso, 'aplicacion') else 'APPLIED'
                     else:
@@ -97,6 +97,7 @@ class Command(BaseCommand):
                 'piloto_activo': bool(control and control.activo),
                 'institucion_piloto_id': control.institucion_id if control else None,
                 'revision_control': control.revision if control else None,
+                'piloto_caso_unico': bool(control and control.caso_unico),
                 'politica_a_fecha_hasta': estado_politica,
                 'politicas_historicas_sin_gobernanza': PoliticaLibroEducativo.objects.filter(
                     institucion=institucion, propuesta__isnull=True).count(),
