@@ -11,6 +11,7 @@ from django.utils import timezone
 
 from instituciones.models import Institucion
 from financiacion_educativa.models_libro import PoliticaLibroEducativo
+from financiacion_educativa.models_recaudos import ConciliacionRecaudoEducativo
 from financiacion_educativa.models_gobernanza_libro import (
     PropuestaPoliticaLibro, EventoPoliticaLibro, EventoAlcanceLibro,
     ControlPilotoLibro, EventoControlPilotoLibro,
@@ -232,33 +233,64 @@ def bloquear_piloto(institucion_id):
     return control
 
 
-def exigir_contabilizacion(*, actor, institucion_id, fecha, politica_id=None, accion='POST', control=None):
+def exigir_ingreso_designado(control, ingreso_id):
+    if not control.caso_unico:
+        return
+    if control.ingreso_designado_id is None:
+        raise ErrorGobernanzaLibro('PILOT_INCOME_REQUIRED', 'El piloto de caso único requiere una conciliación designada.')
+    if control.ingreso_designado_id != ingreso_id:
+        raise ErrorGobernanzaLibro('PILOT_OTHER_INCOME', 'Esta conciliación no es la designada para el piloto de caso único.')
+
+
+def exigir_contabilizacion(*, actor, institucion_id, ingreso_id, fecha, politica_id=None, accion='POST', control=None):
     alcance = exigir_alcance(actor, institucion_id, accion)
     if getattr(settings, 'FINANCIACION_EDUCATIVA_LIBRO_ENABLED', False) is not True:
         raise ErrorGobernanzaLibro('FLAG_DISABLED', 'Contabilizacion 2B bloqueada: el flag esta desactivado.')
     control = control or ControlPilotoLibro.objects.get(pk=1)
     if not control.activo or control.institucion_id != institucion_id:
         raise ErrorGobernanzaLibro('PILOT_CLOSED', 'Contabilizacion 2B bloqueada: la institucion no tiene un piloto activo.')
+    exigir_ingreso_designado(control, ingreso_id)
     politica = resolver_politica(institucion_id, fecha, politica_id)
     return politica, control.revision, alcance.pk
 
 
 @transaction.atomic
-def controlar_piloto(*, institucion_id, activo, actor, motivo):
+def controlar_piloto(*, institucion_id, activo, actor, motivo, caso_unico=None, ingreso_designado_id=None):
     control = bloquear_piloto(institucion_id)
     exigir_alcance(actor, institucion_id, 'CONTROL')
     motivo = _texto(motivo)
-    if type(activo) is not bool:
+    if type(activo) is not bool or (caso_unico is not None and type(caso_unico) is not bool):
         raise ValidationError('Estado de piloto invalido.')
     if control.activo and control.institucion_id != institucion_id:
         raise ValidationError('Debe detener el piloto de la otra institucion antes de cambiar de alcance.')
     if activo:
+        if caso_unico is None:
+            caso_unico = control.institucion_id == institucion_id and control.caso_unico
+        if caso_unico:
+            if ingreso_designado_id is None:
+                raise ErrorGobernanzaLibro('PILOT_INCOME_REQUIRED', 'Designa una conciliación para activar el piloto de caso único.')
+            ingreso = ConciliacionRecaudoEducativo.objects.filter(
+                pk=ingreso_designado_id, reporte__solicitud__institucion_id=institucion_id,
+            ).first()
+            if ingreso is None:
+                raise ErrorGobernanzaLibro('PILOT_INVALID_INCOME', 'La conciliación designada no pertenece a la institución o no existe.')
+            ingreso_designado_id = ingreso.pk
+            resolver_politica(institucion_id, ingreso.fecha_efectiva)
+        elif ingreso_designado_id is not None:
+            raise ValidationError('Para designar una conciliación, selecciona el piloto de caso único.')
+        if control.activo and (control.caso_unico, control.ingreso_designado_id) != (caso_unico, ingreso_designado_id):
+            raise ValidationError('Detén el piloto antes de cambiar la modalidad o la conciliación designada.')
         resolver_politica(institucion_id, timezone.localdate())
+    elif control.institucion_id == institucion_id:
+        caso_unico, ingreso_designado_id = control.caso_unico, control.ingreso_designado_id
+    else:
+        caso_unico, ingreso_designado_id = False, None
     if control.institucion_id == institucion_id and control.activo == activo:
         return control
     control.activo, control.institucion_id, control.revision = activo, institucion_id, control.revision + 1
+    control.caso_unico, control.ingreso_designado_id = caso_unico, ingreso_designado_id
     control._servicio_control = True
     control.save()
     EventoControlPilotoLibro.objects.create(institucion_id=institucion_id, revision=control.revision,
-        activo=activo, actor=actor, motivo=motivo)
+        activo=activo, actor=actor, motivo=motivo, caso_unico=caso_unico, ingreso_designado_id=ingreso_designado_id)
     return control
