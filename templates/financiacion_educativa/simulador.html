@@ -20,7 +20,7 @@
             </div>
             {% if logos_institucionales %}
                 <div class="edu-simulator-partner">
-                    <strong>{% if simulador_publico %}Aliados de Jowalth Academy{% else %}Jowalth Academy{% endif %}</strong>
+                    <strong>{% if simulador_publico %}Aliados{% else %}Jowalth Academy{% endif %}</strong>
                     <div class="edu-simulator-brands" role="group" aria-label="Logos institucionales">
                         {% for nombre, archivo, ancho in logos_institucionales %}
                             <img src="{% static archivo %}" alt="{{ nombre }}">

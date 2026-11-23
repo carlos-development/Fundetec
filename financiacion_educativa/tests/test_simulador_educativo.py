@@ -148,6 +148,7 @@ class SimuladorPublicoFinanciacionEducativaTests(TestCase):
         self.assertNotContains(response, 'M&eacute;todo de c&aacute;lculo')
         self.assertNotContains(response, 'Anualidad francesa')
         self.assertContains(response, 'edu-public-simulator-page')
+        self.assertContains(response, '<strong>Aliados</strong>', html=True)
         self.assertContains(response, 'alt="FUNDETEC"')
         self.assertContains(response, 'alt="Loopiter"')
         self.assertContains(response, 'alt="Jowalth Academy"')
