@@ -15,6 +15,7 @@ from financiacion_educativa.models_recaudos import AplicacionCuotaEducativa, Con
 from financiacion_educativa.services import aplicacion_cuotas, recaudos
 from financiacion_educativa.tests.test_ingreso_operaciones import DatosIngresoOperaciones
 from financiacion_educativa.tests.test_recaudos_breb import AISLAMIENTO
+from financiacion_educativa.templatetags.recaudo_format import cop_recaudo
 
 
 class DatosTableroRecaudos(DatosIngresoOperaciones):
@@ -91,6 +92,23 @@ class TableroRecaudosTests(DatosTableroRecaudos, TestCase):
                     self.assertEqual(indicador['importe'], respaldo.context['total_listado'])
                     self.assertEqual(indicador['importe'], sum(i.monto_recibido for i in respaldo.context['pagina']))
 
+    def test_interes_aplicado_y_partes_sin_politica_de_reparto(self):
+        respuesta = self.consultar(institucion=self.institucion.pk, estado='TO_APPLY')
+        esperado = self.aplicado.aplicacion.interes_aplicado + self.aplicado_segundo.aplicacion.interes_aplicado
+        self.assertGreater(esperado, 0)
+        self.assertContains(respuesta, f'<dd id="interes-aplicado-periodo">{cop_recaudo(esperado)}</dd>', html=True)
+        self.assertContains(respuesta, '<dt>Parte de Aprobado</dt><dd>Sin política aprobada</dd>', html=True)
+        self.assertContains(respuesta, '<dt>Parte de la institución</dt><dd>Sin política aprobada</dd>', html=True)
+
+    def test_partes_por_cuota_aplicada_historica_y_ausentes_en_pendientes(self):
+        aplicada = self.consultar(institucion=self.institucion.pk, estado='APPLIED')
+        self.assertContains(aplicada, 'Cuota 1 cubierta')
+        self.assertContains(aplicada, 'Cuota 2 cubierta')
+        self.assertContains(aplicada, 'class="collections-installment-shares"', count=2)
+        self.assertContains(aplicada, 'Sin política aprobada', count=6)
+        pendiente = self.consultar(institucion=self.institucion.pk, estado='TO_APPLY')
+        self.assertNotContains(pendiente, 'class="collections-installment-shares"')
+
     def test_institucion_limita_todas_las_cifras_meses_y_listado(self):
         respuesta = self.consultar(institucion=self.institucion.pk)
         ids = {i.pk for i in respuesta.context['pagina']}
@@ -120,7 +138,7 @@ class TableroRecaudosTests(DatosTableroRecaudos, TestCase):
     def test_pendiente_no_fabrica_capital_intereses_ni_cuota_pagada(self):
         respuesta = self.consultar(estado='TO_APPLY')
         self.assertEqual({i.pk for i in respuesta.context['pagina']}, {self.pendiente.pk, self.pendiente_ajeno.pk})
-        self.assertNotContains(respuesta, 'Aplicado &middot; Cuota')
+        self.assertNotContains(respuesta, 'class="collections-installment-shares"')
         self.assertContains(respuesta, 'a&uacute;n no tienen desglose')
         self.assertEqual(respuesta.context['total_listado'], Decimal('100000'))
 

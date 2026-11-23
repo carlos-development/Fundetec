@@ -25,7 +25,8 @@ class Command(BaseCommand):
         parser.add_argument('--desde')
         parser.add_argument('--hasta')
         parser.add_argument('--actor-id', type=int)
-        parser.add_argument('--modo', choices=dict(libro.MODOS), default='PARTIAL')
+        parser.add_argument('--modo', choices=dict(libro.MODOS),
+            help='Si se omite, usa cuota completa para la política contractual y parcial para la general.')
         parser.add_argument('--limit', type=int, default=100)
 
     def handle(self, *args, **opciones):
@@ -76,9 +77,10 @@ class Command(BaseCommand):
                         elif ingreso.evidencia_movimiento.estado_escaneo != 'SAFE':
                             codigo = 'SECURITY_REVIEW_REQUIRED'
                         else:
+                            modo = opciones['modo'] or ('FULL' if libro.es_cuota_contractual(politica_caso.reglas) else 'PARTIAL')
                             libro.calcular_distribucion(foto=ingreso.reporte.fotografia,
                                 estado=libro.estado_libro(ingreso.reporte.fotografia), recibido=ingreso.disponible_libro,
-                                fecha=ingreso.fecha_efectiva, modo=opciones['modo'], reglas=politica_caso.reglas)
+                                fecha=ingreso.fecha_efectiva, modo=modo, reglas=politica_caso.reglas)
                 except PermissionDenied:
                     codigo = 'OPERATOR_PERMISSION_OR_SCOPE_DENIED'
                 except ValidationError as error:

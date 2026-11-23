@@ -13,7 +13,7 @@ test('Tablero operativo: importes y respaldos bancarios sin JavaScript', async t
     await context.addCookies([{ name: 'sessionid', value: process.env.EDU_COLLECTIONS_SESSION, url: base }]);
     const page = await context.newPage();
     async function capture(name) {
-        for (const width of [375, 390, 1440]) {
+        for (const width of [320, 375, 390, 1440]) {
             await page.setViewportSize({ width, height: width > 700 ? 1000 : 844 });
             await page.evaluate(() => window.scrollTo(0, 0));
             assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `${name}: overflow ${width}`);
@@ -23,6 +23,13 @@ test('Tablero operativo: importes y respaldos bancarios sin JavaScript', async t
     }
     assert.equal((await page.goto(base + process.env.EDU_COLLECTIONS_URL)).status(), 200);
     assert.equal(await page.locator('#movements-total').innerText().then(s => s.startsWith('5 movimientos')), true);
+    const shares = page.locator('#movimientos .collections-installment-shares');
+    assert.equal(await shares.count(), 3);
+    assert.equal(await shares.first().getByText('Sin política aprobada', { exact: true }).count(), 2);
+    assert.equal(
+        await page.locator('#interes-aplicado-periodo').innerText(),
+        process.env.EDU_COLLECTIONS_APPLIED_INTEREST
+    );
     const indicators = await page.locator('[data-indicador]').evaluateAll(items => items.map(a => ({
         url: a.getAttribute('href'), amount: a.querySelector('strong').textContent,
         count: Number(a.querySelector('small').textContent.trim().split(' ')[0]),
@@ -40,6 +47,7 @@ test('Tablero operativo: importes y respaldos bancarios sin JavaScript', async t
     await page.locator('#id_estado').selectOption('TO_APPLY');
     await page.getByRole('button', { name: 'Consultar', exact: true }).click();
     assert.equal(await page.locator('#movimientos tbody tr').count(), 1);
+    assert.equal(await shares.count(), 0);
     assert.equal((await page.locator('#movements-total').innerText()).includes('$40.000'), true);
     assert.equal((await page.content()).includes('OTRA-INSTITUCION-SINTETICA'), false);
     await capture('03-por-aplicar-institucion');

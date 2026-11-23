@@ -13,7 +13,7 @@
 
 {% block content %}
 <div class="edu-dashboard-layout edu-operations-layout">
-    {% include "financiacion_educativa/dashboards/operaciones/_sidebar.html" %}
+    {% block operations_navigation %}{% include "financiacion_educativa/dashboards/operaciones/_sidebar.html" %}{% endblock %}
     <section class="edu-dashboard-content" aria-label="Contenido del panel operativo">
         {% block operations_content %}{% endblock %}
     </section>

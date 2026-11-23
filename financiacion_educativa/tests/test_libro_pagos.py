@@ -110,12 +110,41 @@ class LibroPagosTests(DatosLibro, TestCase):
 
     def test_parcial_cruza_cuotas_vencidas_y_solo_cubre_la_primera(self):
         ingreso = self.nuevo_ingreso(self.cuota.valor_cuota + Decimal('100'), fecha=date(2026, 10, 5))
-        self.registrar(ingreso)
+        movimiento = self.registrar(ingreso)
         cuotas = libro.anotar_cuotas(self.fotografia.cuotas.all()).order_by('numero')
         self.assertTrue(cuotas[0].cubierta_libro)
         self.assertFalse(cuotas[1].cubierta_libro)
         self.assertEqual(cuotas[1].interes_cubierto, 100)
         self.assertEqual(libro.estado_libro(self.fotografia)['plan'][0]['numero'], 2)
+        self.client.force_login(self.actor)
+        ruta = reverse('financiacion_educativa_web:operaciones:tablero-recaudos')
+        filtros = {'desde': '2026-10-05', 'hasta': '2026-10-05', 'estado': 'CONFIRMED'}
+        aplicado = self.client.get(ruta, filtros)
+        self.assertContains(aplicado, 'class="collections-installment-shares"', count=2)
+        self.assertContains(aplicado, 'Cuota 1 cubierta')
+        self.assertContains(aplicado, 'Abono parcial &middot; Cuota 2')
+        self.assertNotContains(aplicado, 'Cuota 2 cubierta')
+        libro.compensar(**self.datos_compensacion(movimiento))
+        compensado = self.client.get(ruta, filtros)
+        self.assertEqual(compensado.context['pagina'][0].cuotas_aplicadas, [])
+        self.assertNotContains(compensado, 'class="collections-installment-shares"')
+
+    def test_tablero_actualiza_cobertura_con_abonos_de_otras_fechas(self):
+        parcial = Decimal('100000.00')
+        self.registrar(self.nuevo_ingreso(parcial))
+        siguiente_fecha = self.fecha + timedelta(days=1)
+        cierre = self.registrar(self.nuevo_ingreso(self.cuota.valor_cuota - parcial, fecha=siguiente_fecha))
+        self.client.force_login(self.actor)
+        ruta = reverse('financiacion_educativa_web:operaciones:tablero-recaudos')
+        filtros = {'desde': self.fecha.isoformat(), 'hasta': self.fecha.isoformat(), 'estado': 'APPLIED'}
+        cubierta = self.client.get(ruta, filtros)
+        self.assertContains(cubierta, 'Cuota 1 cubierta')
+        self.assertNotContains(cubierta, 'Abono parcial')
+
+        libro.compensar(**self.datos_compensacion(cierre))
+        parcial = self.client.get(ruta, filtros)
+        self.assertContains(parcial, 'Abono parcial &middot; Cuota 1')
+        self.assertNotContains(parcial, 'Cuota 1 cubierta')
 
     def test_interes_anticipado_no_se_pierde_al_reproyectar(self):
         self.registrar(self.nuevo_ingreso())
