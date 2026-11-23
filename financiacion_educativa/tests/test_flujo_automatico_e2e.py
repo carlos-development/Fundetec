@@ -1,12 +1,14 @@
 import json
 from copy import deepcopy
+from io import BytesIO
 from tempfile import TemporaryDirectory
 from urllib.parse import urlparse
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import override_settings
+from django.test import Client, override_settings
 from django.urls import reverse
+from pypdf import PdfReader
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -45,13 +47,13 @@ from financiacion_educativa.tests.delivery_backends import (
 )
 from financiacion_educativa.tests.factories import (
     crear_configuracion_financiera,
+    crear_institucion,
     imagen_jpeg_prueba,
 )
 from financiacion_educativa.tests.signature_backends import (
     RecordingEducationalSignatureBackend,
 )
 from financiacion_educativa.tests.test_procesamiento_pdf import pdf_sintetico
-from instituciones.models import Institucion
 from instituciones.services.credenciales import crear_credencial_api
 
 
@@ -113,6 +115,8 @@ PAYLOAD = {
     FINANCIACION_EDUCATIVA_PDF_USE_SUBPROCESS=False,
     FINANCIACION_EDUCATIVA_ZAPSIGN_BACKEND=SIGNATURE_BACKEND,
     FINANCIACION_EDUCATIVA_ALLOW_TEST_SIGNATURE_BACKENDS=True,
+    FINANCIACION_EDUCATIVA_SIGNATURE_SEND_PAUSED=False,
+    FINANCIACION_EDUCATIVA_ZAPSIGN_WEBHOOK_HEADER='X-Educational-Signature-Secret',
     FINANCIACION_EDUCATIVA_ZAPSIGN_WEBHOOK_SECRET='e2e-webhook-secret',
     FINANCIACION_EDUCATIVA_SIGNATURE_RECIPIENT_HMAC_KEY='e2e-hmac-key',
     FINANCIACION_EDUCATIVA_ACREEDOR_RAZON_SOCIAL='ACREEDOR EDUCATIVO SAS',
@@ -140,11 +144,7 @@ class FlujoAutomaticoE2ETests(APITestCase):
         RecordingInvitationDeliveryBackend.reset()
         RecordingEducationalSignatureBackend.reset()
 
-        self.institucion = Institucion.objects.create(
-            nombre_comercial='Institucion E2E',
-            razon_social='Institucion E2E SAS',
-            numero_identificacion_tributaria='901700002',
-        )
+        self.institucion = crear_institucion('2')
         self.credencial = crear_credencial_api(
             institucion=self.institucion,
             nombre='Prueba E2E automatica',
@@ -206,14 +206,21 @@ class FlujoAutomaticoE2ETests(APITestCase):
         return documento
 
     def test_api_hasta_aprobacion_firmada_sin_pasos_administrativos(self):
+        alta_url = reverse('financiacion_educativa_api:solicitud-crear')
         with self.captureOnCommitCallbacks(execute=True):
             creacion = self.client.post(
-                reverse('financiacion_educativa_api:solicitud-crear'),
+                alta_url,
                 deepcopy(PAYLOAD),
                 format='json',
                 **self._api_headers(),
             )
         self.assertEqual(creacion.status_code, status.HTTP_202_ACCEPTED)
+        with self.captureOnCommitCallbacks(execute=True):
+            alta_repetida = self.client.post(alta_url, deepcopy(PAYLOAD), format='json', **self._api_headers())
+        self.assertEqual(alta_repetida.status_code, status.HTTP_202_ACCEPTED)
+        self.assertEqual(alta_repetida['Idempotent-Replayed'], 'true')
+        self.assertEqual(alta_repetida.data['application_id'], creacion.data['application_id'])
+        self.assertEqual(SolicitudFinanciacionEducativa.objects.filter(institucion=self.institucion).count(), 1)
         resultado_correo = procesar_siguiente_correo()
         self.assertTrue(resultado_correo.procesado)
         self.assertEqual(len(RecordingInvitationDeliveryBackend.deliveries), 1)
@@ -315,6 +322,8 @@ class FlujoAutomaticoE2ETests(APITestCase):
         for _ in range(9):
             resultado_worker = procesar_siguiente_trabajo()
             self.assertTrue(resultado_worker.procesado)
+            self.assertNotEqual(resultado_worker.estado, EstadoProcesoAutomatizacionEducativa.FAILED,
+                                resultado_worker.codigo)
             if (
                 resultado_worker.estado
                 == EstadoProcesoAutomatizacionEducativa.PENDING_SIGNATURE
@@ -354,13 +363,23 @@ class FlujoAutomaticoE2ETests(APITestCase):
             activa=True,
         )
         self.assertTrue(fotografia.bloqueada)
-        self.assertEqual(
-            ArtefactoContractualEducativo.objects.filter(
-                solicitud=solicitud,
-                vigente=True,
-            ).count(),
-            2,
-        )
+        artefactos = {artefacto.tipo: artefacto for artefacto in ArtefactoContractualEducativo.objects.filter(
+            solicitud=solicitud, vigente=True)}
+        paginas_esperadas = {
+            TipoArtefactoContractualEducativo.ENROLLMENT_FORM: 1,
+            TipoArtefactoContractualEducativo.PROMISSORY_NOTE: 4,
+        }
+        self.assertEqual(artefactos.keys(), paginas_esperadas.keys())
+        for tipo, paginas in paginas_esperadas.items():
+            with self.subTest(artefacto=tipo), artefactos[tipo].archivo.open('rb') as pdf:
+                self.assertEqual(len(PdfReader(pdf).pages), paginas)
+                self.assertEqual(artefactos[tipo].anexo_matricula_snapshot, {
+                    'institution_id': str(self.institucion.pk),
+                    'profile': 'FUNDETEC_FO_AD_005',
+                    'version': 'FO-AD-005-V2-EDU-2',
+                })
+        plan_url = reverse('financiacion_educativa_web:plan-contractual-pdf', args=[solicitud.pk, fotografia.pk])
+        self.assertEqual(self.client.get(plan_url).status_code, status.HTTP_404_NOT_FOUND)
 
         detalle_previo = self.client.get(
             reverse(
@@ -380,12 +399,13 @@ class FlujoAutomaticoE2ETests(APITestCase):
             'status': 'signed',
         }
         webhook_url = reverse('financiacion_educativa_api:zapsign-webhook')
-        webhook = self.client.post(
-            webhook_url,
-            data=json.dumps(payload_webhook),
-            content_type='application/json',
-            HTTP_X_EDUCATIONAL_SIGNATURE_SECRET='e2e-webhook-secret',
-        )
+        with self.captureOnCommitCallbacks(execute=True):
+            webhook = self.client.post(
+                webhook_url,
+                data=json.dumps(payload_webhook),
+                content_type='application/json',
+                HTTP_X_EDUCATIONAL_SIGNATURE_SECRET='e2e-webhook-secret',
+            )
         self.assertEqual(webhook.status_code, status.HTTP_200_OK)
         detalle_primera_firma = self.client.get(
             reverse(
@@ -409,13 +429,15 @@ class FlujoAutomaticoE2ETests(APITestCase):
         terminos_primera_firma = deepcopy(
             detalle_primera_firma.data['financial_terms']
         )
+        correos_primera_firma = OutboxCorreoEducativo.objects.filter(solicitud=solicitud).count()
 
-        repetido = self.client.post(
-            webhook_url,
-            data=json.dumps(payload_webhook),
-            content_type='application/json',
-            HTTP_X_EDUCATIONAL_SIGNATURE_SECRET='e2e-webhook-secret',
-        )
+        with self.captureOnCommitCallbacks(execute=True):
+            repetido = self.client.post(
+                webhook_url,
+                data=json.dumps(payload_webhook),
+                content_type='application/json',
+                HTTP_X_EDUCATIONAL_SIGNATURE_SECRET='e2e-webhook-secret',
+            )
         self.assertEqual(repetido.status_code, status.HTTP_200_OK)
 
         solicitud.refresh_from_db()
@@ -436,6 +458,7 @@ class FlujoAutomaticoE2ETests(APITestCase):
         self.assertEqual(pagare.archivo_firmado.name, archivo_firmado_nombre)
         self.assertEqual(pagare.hash_firmado_sha256, archivo_firmado_hash)
         self.assertEqual(EventoWebhookFirmaEducativa.objects.count(), 1)
+        self.assertEqual(OutboxCorreoEducativo.objects.filter(solicitud=solicitud).count(), correos_primera_firma)
         self.assertEqual(
             ProcesoAutomatizacionEducativa.objects.filter(
                 solicitud=solicitud,
@@ -498,3 +521,15 @@ class FlujoAutomaticoE2ETests(APITestCase):
             progreso_final['financial_terms'],
             detalle_final.data['financial_terms'],
         )
+        plan = self.client.get(plan_url)
+        self.assertEqual(plan.status_code, status.HTTP_200_OK)
+        self.assertEqual(plan['Content-Type'], 'application/pdf')
+        self.assertEqual(plan['Content-Disposition'], 'attachment; filename="plan-contractual-v1.pdf"')
+        self.assertIn('no-store', plan['Cache-Control'])
+        texto_plan = '\n'.join(pagina.extract_text() for pagina in PdfReader(BytesIO(plan.content)).pages)
+        self.assertIn('Plan contractual de pagos', texto_plan)
+        self.assertIn(PAYLOAD['external_reference'], texto_plan)
+        ajeno = Client()
+        self.assertEqual(ajeno.get(plan_url).status_code, status.HTTP_302_FOUND)
+        ajeno.force_login(get_user_model().objects.create_user(username='e2e-sin-expediente'))
+        self.assertEqual(ajeno.get(plan_url).status_code, status.HTTP_404_NOT_FOUND)
