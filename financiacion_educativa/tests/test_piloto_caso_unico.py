@@ -8,6 +8,7 @@ from financiacion_educativa.models_gobernanza_libro import ControlPilotoLibro, E
 from financiacion_educativa.models_libro import LineaLibroEducativo, MovimientoLibroEducativo
 from financiacion_educativa.models_recaudos import ConciliacionRecaudoEducativo
 from financiacion_educativa.services import gobernanza_libro as gobierno, libro_pagos as libro
+from financiacion_educativa.services.limpieza_solicitudes import construir_plan_limpieza
 from financiacion_educativa.tests.piloto_libro_helpers import politica_sintetica
 from financiacion_educativa.tests.test_libro_pagos import DatosLibro
 from financiacion_educativa.tests.test_recaudos_breb import AISLAMIENTO
@@ -68,6 +69,9 @@ class PilotoCasoUnicoTests(DatosLibro, TestCase):
             .values_list('activo', 'caso_unico', 'ingreso_designado_id')), [
                 (True, True, self.designado.pk), (False, True, self.designado.pk),
             ])
+        relaciones = construir_plan_limpieza(self.institucion).relaciones_protegidas
+        for modelo in ('ControlPilotoLibro', 'EventoControlPilotoLibro'):
+            self.assertIn(f'{modelo}.ingreso_designado->ConciliacionRecaudoEducativo', relaciones)
 
     def test_contabilizacion_reintento_compensacion_y_cierre(self):
         _, token_otro = self.preview(self.otro, 'FULL')

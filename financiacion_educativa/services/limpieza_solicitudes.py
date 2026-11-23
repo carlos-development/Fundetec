@@ -166,6 +166,8 @@ MODELOS_CON_ARCHIVOS = (
 
 # Auditoria Sandbox conocida, pero no eliminable por la limpieza masiva QA.
 DEPENDENCIAS_PRESERVADAS = (
+    EspecificacionDependencia('ControlPilotoLibro', 'ingreso_designado__reporte__solicitud_id__in'),
+    EspecificacionDependencia('EventoControlPilotoLibro', 'ingreso_designado__reporte__solicitud_id__in'),
     EspecificacionDependencia('MovimientoLibroEducativo', 'fotografia__solicitud_id__in'),
     EspecificacionDependencia('LineaLibroEducativo', 'movimiento__fotografia__solicitud_id__in'),
     EspecificacionDependencia('ReporteRecaudoEducativo', 'solicitud_id__in'),
