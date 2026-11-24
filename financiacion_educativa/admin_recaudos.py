@@ -10,6 +10,7 @@ from .models_recaudos import (
 )
 from .services import recaudos
 from .models_libro import PoliticaLibroEducativo, MovimientoLibroEducativo, LineaLibroEducativo
+from .models_reparto_intereses import ConvenioRepartoInteresEducativo
 from .models_gobernanza_libro import (PropuestaPoliticaLibro, EventoPoliticaLibro,
     EventoAlcanceLibro, ControlPilotoLibro, EventoControlPilotoLibro)
 
@@ -44,6 +45,41 @@ for modelo in (PropuestaPoliticaLibro, EventoPoliticaLibro, EventoAlcanceLibro,
                EventoReceptorBrebEducativo, ReporteRecaudoEducativo,
                ConciliacionRecaudoEducativo, RechazoReporteRecaudoEducativo):
     admin.site.register(modelo, EvidenciaSoloLecturaAdmin)
+
+
+class ConvenioRepartoForm(forms.ModelForm):
+    class Meta:
+        model = ConvenioRepartoInteresEducativo
+        fields = ('institucion', 'version', 'vigente_desde', 'vigente_hasta',
+                  'porcentaje_aprobado', 'referencia_aprobacion')
+
+    def clean(self):
+        datos = super().clean()
+        institucion = datos.get('institucion')
+        if institucion is not None:
+            # El POST del admin ya es atómico. Valida el solape después de adquirir el bloqueo.
+            type(institucion).objects.select_for_update().get(pk=institucion.pk)
+        return datos
+
+
+@admin.register(ConvenioRepartoInteresEducativo)
+class ConvenioRepartoAdmin(EvidenciaSoloLecturaAdmin):
+    form = ConvenioRepartoForm
+    list_display = ('institucion', 'version', 'vigente_desde', 'vigente_hasta', 'porcentaje_aprobado', 'porcentaje_institucion')
+    list_filter = ('institucion',)
+
+    def has_add_permission(self, request):
+        return admin.ModelAdmin.has_add_permission(self, request)
+
+    def get_readonly_fields(self, request, obj=None):
+        return [*super().get_readonly_fields(request, obj), 'porcentaje_institucion'] if obj else []
+
+    def get_fields(self, request, obj=None):
+        return super().get_fields(request, obj) if obj else self.form._meta.fields
+
+    def save_model(self, request, obj, form, change):
+        obj.aprobado_por = request.user
+        super().save_model(request, obj, form, change)
 
 
 class ReceptorForm(forms.ModelForm):

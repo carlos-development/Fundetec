@@ -612,11 +612,14 @@
 
 .collections-installment-shares {
     display: grid;
-    gap: 4px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 4px 10px;
     margin: 6px 0 0;
     font-size: .8125rem;
     line-height: 1.35;
 }
+
+.collections-monthly-table .collections-installment-shares { text-align: left; }
 
 .collections-installment-shares dt { font-weight: 600; }
 .collections-installment-shares dd { margin: 0; color: var(--edu-muted); }

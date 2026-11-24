@@ -121,9 +121,11 @@
         <section class="collections-panel collections-distribution" aria-labelledby="interest-distribution-title">
             <h2 id="interest-distribution-title">Distribución de intereses</h2>
             <dl>
-                <div><dt>Parte de Aprobado</dt><dd>Sin política aprobada</dd></div>
-                <div><dt>Parte de la institución</dt><dd>Sin política aprobada</dd></div>
+                {% include 'financiacion_educativa/recaudos/_partes_interes.html' with partes=reparto_periodo only %}
             </dl>
+            {% if reparto_periodo and interes_sin_convenio %}
+                <p class="collections-note">Intereses sin política aprobada {{ interes_sin_convenio|cop_recaudo }}</p>
+            {% endif %}
         </section>
     </div>
 
@@ -161,7 +163,17 @@
                         <td class="collections-amount">{{ mes.pendientes|cop_recaudo }}</td>
                         <td class="collections-amount">{{ mes.aplicados|cop_recaudo }}</td>
                         <td class="collections-amount">{{ mes.capital|cop_recaudo }}</td>
-                        <td class="collections-amount">{{ mes.intereses|cop_recaudo }}</td>
+                        <td class="collections-amount">
+                            {{ mes.intereses|cop_recaudo }}
+                            {% if mes.reparto %}
+                                <dl class="collections-installment-shares">
+                                    {% include 'financiacion_educativa/recaudos/_partes_interes.html' with partes=mes.reparto only %}
+                                </dl>
+                                {% if mes.interes_sin_convenio %}
+                                    <small>Intereses sin política aprobada {{ mes.interes_sin_convenio|cop_recaudo }}</small>
+                                {% endif %}
+                            {% endif %}
+                        </td>
                     </tr>
                     {% empty %}
                     <tr><td colspan="6">Sin ingresos confirmados en este rango.</td></tr>
@@ -211,13 +223,17 @@
                                         <span class="collections-status is-pending">Abono parcial &middot; Cuota {{ cuota.numero }}</span>
                                     {% endif %}
                                     <dl class="collections-installment-shares">
-                                        <div><dt>Parte de Aprobado</dt><dd>Sin política aprobada</dd></div>
-                                        <div><dt>Parte de la institución</dt><dd>Sin política aprobada</dd></div>
+                                        {% include 'financiacion_educativa/recaudos/_partes_interes.html' with partes=cuota.reparto only %}
                                     </dl>
                                 </div>
                             {% empty %}{% if ingreso.aplicado_neto %}
                                 <span class="collections-status is-applied">Aplicación contabilizada</span>
                             {% endif %}{% endfor %}
+                            {% if ingreso.mostrar_reparto_sin_cuota %}
+                                <dl class="collections-installment-shares">
+                                    {% include 'financiacion_educativa/recaudos/_partes_interes.html' with partes=ingreso.reparto_sin_cuota only %}
+                                </dl>
+                            {% endif %}
                             {% if ingreso.disponible_libro %}
                                 <span class="collections-status is-pending">Sin destino {{ ingreso.disponible_libro|cop_recaudo }}</span>
                             {% endif %}

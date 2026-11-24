@@ -12,6 +12,7 @@ from financiacion_educativa.models import CuotaAmortizacionEducativa
 from financiacion_educativa.models_libro import LineaLibroEducativo
 from financiacion_educativa.models_recaudos import ConciliacionRecaudoEducativo
 from financiacion_educativa.services.libro_pagos import anotar_cuotas, anotar_ingresos
+from .reparto_intereses import CENTAVO, repartir_cuotas
 
 
 SEGMENTOS = (
@@ -23,17 +24,17 @@ OPCIONES_SEGMENTO = [(codigo, etiqueta) for codigo, etiqueta, _ in SEGMENTOS]
 CERO = Decimal('0.00')
 
 
-def detallar_cuotas_aplicadas(pagina):
+def detallar_cuotas_aplicadas(pagina, convenios):
     ingresos = list(pagina)
     cuotas = defaultdict(list)
+    signo = Case(When(movimiento__tipo='COMPENSATION', then=Value(-1)), default=Value(1))
     lineas = list(LineaLibroEducativo.objects.filter(
         movimiento__ingreso_id__in=[ingreso.pk for ingreso in ingresos],
         cuota__isnull=False,
     ).values('movimiento__ingreso_id', 'cuota_id', 'cuota__numero').annotate(
-        aplicado=Sum(F('importe') * Case(
-            When(movimiento__tipo='COMPENSATION', then=Value(-1)), default=Value(1),
-        )),
-    ).filter(aplicado__gt=0).order_by('cuota__numero'))
+        aplicado=Sum(F('importe') * signo),
+        interes=Sum(F('importe') * signo, filter=Q(concepto='INTEREST'), default=CERO),
+    ).filter(aplicado__gt=0).order_by('cuota__numero', 'cuota_id'))
     # La cobertura de la cuota incluye abonos de otros ingresos y sus compensaciones.
     cubiertas = set(anotar_cuotas(CuotaAmortizacionEducativa.objects.filter(
         pk__in={linea['cuota_id'] for linea in lineas},
@@ -42,12 +43,15 @@ def detallar_cuotas_aplicadas(pagina):
         cuotas[linea['movimiento__ingreso_id']].append({
             'numero': linea['cuota__numero'],
             'cubierta': linea['cuota_id'] in cubiertas,
+            'interes_neto': linea['interes'].quantize(CENTAVO),
         })
     for ingreso in ingresos:
         if hasattr(ingreso, 'aplicacion'):
-            ingreso.cuotas_aplicadas = [{'numero': ingreso.aplicacion.cuota.numero, 'cubierta': True}]
+            ingreso.cuotas_aplicadas = [{'numero': ingreso.aplicacion.cuota.numero, 'cubierta': True,
+                                        'interes_neto': ingreso.aplicacion.interes_aplicado}]
         else:
             ingreso.cuotas_aplicadas = cuotas[ingreso.pk]
+        repartir_cuotas(ingreso, convenios)
 
 
 def cohorte_bancaria(datos):

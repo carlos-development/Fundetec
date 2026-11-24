@@ -42,30 +42,30 @@ efectiva, como antes. No representa deuda, saldo a corte ni paz y salvo.
    reportes del estudiante reutiliza el mismo componente de evidencia y conserva
    referencia, monto, fecha, observacion y justificacion de diferencias.
 
-## Reparto de intereses: bloqueado
+## Reparto de intereses
 
-No se habilita reparto definitivo. `ROADMAP_FINANCIACION_EDUCATIVA.md` ya
-identifica 80 % APROBADO / 20 % Jowalth como propuesta sin confirmar. No hay un
-convenio de reparto versionado o aportado con esta entrega. El anexo de matricula
-no demuestra un acuerdo comercial de distribucion. Faltan:
+El tablero usa el interés neto aplicado de las aplicaciones históricas y del Libro 2B.
+Los períodos mantienen la fecha bancaria de la conciliación original, incluso al
+compensar. El dinero sin aplicar y los demás conceptos quedan fuera del reparto.
 
-- Convenio aprobado y version verificable que confirme porcentajes y alcance.
-- Fecha de inicio y criterio temporal: fecha bancaria, aplicacion u otra fecha
-  expresamente acordada; tratamiento de contratos previos y periodos de corte.
-- Precision COP, modo de redondeo y destinatario del eventual residuo. Las dos
-  partes deben sumar exactamente el interes aplicado, sin crear o perder pesos.
-- Aprobacion del tratamiento de correcciones/reversiones antes de implementarlas.
+Un convenio aprobado tiene versión, institución, vigencia inclusiva por fecha
+bancaria, porcentaje de Aprobado, referencia documental y usuario que lo registra.
+La parte de la institución es el complemento a 100 %. El alta en Django Admin
+requiere el permiso específico del convenio. Los registros son inmutables y sus
+vigencias dentro de una institución deben ser disjuntas.
 
-Base autorizada para el futuro incremento: exclusivamente
-`AplicacionCuotaEducativa.interes_aplicado`, agrupado por la institucion de la
-solicitud y el periodo definido. Excluir capital, originacion 10 %, IVA, garantia,
-seguro y conciliaciones sin aplicacion. No calcular sobre cuotas programadas.
+Aprobado se redondea al centavo con `ROUND_HALF_UP` por ingreso y la institución
+recibe el saldo exacto. Para varias cuotas del mismo ingreso, el redondeo acumulado
+en orden de cuota distribuye los centavos sin cambiar el total del movimiento.
+Los meses y el período suman movimientos ya redondeados. El tablero informa
+«Sin política aprobada» cuando corresponda y muestra el interés sin convenio
+por separado en períodos mixtos.
 
-La persistencia del reparto corresponde a **otro PR**, posterior al convenio:
-regla inmutable/versionada, vigencia y referencia de aprobacion; aplicacion y
-regla asociadas a cada reparto, importes y verificacion de suma; unicidad y
-transaccion. No recalcular historicos automaticamente ni reinterpretar el interes
-de aplicaciones ya registradas. Esta entrega no agrega modelos ni migraciones.
+Finanzas debe confirmar institución y alcance, documento y versión aprobados,
+responsable autorizado, fechas de inicio y fin inclusive, tratamiento de
+contratos e ingresos previos, porcentajes de ambas partes, redondeo y residuo,
+y atribución de compensaciones a la fecha bancaria original. La migración crea
+la tabla vacía. El reparto es un cálculo de consulta del tablero.
 
 ## Validacion y capturas
 

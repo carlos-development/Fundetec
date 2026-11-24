@@ -1,4 +1,5 @@
 import os
+from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 import subprocess
 from unittest import skipUnless
@@ -17,6 +18,10 @@ from financiacion_educativa.templatetags.recaudo_format import cop_recaudo
 class TableroRecaudosBrowserTests(DatosTableroRecaudos, StaticLiveServerTestCase):
     def test_tablero_y_respaldo_sin_javascript(self):
         self.preparar_tablero()
+        convenio = self.crear_convenio()
+        intereses = [ingreso.aplicacion.interes_aplicado for ingreso in (self.aplicado, self.aplicado_segundo)]
+        aprobado = [(interes * convenio.porcentaje_aprobado / 100).quantize(Decimal('.01'), rounding=ROUND_HALF_UP)
+                    for interes in intereses]
         cliente, pagador = Client(), Client()
         cliente.force_login(self.actor)
         pagador.force_login(self.pagador)
@@ -28,6 +33,10 @@ class TableroRecaudosBrowserTests(DatosTableroRecaudos, StaticLiveServerTestCase
             'EDU_COLLECTIONS_PATH': self.ruta_tablero(),
             'EDU_COLLECTIONS_URL': self.ruta_tablero() + '?' + urlencode(self.rango),
             'EDU_COLLECTIONS_INSTITUTION': str(self.institucion.pk),
+            'EDU_COLLECTIONS_APROBADO_PERIODO': cop_recaudo(sum(aprobado)),
+            'EDU_COLLECTIONS_INSTITUCION_PERIODO': cop_recaudo(sum(intereses) - sum(aprobado)),
+            'EDU_COLLECTIONS_APROBADO_MOVIMIENTO': cop_recaudo(aprobado[-1]),
+            'EDU_COLLECTIONS_INSTITUCION_MOVIMIENTO': cop_recaudo(intereses[-1] - aprobado[-1]),
             'EDU_COLLECTIONS_APPLIED_INTEREST': cop_recaudo(sum(
                 ingreso.aplicacion.interes_aplicado
                 for ingreso in (self.aplicado, self.aplicado_segundo, self.aplicado_ajeno)
@@ -36,4 +45,4 @@ class TableroRecaudosBrowserTests(DatosTableroRecaudos, StaticLiveServerTestCase
         result = subprocess.run(['node', '--test', str(Path(__file__).parent / 'js/test_tablero_recaudos_browser.js')],
             env=env, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=180)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        print('Tablero: filtros, importes/listados y capturas 320/375/390/1440 px sin JavaScript OK.')
+        print('Tablero: filtros, cuadre de reparto y capturas en 320/375/390/1440 px sin JavaScript OK.')

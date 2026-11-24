@@ -9,6 +9,7 @@ from financiacion_educativa.services.recaudos import PERMISO_CONSULTAR
 from financiacion_educativa.web.forms_recaudos import FiltrosTableroRecaudosForm
 from financiacion_educativa.web.recaudos import _contexto, _habilitado
 from .permissions import requiere_permisos_operativos
+from .reparto_intereses import agregar_repartos_periodo, cargar_convenios, tiene_aplicacion_registrada
 from .reporte_recaudos import (
     CERO, cohorte_bancaria, construir_tablero, detallar_cuotas_aplicadas, filtrar_segmento, parametros_cohorte,
 )
@@ -31,12 +32,15 @@ def tablero_view(request):
     datos = form.cleaned_data
     consulta = cohorte_bancaria(datos)
     tablero = construir_tablero(consulta, datos)
+    convenios = cargar_convenios(datos)
+    agregar_repartos_periodo(tablero, consulta, convenios)
     listado = filtrar_segmento(consulta, datos['estado'])
     campo = {'TO_APPLY': 'disponible_libro', 'APPLIED': 'aplicado_neto'}.get(datos['estado'], 'monto_recibido')
     total_listado = listado.aggregate(importe=Sum(campo, default=CERO))['importe']
-    pagina = Paginator(listado.select_related('reporte__solicitud__institucion', 'aplicacion__cuota').order_by(
+    pagina = Paginator(listado.annotate(tiene_aplicacion_registrada=tiene_aplicacion_registrada()).select_related(
+        'reporte__solicitud__institucion', 'aplicacion__cuota').order_by(
         '-fecha_efectiva', '-confirmada_en', 'pk'), 25).get_page(request.GET.get('page'))
-    detallar_cuotas_aplicadas(pagina)
+    detallar_cuotas_aplicadas(pagina, convenios)
     return render(request, 'financiacion_educativa/recaudos/tablero.html', {
         **contexto, **tablero, 'pagina': pagina, 'total_listado': total_listado,
         'etiqueta_listado': dict(form.fields['estado'].choices)[datos['estado']],
