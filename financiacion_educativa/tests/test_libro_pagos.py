@@ -1,5 +1,5 @@
 from datetime import date, timedelta
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from unittest.mock import patch
 from uuid import uuid4
 
@@ -14,6 +14,7 @@ from django.urls import reverse
 from financiacion_educativa.models import ArtefactoContractualEducativo
 from financiacion_educativa.models_libro import PoliticaLibroEducativo, MovimientoLibroEducativo, LineaLibroEducativo
 from financiacion_educativa.models_recaudos import AplicacionCuotaEducativa, ConciliacionRecaudoEducativo
+from financiacion_educativa.models_reparto_intereses import ConvenioRepartoInteresEducativo
 from financiacion_educativa.services import libro_pagos as libro
 from financiacion_educativa.services import recaudos, aplicacion_cuotas
 from financiacion_educativa.services import gobernanza_libro as gobierno
@@ -145,6 +146,30 @@ class LibroPagosTests(DatosLibro, TestCase):
         parcial = self.client.get(ruta, filtros)
         self.assertContains(parcial, 'Abono parcial &middot; Cuota 1')
         self.assertNotContains(parcial, 'Cuota 1 cubierta')
+
+    def test_reparto_refleja_compensacion_y_su_reintento_en_periodo_bancario(self):
+        ConvenioRepartoInteresEducativo.objects.create(institucion=self.institucion,
+            version='SYNTHETIC-ONLY', vigente_desde=self.fecha, vigente_hasta=self.fecha,
+            porcentaje_aprobado=Decimal('33.3333'), aprobado_por=self.aprobador, referencia_aprobacion='QA')
+        ingreso = self.nuevo_ingreso(self.cuota.valor_cuota)
+        movimiento = self.registrar(ingreso, 'FULL')
+        self.client.force_login(self.actor)
+        ruta = reverse('financiacion_educativa_web:operaciones:tablero-recaudos')
+        filtros = {'desde': self.fecha.isoformat(), 'hasta': self.fecha.isoformat()}
+        antes = self.client.get(ruta, filtros).context
+        self.assertGreater(movimiento.intereses, 0)
+        parte = (movimiento.intereses * Decimal('.333333')).quantize(Decimal('.01'), rounding=ROUND_HALF_UP)
+        self.assertEqual(antes['reparto_periodo'], {'aprobado': parte, 'institucion': movimiento.intereses - parte})
+        self.assertEqual(antes['pagina'][0].cuotas_aplicadas[0]['reparto'], antes['reparto_periodo'])
+
+        datos = self.datos_compensacion(movimiento)
+        libro.compensar(**datos)
+        libro.compensar(**datos)
+        despues = self.client.get(ruta, filtros).context
+        self.assertEqual(MovimientoLibroEducativo.objects.count(), 2)
+        self.assertEqual(despues['totales']['intereses'], 0)
+        self.assertEqual(despues['reparto_periodo'], {'aprobado': Decimal('0'), 'institucion': Decimal('0')})
+        self.assertEqual(despues['pagina'][0].reparto_sin_cuota, despues['reparto_periodo'])
 
     def test_interes_anticipado_no_se_pierde_al_reproyectar(self):
         self.registrar(self.nuevo_ingreso())

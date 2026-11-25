@@ -12,20 +12,41 @@ test('Tablero operativo: importes y respaldos bancarios sin JavaScript', async t
     await context.route('**/*', r => new URL(r.request().url()).origin === base ? r.continue() : r.abort());
     await context.addCookies([{ name: 'sessionid', value: process.env.EDU_COLLECTIONS_SESSION, url: base }]);
     const page = await context.newPage();
+    const shares = page.locator('#movimientos .collections-installment-shares');
+    const distribution = page.locator('.collections-distribution dl');
+    const summaryShares = [
+        process.env.EDU_COLLECTIONS_APROBADO_PERIODO,
+        process.env.EDU_COLLECTIONS_INSTITUCION_PERIODO,
+    ];
+    async function assertColumns(list) {
+        const [aprobado, institucion] = await list.locator(':scope > div').evaluateAll(parts => (
+            parts.map(part => ({ x: part.offsetLeft, y: part.offsetTop }))
+        ));
+        assert.ok(aprobado.x < institucion.x);
+        assert.equal(aprobado.y, institucion.y);
+    }
     async function capture(name) {
         for (const width of [320, 375, 390, 1440]) {
             await page.setViewportSize({ width, height: width > 700 ? 1000 : 844 });
             await page.evaluate(() => window.scrollTo(0, 0));
             assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `${name}: overflow ${width}`);
             assert.equal(await page.locator('.edu-navbar-logo img').evaluate(img => img.complete && img.naturalWidth > 0), true);
+            if (name === '01-tablero') {
+                assert.deepEqual(await distribution.locator('dd').allTextContents(), summaryShares);
+                await assertColumns(shares.first());
+            }
             await page.screenshot({ path: path.join(process.env.EDU_COLLECTIONS_SCREENSHOTS, `${name}-${width}.png`), fullPage: true });
         }
     }
     assert.equal((await page.goto(base + process.env.EDU_COLLECTIONS_URL)).status(), 200);
     assert.equal(await page.locator('#movements-total').innerText().then(s => s.startsWith('5 movimientos')), true);
-    const shares = page.locator('#movimientos .collections-installment-shares');
     assert.equal(await shares.count(), 3);
-    assert.equal(await shares.first().getByText('Sin política aprobada', { exact: true }).count(), 2);
+    assert.deepEqual(await distribution.locator('dd').allTextContents(), summaryShares);
+    assert.deepEqual(await shares.first().locator('dd').allTextContents(), [
+        process.env.EDU_COLLECTIONS_APROBADO_MOVIMIENTO,
+        process.env.EDU_COLLECTIONS_INSTITUCION_MOVIMIENTO,
+    ]);
+    assert.equal(await shares.nth(1).getByText('Sin política aprobada', { exact: true }).count(), 2);
     assert.equal(
         await page.locator('#interes-aplicado-periodo').innerText(),
         process.env.EDU_COLLECTIONS_APPLIED_INTEREST
@@ -52,6 +73,7 @@ test('Tablero operativo: importes y respaldos bancarios sin JavaScript', async t
     assert.equal((await page.content()).includes('OTRA-INSTITUCION-SINTETICA'), false);
     await capture('03-por-aplicar-institucion');
     await page.getByText('Ver importes por mes bancario', { exact: true }).click();
+    assert.deepEqual(await page.locator('.collections-history .collections-installment-shares dd').allTextContents(), summaryShares);
     await capture('04-mes-bancario');
     await page.goto(base + process.env.EDU_COLLECTIONS_PATH + '?desde=2020-01-01&hasta=2020-01-31');
     assert.equal(await page.locator('#movements-total').innerText().then(s => s.startsWith('0 movimientos')), true);

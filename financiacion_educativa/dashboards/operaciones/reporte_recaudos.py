@@ -3,8 +3,7 @@
 from collections import defaultdict
 from decimal import Decimal
 
-from django.db.models import Case, Count, F, Q, Sum, Value, When
-from django.db.models.functions import TruncMonth
+from django.db.models import Case, F, Q, Sum, Value, When
 from django.http import QueryDict
 from django.urls import reverse
 
@@ -12,6 +11,7 @@ from financiacion_educativa.models import CuotaAmortizacionEducativa
 from financiacion_educativa.models_libro import LineaLibroEducativo
 from financiacion_educativa.models_recaudos import ConciliacionRecaudoEducativo
 from financiacion_educativa.services.libro_pagos import anotar_cuotas, anotar_ingresos
+from .reparto_intereses import CENTAVO, acumular_reparto, repartir_cuotas, tiene_aplicacion_registrada
 
 
 SEGMENTOS = (
@@ -23,17 +23,17 @@ OPCIONES_SEGMENTO = [(codigo, etiqueta) for codigo, etiqueta, _ in SEGMENTOS]
 CERO = Decimal('0.00')
 
 
-def detallar_cuotas_aplicadas(pagina):
+def detallar_cuotas_aplicadas(pagina, convenios):
     ingresos = list(pagina)
     cuotas = defaultdict(list)
+    signo = Case(When(movimiento__tipo='COMPENSATION', then=Value(-1)), default=Value(1))
     lineas = list(LineaLibroEducativo.objects.filter(
         movimiento__ingreso_id__in=[ingreso.pk for ingreso in ingresos],
         cuota__isnull=False,
     ).values('movimiento__ingreso_id', 'cuota_id', 'cuota__numero').annotate(
-        aplicado=Sum(F('importe') * Case(
-            When(movimiento__tipo='COMPENSATION', then=Value(-1)), default=Value(1),
-        )),
-    ).filter(aplicado__gt=0).order_by('cuota__numero'))
+        aplicado=Sum(F('importe') * signo),
+        interes=Sum(F('importe') * signo, filter=Q(concepto='INTEREST'), default=CERO),
+    ).filter(aplicado__gt=0).order_by('cuota__numero', 'cuota_id'))
     # La cobertura de la cuota incluye abonos de otros ingresos y sus compensaciones.
     cubiertas = set(anotar_cuotas(CuotaAmortizacionEducativa.objects.filter(
         pk__in={linea['cuota_id'] for linea in lineas},
@@ -42,12 +42,15 @@ def detallar_cuotas_aplicadas(pagina):
         cuotas[linea['movimiento__ingreso_id']].append({
             'numero': linea['cuota__numero'],
             'cubierta': linea['cuota_id'] in cubiertas,
+            'interes_neto': linea['interes'].quantize(CENTAVO),
         })
     for ingreso in ingresos:
         if hasattr(ingreso, 'aplicacion'):
-            ingreso.cuotas_aplicadas = [{'numero': ingreso.aplicacion.cuota.numero, 'cubierta': True}]
+            ingreso.cuotas_aplicadas = [{'numero': ingreso.aplicacion.cuota.numero, 'cubierta': True,
+                                        'interes_neto': ingreso.aplicacion.interes_aplicado}]
         else:
             ingreso.cuotas_aplicadas = cuotas[ingreso.pk]
+        repartir_cuotas(ingreso, convenios)
 
 
 def cohorte_bancaria(datos):
@@ -72,19 +75,39 @@ def parametros_cohorte(datos):
     return parametros
 
 
-def construir_tablero(consulta, datos):
-    consulta = anotar_ingresos(consulta)
-    # All summary amounts come from one SQL statement and OneToOne joins only.
-    meses = list(consulta.order_by().annotate(mes=TruncMonth('fecha_efectiva')).values('mes').annotate(
-        confirmados=Sum('monto_recibido', default=CERO),
-        pendientes=Sum('disponible_libro', default=CERO),
-        aplicados=Sum('aplicado_neto', default=CERO),
-        capital=Sum('capital_neto', default=CERO),
-        intereses=Sum('interes_neto', default=CERO),
-        cantidad_confirmados=Count('pk'),
-        cantidad_pendientes=Count('pk', filter=Q(disponible_libro__gt=0)),
-        cantidad_aplicados=Count('pk', filter=Q(aplicado_neto__gt=0)),
-    ).order_by('mes'))
+def resumir_meses(consulta, convenios):
+    # Un cursor lee cada ingreso con sus importes netos en una sola instantánea.
+    filas = anotar_ingresos(consulta).order_by().annotate(aplicacion_registrada=tiene_aplicacion_registrada()).values_list(
+        'fecha_efectiva', 'reporte__solicitud__institucion_id', 'monto_recibido',
+        'capital_neto', 'interes_neto', 'aplicacion_registrada',
+    )
+    por_mes = {}
+    for fecha, institucion_id, recibido, capital, interes, registrado in filas.iterator():
+        inicio = fecha.replace(day=1)
+        if inicio not in por_mes:
+            por_mes[inicio] = dict(mes=inicio, confirmados=CERO, pendientes=CERO, aplicados=CERO,
+                                   capital=CERO, intereses=CERO, cantidad_confirmados=0, cantidad_pendientes=0,
+                                   cantidad_aplicados=0, reparto=None, interes_sin_convenio=CERO)
+        mes = por_mes[inicio]
+        capital = capital.quantize(CENTAVO)
+        interes = interes.quantize(CENTAVO)
+        aplicado = capital + interes
+        pendiente = recibido - aplicado
+        mes['confirmados'] += recibido
+        mes['capital'] += capital
+        mes['intereses'] += interes
+        mes['aplicados'] += aplicado
+        mes['pendientes'] += pendiente
+        mes['cantidad_confirmados'] += 1
+        mes['cantidad_aplicados'] += int(aplicado > 0)
+        mes['cantidad_pendientes'] += int(pendiente > 0)
+        if registrado:
+            acumular_reparto(mes, convenios, institucion_id, fecha, interes)
+    return [por_mes[inicio] for inicio in sorted(por_mes)]
+
+
+def construir_tablero(consulta, datos, convenios=None):
+    meses = resumir_meses(consulta, convenios or {})
     campos = ('confirmados', 'pendientes', 'aplicados', 'capital', 'intereses')
     totales = {campo: sum((mes[campo] for mes in meses), CERO) for campo in campos}
     for campo in ('confirmados', 'pendientes', 'aplicados'):
@@ -97,4 +120,9 @@ def construir_tablero(consulta, datos):
         indicadores.append({'codigo': codigo, 'etiqueta': etiqueta, 'importe': totales[campo],
             'cantidad': totales['cantidad_' + campo], 'url': ruta + '?' + parametros.urlencode() + '#movimientos',
             'activo': datos['estado'] == codigo})
-    return {'meses': meses, 'totales': totales, 'indicadores': indicadores}
+    repartos = [mes['reparto'] for mes in meses if mes['reparto'] is not None]
+    reparto_periodo = None
+    if repartos:
+        reparto_periodo = {campo: sum((r[campo] for r in repartos), CERO) for campo in ('aprobado', 'institucion')}
+    return {'meses': meses, 'totales': totales, 'indicadores': indicadores, 'reparto_periodo': reparto_periodo,
+            'interes_sin_convenio': sum((mes['interes_sin_convenio'] for mes in meses), CERO)}

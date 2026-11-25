@@ -1,17 +1,25 @@
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
+from types import SimpleNamespace
+from unittest import skipUnless
+from unittest.mock import patch
 from urllib.parse import parse_qs
 from uuid import uuid4
 
 from django.contrib.auth import get_user_model
-from django.db import connection
-from django.test import TestCase, override_settings
+from django.contrib.auth.models import Permission
+from django.core.exceptions import ValidationError
+from django.db import connection, connections, transaction
+from django.test import TestCase, TransactionTestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
 from instituciones.models import MembresiaInstitucion
+from financiacion_educativa.dashboards.operaciones.reparto_intereses import repartir_cuotas
 from financiacion_educativa.models_recaudos import AplicacionCuotaEducativa, ConciliacionRecaudoEducativo
+from financiacion_educativa.models_reparto_intereses import ConvenioRepartoInteresEducativo
 from financiacion_educativa.services import aplicacion_cuotas, recaudos
 from financiacion_educativa.tests.test_ingreso_operaciones import DatosIngresoOperaciones
 from financiacion_educativa.tests.test_recaudos_breb import AISLAMIENTO
@@ -52,6 +60,13 @@ class DatosTableroRecaudos(DatosIngresoOperaciones):
 
     def ruta_tablero(self):
         return reverse('financiacion_educativa_web:operaciones:tablero-recaudos')
+
+    def crear_convenio(self, **cambios):
+        datos = dict(institucion=self.institucion, version='SYNTHETIC-ONLY',
+            vigente_desde=date(2026, 9, 1), vigente_hasta=date(2026, 9, 30),
+            porcentaje_aprobado=Decimal('37.5000'), aprobado_por=self.actor,
+            referencia_aprobacion='Prueba sintética')
+        return ConvenioRepartoInteresEducativo.objects.create(**{**datos, **cambios})
 
 
 @override_settings(**AISLAMIENTO)
@@ -108,6 +123,84 @@ class TableroRecaudosTests(DatosTableroRecaudos, TestCase):
         self.assertContains(aplicada, 'Sin política aprobada', count=6)
         pendiente = self.consultar(institucion=self.institucion.pk, estado='TO_APPLY')
         self.assertNotContains(pendiente, 'class="collections-installment-shares"')
+
+    def test_reparte_por_institucion_y_vigencia_y_cuadra_cada_periodo(self):
+        self.crear_convenio(vigente_hasta=date(2026, 9, 29), porcentaje_aprobado=Decimal('0'))
+        self.crear_convenio(version='SYNTHETIC-NEXT', vigente_desde=date(2026, 9, 30),
+            vigente_hasta=date(2026, 10, 31), porcentaje_aprobado=Decimal('100'))
+        siguiente = self.movimiento(self.solicitud, date(2026, 10, 1), aplicar=True)
+        respuesta = self.consultar(hasta='2026-10-31')
+        primero = self.aplicado.aplicacion.interes_aplicado
+        segundo = self.aplicado_segundo.aplicacion.interes_aplicado
+        otro = self.aplicado_ajeno.aplicacion.interes_aplicado
+        posterior = siguiente.aplicacion.interes_aplicado
+
+        filas = {ingreso.pk: ingreso for ingreso in respuesta.context['pagina']}
+        self.assertEqual(filas[self.aplicado.pk].cuotas_aplicadas[0]['reparto'],
+            {'aprobado': Decimal('0'), 'institucion': primero})
+        self.assertEqual(filas[self.aplicado_segundo.pk].cuotas_aplicadas[0]['reparto'],
+            {'aprobado': segundo, 'institucion': Decimal('0')})
+        self.assertNotIn('reparto', filas[self.aplicado_ajeno.pk].cuotas_aplicadas[0])
+        self.assertEqual(respuesta.context['reparto_periodo'], {'aprobado': segundo + posterior, 'institucion': primero})
+        self.assertEqual(respuesta.context['interes_sin_convenio'], otro)
+        self.assertContains(respuesta, 'Sin política aprobada')
+        septiembre, octubre = respuesta.context['meses']
+        self.assertEqual(septiembre['reparto'], {'aprobado': segundo, 'institucion': primero})
+        self.assertEqual(octubre['reparto'], {'aprobado': posterior, 'institucion': Decimal('0')})
+        for mes in (septiembre, octubre):
+            self.assertEqual(sum(mes['reparto'].values()) + mes['interes_sin_convenio'], mes['intereses'].quantize(Decimal('.01')))
+
+    def test_redondeo_distribuye_centavos_entre_cuotas_sin_cambiar_total_del_ingreso(self):
+        convenio = self.crear_convenio(porcentaje_aprobado=Decimal('50'))
+        ingreso = SimpleNamespace(reporte=self.aplicado.reporte, fecha_efectiva=self.aplicado.fecha_efectiva,
+            tiene_aplicacion_registrada=True, interes_neto=Decimal('.03'),
+            cuotas_aplicadas=[{'interes_neto': Decimal('.01')} for _ in range(3)])
+        repartir_cuotas(ingreso, {self.institucion.pk: [convenio]})
+        partes = [cuota['reparto'] for cuota in ingreso.cuotas_aplicadas]
+        self.assertTrue(all(sum(parte.values()) == Decimal('.01') for parte in partes))
+        self.assertEqual(sum(parte['aprobado'] for parte in partes), Decimal('.02'))
+        self.assertEqual(sum(parte['institucion'] for parte in partes), Decimal('.01'))
+
+    def test_total_redondea_por_ingreso_y_no_por_periodo_ni_pagina(self):
+        self.crear_convenio()
+        ingresos = [self.aplicado, self.aplicado_segundo]
+        ingresos.extend(self.movimiento(self.contrato(f'REPARTO-SINTETICO-{n}', self.institucion)[0],
+            date(2026, 9, 15), aplicar=True) for n in range(2))
+        esperado = sum((i.aplicacion.interes_aplicado * Decimal('.375')).quantize(Decimal('.01'), rounding=ROUND_HALF_UP)
+            for i in ingresos)
+        for _ in range(25):
+            self.movimiento(self.solicitud, date(2026, 9, 30), monto=Decimal('10000'))
+        for pagina in (1, 2):
+            respuesta = self.consultar(institucion=self.institucion.pk, page=pagina)
+            self.assertEqual(respuesta.context['reparto_periodo']['aprobado'], esperado)
+            self.assertEqual(respuesta.context['interes_sin_convenio'], 0)
+
+    def test_rechaza_convenio_solapado_invalido_y_edicion(self):
+        convenio = self.crear_convenio()
+        for datos in (
+            {'version': 'SOLAPA', 'vigente_desde': date(2026, 9, 30), 'vigente_hasta': date(2026, 10, 1)},
+            {'version': 'ATRAS', 'vigente_desde': date(2026, 10, 2), 'vigente_hasta': date(2026, 10, 1)},
+            {'version': 'EXCESO', 'institucion': self.otra, 'porcentaje_aprobado': Decimal('100.0001')},
+            {'version': 'SYNTHETIC-ONLY', 'vigente_desde': date(2026, 10, 1), 'vigente_hasta': date(2026, 10, 2)},
+            {'version': ' ', 'institucion': self.otra},
+        ):
+            with self.subTest(datos=datos), self.assertRaises(ValidationError):
+                self.crear_convenio(**datos)
+        convenio.porcentaje_aprobado = Decimal('90')
+        with self.assertRaises(ValidationError):
+            convenio.save()
+
+    def test_alta_en_admin_requiere_permiso_dedicado_y_registra_aprobador(self):
+        usuario = get_user_model().objects.create_user('finanzas-sintetico', is_staff=True)
+        self.client.force_login(usuario)
+        url = reverse('admin:financiacion_educativa_conveniorepartointereseducativo_add')
+        datos = {'institucion': self.institucion.pk, 'version': 'QA-ONLY', 'vigente_desde': '2026-09-01',
+                 'vigente_hasta': '2026-09-30', 'porcentaje_aprobado': '52.1250', 'referencia_aprobacion': 'QA'}
+        self.assertEqual(self.client.post(url, datos).status_code, 403)
+        usuario.user_permissions.add(Permission.objects.get(codename='add_conveniorepartointereseducativo'))
+        self.assertEqual(self.client.post(url, datos).status_code, 302)
+        self.assertEqual(ConvenioRepartoInteresEducativo.objects.get().aprobado_por, usuario)
+        self.assertContains(self.client.post(url, {**datos, 'version': 'QA-OVERLAP'}), 'se solapa con la vigencia')
 
     def test_institucion_limita_todas_las_cifras_meses_y_listado(self):
         respuesta = self.consultar(institucion=self.institucion.pk)
@@ -235,3 +328,64 @@ class TableroRecaudosTests(DatosTableroRecaudos, TestCase):
         self.assertEqual(len(capturadas), 1)
         self.assertNotIn('FOR UPDATE', capturadas[0]['sql'])
         self.assertEqual(tablero['totales']['cantidad_confirmados'], 5)
+
+
+@skipUnless(connection.vendor == 'postgresql', 'Requiere conexiones independientes a PostgreSQL.')
+@override_settings(**AISLAMIENTO)
+class ConcurrenciaRepartoTableroTests(DatosTableroRecaudos, TransactionTestCase):
+    def comprobar_aplicacion_intercalada(self, fecha_aplicacion):
+        from financiacion_educativa.dashboards.operaciones import tablero_recaudos
+
+        self.crear_convenio(vigente_hasta=date(2026, 10, 31))
+        inicial = self.movimiento(self.solicitud, date(2026, 9, 1), aplicar=True)
+        filtros = {'desde': '2026-09-01', 'hasta': '2026-10-31', 'institucion': self.institucion.pk}
+        self.client.force_login(self.actor)
+        construir = tablero_recaudos.construir_tablero
+
+        def aplicar():
+            try:
+                with transaction.atomic():
+                    ingreso = self.movimiento(self.solicitud, fecha_aplicacion, aplicar=True)
+                    return ingreso.aplicacion.interes_aplicado
+            finally:
+                connections.close_all()
+
+        intereses = [inicial.aplicacion.interes_aplicado]
+        with ThreadPoolExecutor(max_workers=1) as escritor:
+            def intercalar(*args, **kwargs):
+                tablero = construir(*args, **kwargs)
+                intereses.append(escritor.submit(aplicar).result(timeout=30))
+                return tablero
+
+            with patch.object(tablero_recaudos, 'construir_tablero', side_effect=intercalar):
+                durante = self.client.get(self.ruta_tablero(), filtros)
+        despues = self.client.get(self.ruta_tablero(), filtros)
+        self.assertEqual(len(intereses), 2)
+        for respuesta, fechas, importes in (
+            (durante, [inicial.fecha_efectiva], intereses[:1]),
+            (despues, [inicial.fecha_efectiva, fecha_aplicacion], intereses),
+        ):
+            self.assertEqual(respuesta.status_code, 200)
+            grupos = {}
+            for fecha, interes in zip(fechas, importes):
+                grupos.setdefault(fecha.replace(day=1), []).append(interes)
+            meses = respuesta.context['meses']
+            self.assertEqual([mes['mes'] for mes in meses], sorted(grupos))
+            aprobado_total = Decimal(0)
+            for mes in meses:
+                importes_mes = grupos[mes['mes']]
+                aprobado = sum((i * Decimal('.375')).quantize(Decimal('.01'), rounding=ROUND_HALF_UP)
+                               for i in importes_mes)
+                aprobado_total += aprobado
+                self.assertEqual(mes['intereses'], sum(importes_mes))
+                self.assertEqual(mes['reparto'], {'aprobado': aprobado, 'institucion': sum(importes_mes) - aprobado})
+                self.assertEqual(mes['interes_sin_convenio'], 0)
+            self.assertEqual(respuesta.context['totales']['intereses'], sum(importes))
+            self.assertEqual(respuesta.context['reparto_periodo'],
+                             {'aprobado': aprobado_total, 'institucion': sum(importes) - aprobado_total})
+
+    def test_aplicacion_concurrente_en_mes_nuevo(self):
+        self.comprobar_aplicacion_intercalada(date(2026, 10, 1))
+
+    def test_aplicacion_concurrente_en_mes_existente(self):
+        self.comprobar_aplicacion_intercalada(date(2026, 9, 30))
