@@ -84,12 +84,11 @@ def registrar_disponibilidad_plan(*, solicitud_id, fotografia_id):
 
 
 @transaction.atomic
-def entregar_aviso_plan(outbox, lease_id, enviar, *, aviso_plan_id=None):
+def entregar_aviso_plan(outbox, lease_id, enviar):
     # Version changes use the same application lock; do not lock nullable joins.
     solicitud = SolicitudFinanciacionEducativa.objects.select_for_update().get(pk=outbox.solicitud_id)
     fotografia = CondicionesFinancieras.objects.select_for_update().get(pk=outbox.plan_contractual_id)
-    despacho_individual = aviso_plan_id is not None and aviso_plan_id == outbox.pk
-    if not despacho_individual and not settings.FINANCIACION_EDUCATIVA_CONTRACTUAL_PLAN_EMAILS_ENABLED:
+    if not settings.FINANCIACION_EDUCATIVA_CONTRACTUAL_PLAN_EMAILS_ENABLED:
         raise AvisoPlanDeshabilitado()
     if not _plan_disponible(solicitud, fotografia):
         raise AvisoPlanSustituido()

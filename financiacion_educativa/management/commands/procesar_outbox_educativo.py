@@ -18,7 +18,7 @@ class Command(BaseCommand):
         parser.add_argument('--interval', type=float, default=2.0)
         parser.add_argument(
             '--aviso-plan-id', type=UUID,
-            help='Despacha exclusivamente el aviso de plan indicado, incluso con el envio compartido apagado.',
+            help='Despacha exclusivamente el aviso indicado si el envio de avisos de plan esta habilitado.',
         )
 
     def handle(self, *args, **options):

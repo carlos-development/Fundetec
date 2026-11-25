@@ -178,6 +178,24 @@ class AvisoPlanContractualTests(DatosAvisoPlan, TestCase):
         self.assertEqual(aviso.estado, 'PENDING')
 
     @override_settings(FINANCIACION_EDUCATIVA_CONTRACTUAL_PLAN_EMAILS_ENABLED=False)
+    def test_despacho_por_uuid_apagado_no_reclama_ni_incrementa_intentos(self):
+        aviso = self.firmar()
+        outbox.crear_intencion_correo(
+            solicitud=self.solicitud, tipo_evento='DOSSIER_RECEIVED',
+            codigo_mensaje='DOSSIER_RECEIVED', clave_idempotencia='dossier-qa',
+            destinatarios=[self.titular.email],
+        )
+        filas = OutboxCorreoEducativo.objects.order_by('pk')
+        originales = list(filas.values())
+
+        call_command('procesar_outbox_educativo', '--aviso-plan-id', str(aviso.pk), stdout=StringIO())
+
+        self.assertEqual(list(filas.values()), originales)
+        aviso.refresh_from_db()
+        self.assertEqual((aviso.estado, aviso.intentos), ('PENDING', 0))
+        self.assertIsNone(aviso.lease_id)
+        self.assertEqual(len(mail.outbox), 0)
+
     def test_despacho_por_uuid_solo_procesa_el_aviso_indicado(self):
         expediente, _, _, _ = self.contrato('OTRO-EXPEDIENTE')
         otro_tipo, _ = outbox.crear_intencion_correo(
@@ -392,7 +410,6 @@ class AvisoPlanConcurrenteTests(DatosAvisoPlan, TransactionTestCase):
         self.assertEqual(OutboxCorreoEducativo.objects.get(codigo_mensaje=CODIGO_PLAN).estado, 'SENT')
         self.assertTrue(connection.is_usable())
 
-    @override_settings(FINANCIACION_EDUCATIVA_CONTRACTUAL_PLAN_EMAILS_ENABLED=False)
     def test_dos_despachos_del_mismo_uuid_envian_una_sola_vez(self):
         aviso = self.firmar()
         resultados = self.paralelos(lambda: outbox.procesar_siguiente_correo(aviso_plan_id=aviso.pk))
