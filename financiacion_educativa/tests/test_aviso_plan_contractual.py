@@ -14,6 +14,7 @@ from allauth.account.models import EmailAddress
 from django.contrib.auth import get_user_model
 from django.core import mail
 from django.core.exceptions import ValidationError
+from django.core.management import call_command, CommandError
 from django.db import close_old_connections, connection, connections, IntegrityError, transaction
 from django.test import TestCase, TransactionTestCase, override_settings
 from django.urls import reverse
@@ -175,6 +176,51 @@ class AvisoPlanContractualTests(DatosAvisoPlan, TestCase):
         aviso.refresh_from_db()
         self.assertEqual(aviso.intentos, 0)
         self.assertEqual(aviso.estado, 'PENDING')
+
+    @override_settings(FINANCIACION_EDUCATIVA_CONTRACTUAL_PLAN_EMAILS_ENABLED=False)
+    def test_despacho_por_uuid_solo_procesa_el_aviso_indicado(self):
+        expediente, _, _, _ = self.contrato('OTRO-EXPEDIENTE')
+        otro_tipo, _ = outbox.crear_intencion_correo(
+            solicitud=expediente, tipo_evento='DOSSIER_RECEIVED',
+            codigo_mensaje='DOSSIER_RECEIVED', clave_idempotencia='dossier-qa',
+            destinatarios=[self.titular.email],
+        )
+        aviso = self.firmar()
+        expediente.usuario = self.titular
+        expediente.correo = self.titular.email
+        expediente.fecha_nacimiento_estudiante = date(1990, 1, 1)
+        expediente.save()
+        with transaction.atomic():
+            otro_aviso, _ = registrar_disponibilidad_plan(
+                solicitud_id=expediente.pk, fotografia_id=expediente.fotografias_financieras.get().pk,
+            )
+        otros = OutboxCorreoEducativo.objects.filter(pk__in=[otro_tipo.pk, otro_aviso.pk]).order_by('pk')
+        originales = list(otros.values())
+        self.assertEqual([fila['estado'] for fila in originales], ['PENDING', 'PENDING'])
+
+        for objetivo in (uuid4(), otro_tipo.pk):
+            call_command('procesar_outbox_educativo', '--aviso-plan-id', str(objetivo), stdout=StringIO())
+        self.assertEqual(len(mail.outbox), 0)
+        self.assertEqual(list(otros.values()), originales)
+
+        for _ in range(2):
+            call_command('procesar_outbox_educativo', '--aviso-plan-id', str(aviso.pk), stdout=StringIO())
+        aviso.refresh_from_db()
+        self.assertEqual((aviso.estado, aviso.intentos), ('SENT', 1))
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].extra_headers['Message-ID'], aviso.message_id)
+        self.assertEqual(list(otros.values()), originales)
+
+        self.verificacion.verified = False
+        self.verificacion.save(update_fields=['verified'])
+        with self.assertRaisesMessage(CommandError, 'PLAN_RECIPIENT_UNVERIFIED'):
+            call_command('procesar_outbox_educativo', '--aviso-plan-id', str(otro_aviso.pk))
+        otro_aviso.refresh_from_db()
+        self.assertEqual((otro_aviso.estado, otro_aviso.intentos), ('FAILED', 1))
+        self.assertEqual(list(otros.filter(pk=otro_tipo.pk).values()), [
+            fila for fila in originales if fila['id'] == otro_tipo.pk
+        ])
+        self.assertEqual(len(mail.outbox), 1)
 
     def test_apagado_despues_de_reclamar_no_envia(self):
         self.firmar()
@@ -345,6 +391,15 @@ class AvisoPlanConcurrenteTests(DatosAvisoPlan, TransactionTestCase):
         self.assertEqual(len(mail.outbox), 1)
         self.assertEqual(OutboxCorreoEducativo.objects.get(codigo_mensaje=CODIGO_PLAN).estado, 'SENT')
         self.assertTrue(connection.is_usable())
+
+    @override_settings(FINANCIACION_EDUCATIVA_CONTRACTUAL_PLAN_EMAILS_ENABLED=False)
+    def test_dos_despachos_del_mismo_uuid_envian_una_sola_vez(self):
+        aviso = self.firmar()
+        resultados = self.paralelos(lambda: outbox.procesar_siguiente_correo(aviso_plan_id=aviso.pk))
+        aviso.refresh_from_db()
+        self.assertEqual(sum(r.procesado for r in resultados), 1)
+        self.assertEqual((aviso.estado, aviso.intentos), ('SENT', 1))
+        self.assertEqual(len(mail.outbox), 1)
 
     def test_dos_webhooks_simultaneos_crean_un_aviso_y_una_firma(self):
         from django.test import Client

@@ -533,7 +533,7 @@ def filtro_pausa_breb():
 
 
 @transaction.atomic
-def reclamar_correo_pendiente():
+def reclamar_correo_pendiente(*, aviso_plan_id=None):
     ahora = timezone.now()
     queryset = OutboxCorreoEducativo.objects.filter(
         estado__in=ESTADOS_RECLAMABLES,
@@ -542,7 +542,9 @@ def reclamar_correo_pendiente():
     if not settings.FINANCIACION_EDUCATIVA_BREB_PAYMENT_EMAILS_ENABLED:
         # Subquery avoids a nullable join in the FOR UPDATE claim.
         queryset = queryset.exclude(filtro_pausa_breb())
-    if not settings.FINANCIACION_EDUCATIVA_CONTRACTUAL_PLAN_EMAILS_ENABLED:
+    if aviso_plan_id is not None:
+        queryset = queryset.filter(pk=aviso_plan_id, codigo_mensaje=CODIGO_PLAN)
+    elif not settings.FINANCIACION_EDUCATIVA_CONTRACTUAL_PLAN_EMAILS_ENABLED:
         queryset = queryset.exclude(codigo_mensaje=CODIGO_PLAN)
     queryset = (
         queryset.select_for_update(skip_locked=True)
@@ -755,12 +757,15 @@ def _construir_mensaje(outbox, connection_mail):
     return mensaje
 
 
-def _entregar(outbox, lease_id):
+def _entregar(outbox, lease_id, *, aviso_plan_id=None):
     if SolicitudFinanciacionEducativa.objects.filter(pk=outbox.solicitud_id, estado=EstadoSolicitudFinanciacion.CANCELLED).exists():
         raise CorreoSolicitudCancelada()
     if outbox.codigo_mensaje == CODIGO_PLAN:
         from financiacion_educativa.services.notificaciones_plan_contractual import entregar_aviso_plan
-        return entregar_aviso_plan(outbox, lease_id, lambda: _enviar_mensaje_smtp(outbox))
+        return entregar_aviso_plan(
+            outbox, lease_id, lambda: _enviar_mensaje_smtp(outbox),
+            aviso_plan_id=aviso_plan_id,
+        )
     if outbox.codigo_mensaje in CODIGOS_PAGO:
         from financiacion_educativa.services.notificaciones_pagos import entregar_aviso_pago
         return entregar_aviso_pago(outbox, lease_id, lambda reporte: _enviar_mensaje_smtp(outbox, reporte=reporte))
@@ -941,13 +946,13 @@ def _sincronizar_legado(outbox):
         )
 
 
-def procesar_siguiente_correo():
-    outbox = reclamar_correo_pendiente()
+def procesar_siguiente_correo(*, aviso_plan_id=None):
+    outbox = reclamar_correo_pendiente(aviso_plan_id=aviso_plan_id)
     if not outbox:
         return ResultadoProcesoOutbox(procesado=False)
     lease_id = outbox.lease_id
     try:
-        _entregar(outbox, lease_id)
+        _entregar(outbox, lease_id, aviso_plan_id=aviso_plan_id)
         estado = EstadoOutboxCorreoEducativo.SENT
         codigo = ''
     except Exception as error:
