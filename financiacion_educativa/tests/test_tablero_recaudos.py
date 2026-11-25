@@ -1,14 +1,17 @@
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
 from types import SimpleNamespace
+from unittest import skipUnless
+from unittest.mock import patch
 from urllib.parse import parse_qs
 from uuid import uuid4
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
 from django.core.exceptions import ValidationError
-from django.db import connection
-from django.test import TestCase, override_settings
+from django.db import connection, connections, transaction
+from django.test import TestCase, TransactionTestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
@@ -325,3 +328,64 @@ class TableroRecaudosTests(DatosTableroRecaudos, TestCase):
         self.assertEqual(len(capturadas), 1)
         self.assertNotIn('FOR UPDATE', capturadas[0]['sql'])
         self.assertEqual(tablero['totales']['cantidad_confirmados'], 5)
+
+
+@skipUnless(connection.vendor == 'postgresql', 'Requiere conexiones independientes a PostgreSQL.')
+@override_settings(**AISLAMIENTO)
+class ConcurrenciaRepartoTableroTests(DatosTableroRecaudos, TransactionTestCase):
+    def comprobar_aplicacion_intercalada(self, fecha_aplicacion):
+        from financiacion_educativa.dashboards.operaciones import tablero_recaudos
+
+        self.crear_convenio(vigente_hasta=date(2026, 10, 31))
+        inicial = self.movimiento(self.solicitud, date(2026, 9, 1), aplicar=True)
+        filtros = {'desde': '2026-09-01', 'hasta': '2026-10-31', 'institucion': self.institucion.pk}
+        self.client.force_login(self.actor)
+        construir = tablero_recaudos.construir_tablero
+
+        def aplicar():
+            try:
+                with transaction.atomic():
+                    ingreso = self.movimiento(self.solicitud, fecha_aplicacion, aplicar=True)
+                    return ingreso.aplicacion.interes_aplicado
+            finally:
+                connections.close_all()
+
+        intereses = [inicial.aplicacion.interes_aplicado]
+        with ThreadPoolExecutor(max_workers=1) as escritor:
+            def intercalar(*args, **kwargs):
+                tablero = construir(*args, **kwargs)
+                intereses.append(escritor.submit(aplicar).result(timeout=30))
+                return tablero
+
+            with patch.object(tablero_recaudos, 'construir_tablero', side_effect=intercalar):
+                durante = self.client.get(self.ruta_tablero(), filtros)
+        despues = self.client.get(self.ruta_tablero(), filtros)
+        self.assertEqual(len(intereses), 2)
+        for respuesta, fechas, importes in (
+            (durante, [inicial.fecha_efectiva], intereses[:1]),
+            (despues, [inicial.fecha_efectiva, fecha_aplicacion], intereses),
+        ):
+            self.assertEqual(respuesta.status_code, 200)
+            grupos = {}
+            for fecha, interes in zip(fechas, importes):
+                grupos.setdefault(fecha.replace(day=1), []).append(interes)
+            meses = respuesta.context['meses']
+            self.assertEqual([mes['mes'] for mes in meses], sorted(grupos))
+            aprobado_total = Decimal(0)
+            for mes in meses:
+                importes_mes = grupos[mes['mes']]
+                aprobado = sum((i * Decimal('.375')).quantize(Decimal('.01'), rounding=ROUND_HALF_UP)
+                               for i in importes_mes)
+                aprobado_total += aprobado
+                self.assertEqual(mes['intereses'], sum(importes_mes))
+                self.assertEqual(mes['reparto'], {'aprobado': aprobado, 'institucion': sum(importes_mes) - aprobado})
+                self.assertEqual(mes['interes_sin_convenio'], 0)
+            self.assertEqual(respuesta.context['totales']['intereses'], sum(importes))
+            self.assertEqual(respuesta.context['reparto_periodo'],
+                             {'aprobado': aprobado_total, 'institucion': sum(importes) - aprobado_total})
+
+    def test_aplicacion_concurrente_en_mes_nuevo(self):
+        self.comprobar_aplicacion_intercalada(date(2026, 10, 1))
+
+    def test_aplicacion_concurrente_en_mes_existente(self):
+        self.comprobar_aplicacion_intercalada(date(2026, 9, 30))

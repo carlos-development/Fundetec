@@ -67,30 +67,13 @@ def repartir_cuotas(ingreso, convenios):
         ingreso.reparto_sin_cuota = _partes(diferencia, _parte_aprobado(neto, convenio) - aprobado_anterior)
 
 
-def agregar_repartos_periodo(tablero, consulta, convenios):
-    meses = {mes['mes']: mes for mes in tablero['meses']}
-    for mes in meses.values():
-        mes['reparto'] = None
-        mes['interes_sin_convenio'] = mes['intereses'].quantize(CENTAVO)
-
-    if convenios:
-        ingresos = consulta.filter(tiene_aplicacion_registrada(), reporte__solicitud__institucion_id__in=convenios).order_by()
-        for fecha, institucion_id, interes in ingresos.values_list(
-            'fecha_efectiva', 'reporte__solicitud__institucion_id', 'interes_neto',
-        ).iterator():
-            convenio = _convenio_aplicable(convenios, institucion_id, fecha)
-            if convenio is None:
-                continue
-            mes = meses[fecha.replace(day=1)]
-            interes = interes.quantize(CENTAVO)
-            partes = _partes(interes, _parte_aprobado(interes, convenio))
-            if mes['reparto'] is None:
-                mes['reparto'] = _partes(CERO, CERO)
-            for campo, importe in partes.items():
-                mes['reparto'][campo] += importe
-            mes['interes_sin_convenio'] -= interes
-
-    con_convenio = [mes['reparto'] for mes in meses.values() if mes['reparto'] is not None]
-    tablero['reparto_periodo'] = {campo: sum((mes[campo] for mes in con_convenio), CERO)
-                                  for campo in ('aprobado', 'institucion')} if con_convenio else None
-    tablero['interes_sin_convenio'] = sum((mes['interes_sin_convenio'] for mes in meses.values()), CERO)
+def acumular_reparto(mes, convenios, institucion_id, fecha, interes):
+    convenio = _convenio_aplicable(convenios, institucion_id, fecha)
+    if convenio is None:
+        mes['interes_sin_convenio'] += interes
+        return
+    if mes['reparto'] is None:
+        mes['reparto'] = _partes(CERO, CERO)
+    aprobado = _parte_aprobado(interes, convenio)
+    mes['reparto']['aprobado'] += aprobado
+    mes['reparto']['institucion'] += interes - aprobado
