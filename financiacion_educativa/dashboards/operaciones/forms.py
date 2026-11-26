@@ -9,6 +9,15 @@ from financiacion_educativa.choices import (
 )
 
 
+class FechaCorteObligacionForm(forms.Form):
+    fecha_corte = forms.DateField(
+        label='Fecha bancaria de corte',
+        input_formats=['%Y-%m-%d'],
+        widget=forms.DateInput(format='%Y-%m-%d', attrs={'type': 'date'}),
+        error_messages={'invalid': 'Indica una fecha válida.', 'required': 'Indica la fecha de corte.'},
+    )
+
+
 ORDENAMIENTOS = (
     ('-creada_en', 'Mas recientes'),
     ('creada_en', 'Mas antiguas'),

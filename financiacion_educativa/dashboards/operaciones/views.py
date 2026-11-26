@@ -1,9 +1,10 @@
 from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
-from django.db.models import Sum
+from django.db import transaction
 from django.http import FileResponse, Http404
-from django.shortcuts import redirect, render
+from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET, require_POST
 
@@ -13,6 +14,7 @@ from .forms import (
     FiltrosRevisionDocumentalForm,
     FiltrosSolicitudesOperativasForm,
     FiltrosObligacionesForm,
+    FechaCorteObligacionForm,
 )
 from .permissions import (
     PERMISO_DOCUMENTOS,
@@ -31,8 +33,8 @@ from .presenters import (
     presentar_obligacion,
 )
 from .cartera import (
-    expedientes_en_tramite, filtrar_obligaciones, indicadores_obligaciones,
-    indicadores_tramite, obtener_obligacion,
+    consultar_capital_pendiente, expedientes_en_tramite, filtrar_obligaciones, indicadores_obligaciones,
+    indicadores_tramite, lectura_capital_al_corte, obligaciones_autorizadas,
 )
 from .selectors import (
     filtrar_solicitudes_operativas,
@@ -46,7 +48,7 @@ from .selectors import (
     filtrar_documentos_revision,
     obtener_documento_revision,
 )
-from financiacion_educativa.models_recaudos import AplicacionCuotaEducativa
+from financiacion_educativa.models import CondicionesFinancieras
 from financiacion_educativa.services.revision_documental_operativa import (
     ConflictoRevisionDocumental,
     aceptar_documento_operativo,
@@ -220,24 +222,36 @@ def obligaciones_view(request):
     )
 
 
+@transaction.non_atomic_requests
 @never_cache
 @requiere_permisos_operativos(PERMISO_SOLICITUDES)
 @require_GET
 def obligacion_detalle_view(request, application_id):
-    fotografia = obtener_obligacion(application_id)
-    totales = AplicacionCuotaEducativa.objects.filter(cuota__fotografia=fotografia).aggregate(
-        capital=Sum('capital_aplicado'), interes=Sum('interes_aplicado'),
-    )
-    capital_pendiente = (
-        fotografia.capital_financiado - totales['capital']
-        if totales['capital'] is not None else None
-    )
-    return render(
-        request, 'financiacion_educativa/dashboards/operaciones/obligacion_detalle.html',
-        _contexto(request, seccion='obligaciones', obligacion=presentar_obligacion(fotografia),
-                  fotografia=fotografia, cuotas=fotografia.cuotas.select_related('aplicacion_recaudo'),
-                  pagos_aplicados=totales, capital_pendiente=capital_pendiente),
-    )
+    from .seguimiento import FILTROS
+
+    datos = request.GET if 'fecha_corte' in request.GET else {'fecha_corte': timezone.localdate().isoformat()}
+    formulario = FechaCorteObligacionForm(datos)
+    valido = formulario.is_valid()
+    fecha_corte = formulario.cleaned_data.get('fecha_corte')
+    regreso = {}
+    if request.GET.get('origen') == 'cartera':
+        regreso = {campo: request.GET[campo] for campo in ('origen', *FILTROS) if campo in request.GET}
+    with lectura_capital_al_corte():
+        consulta = obligaciones_autorizadas().filter(solicitud_id=application_id)
+        saldo = {}
+        if valido:
+            try:
+                fotografia, saldo = consultar_capital_pendiente(consulta, fecha_corte)
+            except CondicionesFinancieras.DoesNotExist:
+                raise Http404 from None
+        else:
+            fotografia = get_object_or_404(consulta)
+        return render(request, 'financiacion_educativa/dashboards/operaciones/obligacion_detalle.html',
+            _contexto(request, seccion='obligaciones', obligacion=presentar_obligacion(fotografia),
+                fotografia=fotografia, cuotas=fotografia.cuotas.select_related('aplicacion_recaudo'),
+                formulario_corte=formulario, fecha_corte=fecha_corte, filtros_regreso=regreso,
+                mostrar_aplicaciones='capital_pendiente' in saldo, **saldo),
+            status=200 if valido else 400)
 
 
 @never_cache

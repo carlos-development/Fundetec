@@ -1,5 +1,5 @@
 {% extends "financiacion_educativa/dashboards/operaciones/_base.html" %}
-{% load financiacion_format %}
+{% load financiacion_format recaudo_format %}
 {% block title %}Obligaci&oacute;n {{ obligacion.referencia }} | Aprobado{% endblock %}
 {% block operations_content %}
 {% if seguimiento_regreso %}<a href="{{ seguimiento_regreso }}">Volver al seguimiento filtrado</a>{% endif %}
@@ -11,6 +11,32 @@
     <div><dt>Inicio del plan</dt><dd>{{ fotografia.fecha_inicio_plan|date:"d/m/Y"|default:"No registrado" }}</dd></div><div><dt>Primer vencimiento</dt><dd>{{ fotografia.fecha_primer_vencimiento|date:"d/m/Y"|default:"No registrado" }}</dd></div>
     <div><dt>&Uacute;ltimo vencimiento</dt><dd>{{ fotografia.fecha_ultimo_vencimiento|date:"d/m/Y"|default:"No registrado" }}</dd></div><div><dt>Plazo</dt><dd>{{ fotografia.plazo_meses }} meses</dd></div>
 </dl></section>
+<section class="edu-dashboard-panel" aria-labelledby="capital-corte-titulo">
+    <h2 id="capital-corte-titulo">Capital pendiente a fecha de corte</h2>
+    <form method="get" class="edu-dashboard-filter-primary">
+        {% for campo, valor in filtros_regreso.items %}<input type="hidden" name="{{ campo }}" value="{{ valor }}">{% endfor %}
+        <div class="edu-dashboard-filter{% if formulario_corte.fecha_corte.errors %} has-error{% endif %}">
+            <label for="{{ formulario_corte.fecha_corte.id_for_label }}">{{ formulario_corte.fecha_corte.label }}</label>
+            {{ formulario_corte.fecha_corte }}
+            {% for error in formulario_corte.fecha_corte.errors %}<small id="id_fecha_corte_error" role="alert">{{ error }}</small>{% endfor %}
+        </div>
+        <div class="edu-dashboard-filter-actions"><button type="submit" class="edu-button">Consultar corte</button></div>
+    </form>
+    {% if libro_ingreso_id %}
+        <p>La obligaci&oacute;n tiene movimientos de Libro 2B hasta el {{ fecha_corte|date:"d/m/Y" }}. Para reconstruir el capital a esa fecha, revisa los movimientos del libro ampliado hasta el d&iacute;a elegido. La vista de Libro 2B muestra el estado actual.</p>
+        {% if capacidades_operativas.recaudos %}<a class="edu-dashboard-text-link" href="{% url 'financiacion_educativa_web:operaciones:libro-ingreso' libro_ingreso_id %}">Abrir Libro 2B (vista actual)</a>{% else %}<p>Solicita la revisi&oacute;n a un operador con acceso a Recaudos.</p>{% endif %}
+    {% elif capital_inconsistente %}
+        <p role="alert">El capital aplicado supera el capital contractual. El corte requiere revisi&oacute;n operativa.</p>
+    {% elif mostrar_aplicaciones %}
+        <dl class="edu-dashboard-data-list" data-capital-corte>
+            <div><dt>Capital financiado</dt><dd>{{ capital_financiado|cop_recaudo }}</dd></div>
+            <div><dt>Capital aplicado</dt><dd>{{ capital_aplicado|cop_recaudo }}</dd></div>
+            <div><dt>Capital pendiente</dt><dd>{{ capital_pendiente|cop_recaudo }}</dd></div>
+            <div><dt>Inter&eacute;s aplicado</dt><dd>{{ interes_aplicado|cop_recaudo }}</dd></div>
+        </dl>
+        <p class="edu-dashboard-muted">Cuotas completas aplicadas hasta el {{ fecha_corte|date:"d/m/Y" }}, inclusive, por fecha bancaria. Los ingresos conciliados pendientes de aplicar conservan su estado.</p>
+    {% endif %}
+</section>
 <section class="edu-dashboard-panel"><h2>Desglose contractual en COP</h2><dl class="edu-dashboard-data-list">
     <div><dt>Monto solicitado</dt><dd>{{ fotografia.valor_financiado|cop }}</dd></div>
     <div><dt>Originaci&oacute;n ({{ fotografia.tasa_comision|porcentaje }}%)</dt><dd>{{ fotografia.valor_comision|cop }}</dd></div>
@@ -25,16 +51,7 @@
 </dl></section>
 <section class="edu-dashboard-panel"><h2>Calendario de amortizaci&oacute;n programado</h2><p class="edu-dashboard-muted">Saldos y cuotas pactados de la fotograf&iacute;a que respalda la firma. No son saldos efectivos de cartera.</p>
 <div class="edu-dashboard-table-wrap edu-contract-table-wrap" tabindex="0" role="region" aria-label="Calendario programado desplazable"><table class="edu-dashboard-table edu-contract-table">
-    <thead><tr><th>Cuota</th><th>Aplicaci&oacute;n</th><th>Vencimiento</th><th>Saldo inicial programado</th><th>Capital</th><th>Inter&eacute;s</th><th>Cuota programada</th><th>Saldo final programado</th></tr></thead>
-    <tbody>{% for cuota in cuotas %}<tr><td>{{ cuota.numero }}</td><td>{% if cuota.aplicacion_recaudo %}Pagada{% else %}Sin pago aplicado{% endif %}</td><td>{{ cuota.fecha_vencimiento|date:"d/m/Y" }}</td><td>{{ cuota.saldo_inicial|cop }}</td><td>{{ cuota.capital|cop }}</td><td>{{ cuota.interes|cop }}</td><td>{{ cuota.valor_cuota|cop }}</td><td>{{ cuota.saldo_final|cop }}</td></tr>{% empty %}<tr><td colspan="8">Calendario no disponible en esta fotograf&iacute;a. Requiere verificaci&oacute;n operativa.</td></tr>{% endfor %}</tbody>
+    <thead><tr><th>Cuota</th>{% if mostrar_aplicaciones %}<th>Aplicaci&oacute;n al corte</th>{% endif %}<th>Vencimiento</th><th>Saldo inicial programado</th><th>Capital</th><th>Inter&eacute;s</th><th>Cuota programada</th><th>Saldo final programado</th></tr></thead>
+    <tbody>{% for cuota in cuotas %}<tr><td>{{ cuota.numero }}</td>{% if mostrar_aplicaciones %}<td>{% if cuota.aplicacion_recaudo.cuota_verificada and cuota.aplicacion_recaudo.fecha_efectiva <= fecha_corte %}Pagada{% else %}Sin pago aplicado{% endif %}</td>{% endif %}<td>{{ cuota.fecha_vencimiento|date:"d/m/Y" }}</td><td>{{ cuota.saldo_inicial|cop }}</td><td>{{ cuota.capital|cop }}</td><td>{{ cuota.interes|cop }}</td><td>{{ cuota.valor_cuota|cop }}</td><td>{{ cuota.saldo_final|cop }}</td></tr>{% empty %}<tr><td colspan="{% if mostrar_aplicaciones %}8{% else %}7{% endif %}">Calendario no disponible en esta fotograf&iacute;a. Requiere verificaci&oacute;n operativa.</td></tr>{% endfor %}</tbody>
 </table></div></section>
-{% if capital_pendiente != None %}
-<section class="edu-dashboard-panel"><h2>Pagos aplicados</h2><dl class="edu-dashboard-data-list">
-    <div><dt>Capital aplicado</dt><dd>{{ pagos_aplicados.capital|cop }}</dd></div>
-    <div><dt>Inter&eacute;s aplicado</dt><dd>{{ pagos_aplicados.interes|cop }}</dd></div>
-    <div><dt>Capital pendiente seg&uacute;n pagos aplicados</dt><dd>{{ capital_pendiente|cop }}</dd></div>
-</dl><p class="edu-dashboard-muted">No incluye ingresos sin aplicar ni corresponde a una liquidaci&oacute;n de pago total.</p></section>
-{% else %}
-{% include "financiacion_educativa/dashboards/operaciones/_pagos_no_disponibles.html" %}
-{% endif %}
 {% endblock %}
