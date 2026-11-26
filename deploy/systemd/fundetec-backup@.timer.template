@@ -1,0 +1,11 @@
+[Unit]
+Description=Programacion de respaldo cifrado de Fundetec (%i)
+
+[Timer]
+OnCalendar=@@CALENDARIO_APROBADO@@
+AccuracySec=1s
+Persistent=false
+Unit=fundetec-backup@%i.service
+
+[Install]
+WantedBy=timers.target
