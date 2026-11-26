@@ -1,9 +1,11 @@
 import json
-from datetime import timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from io import StringIO
 from unittest import skipUnless
+from unittest.mock import patch
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 from django.core.management import call_command
 from django.core.management.base import CommandError
@@ -45,8 +47,9 @@ class ConsultaCapitalMixin:
 @skipUnless(connection.vendor == 'postgresql', 'La consulta requiere PostgreSQL.')
 @override_settings(**{**AISLAMIENTO, 'FINANCIACION_EDUCATIVA_BREB_PAYMENT_EMAILS_ENABLED': False})
 class CapitalPendienteCorteTests(ConsultaCapitalMixin, DatosAplicacion, TransactionTestCase):
-    def crear_caso(self, referencia, fecha_bancaria=None, aplicar=False):
-        self.solicitud, self.fotografia, _, _ = self.contrato(referencia)
+    def crear_caso(self, referencia, fecha_bancaria=None, *, aplicar=False, autorizada_en):
+        with patch('financiacion_educativa.tests.test_dashboard_obligaciones.timezone.now', return_value=autorizada_en):
+            self.solicitud, self.fotografia, _, _ = self.contrato(referencia)
         self.solicitud.usuario = self.pagador
         self.solicitud.correo = self.pagador.email
         self.solicitud.save(update_fields=['usuario', 'correo'])
@@ -65,12 +68,13 @@ class CapitalPendienteCorteTests(ConsultaCapitalMixin, DatosAplicacion, Transact
         hoy = timezone.localdate()
         corte = hoy - timedelta(days=1)
         antes = corte - timedelta(days=1)
+        firma = datetime.combine(antes - timedelta(days=1), time(9), ZoneInfo('America/Bogota'))
         casos = [
-            ('sin_pagos', *self.crear_caso('CORTE-SIN-PAGOS'), False),
-            ('aplicado_antes', *self.crear_caso('CORTE-ANTES', antes, aplicar=True), True),
-            ('aplicado_despues', *self.crear_caso('CORTE-DESPUES', hoy, aplicar=True), False),
-            ('conciliado_pendiente', *self.crear_caso('CORTE-CONCILIADO', antes), False),
-            ('aplicado_el_mismo_dia', *self.crear_caso('CORTE-INCLUSIVO', corte, aplicar=True), True),
+            ('sin_pagos', *self.crear_caso('CORTE-SIN-PAGOS', autorizada_en=firma), False),
+            ('aplicado_antes', *self.crear_caso('CORTE-ANTES', antes, aplicar=True, autorizada_en=firma), True),
+            ('aplicado_despues', *self.crear_caso('CORTE-DESPUES', hoy, aplicar=True, autorizada_en=firma), False),
+            ('conciliado_pendiente', *self.crear_caso('CORTE-CONCILIADO', antes, autorizada_en=firma), False),
+            ('aplicado_el_mismo_dia', *self.crear_caso('CORTE-INCLUSIVO', corte, aplicar=True, autorizada_en=firma), True),
         ]
         cantidades = (ConciliacionRecaudoEducativo.objects.count(), AplicacionCuotaEducativa.objects.count())
         self.assertEqual(cantidades, (4, 3))
@@ -98,6 +102,47 @@ class CapitalPendienteCorteTests(ConsultaCapitalMixin, DatosAplicacion, Transact
             (ConciliacionRecaudoEducativo.objects.count(), AplicacionCuotaEducativa.objects.count()))
         print('CAPITAL_CORTE=' + json.dumps(respuestas, sort_keys=True))
 
+    def test_detalle_y_comando_respetan_el_dia_de_autorizacion_en_bogota(self):
+        firma = datetime(2026, 10, 15, 2, 30, tzinfo=UTC)
+        fecha_autorizacion = date(2026, 10, 14)
+        anterior = fecha_autorizacion - timedelta(days=1)
+        foto, _ = self.crear_caso('CORTE-AUTORIZACION', autorizada_en=firma)
+        self.client.force_login(self.actor)
+
+        with timezone.override('UTC'):
+            rechazada = self.detalle(foto, anterior.isoformat())
+            self.assertContains(rechazada, 'Elige el 14/10/2026 o una fecha posterior', status_code=400)
+            self.assertContains(rechazada, '14/10/2026 21:30', status_code=400)
+            self.assertContains(rechazada, f'value="{anterior.isoformat()}"', status_code=400)
+            for texto in ('data-capital-corte', 'Desglose contractual en COP', 'Saldo inicial programado'):
+                self.assertNotContains(rechazada, texto, status_code=400)
+
+            salida = StringIO()
+            with self.assertRaisesMessage(CommandError,
+                    'La fecha de corte no puede ser anterior a la autorización efectiva del plan (2026-10-14, hora de Bogotá).'):
+                call_command('consultar_capital_pendiente', '--obligacion-id', str(foto.pk),
+                    '--fecha-corte', anterior.isoformat(), stdout=salida)
+            self.assertEqual(salida.getvalue(), '')
+
+            aceptada = self.detalle(foto, fecha_autorizacion.isoformat())
+            self.assertContains(aceptada, 'data-capital-corte')
+            self.assertContains(aceptada, 'Desglose contractual en COP')
+            resultado = self.consultar(foto.pk, fecha_autorizacion)
+            for clave, monto in (
+                ('capital_financiado', foto.capital_financiado),
+                ('capital_aplicado', Decimal('0.00')),
+                ('capital_pendiente', foto.capital_financiado),
+            ):
+                self.assertEqual(aceptada.context[clave], monto)
+                self.assertEqual(Decimal(resultado[clave]), monto)
+
+        print('CAPITAL_CORTE_AUTORIZACION=' + json.dumps(dict(
+            firma_utc=firma.isoformat(), fecha_autorizacion_bogota=fecha_autorizacion.isoformat(),
+            anterior=dict(fecha_corte=anterior.isoformat(), http=rechazada.status_code,
+                cifras_visibles=False, comando='CommandError'),
+            mismo_dia=dict(fecha_corte=fecha_autorizacion.isoformat(), http=aceptada.status_code,
+                cifras_visibles=True, comando='OK'))))
+
     def test_acceso_vigente_y_fecha_invalida(self):
         ruta = self.detalle_url(self.solicitud)
         self.assertEqual(self.client.get(ruta).status_code, 302)
@@ -114,6 +159,11 @@ class CapitalPendienteCorteTests(ConsultaCapitalMixin, DatosAplicacion, Transact
 @override_settings(**{**AISLAMIENTO, 'FINANCIACION_EDUCATIVA_LIBRO_ENABLED': True,
     'FINANCIACION_EDUCATIVA_BREB_PAYMENT_EMAILS_ENABLED': False})
 class CapitalPendienteLibroCorteTests(ConsultaCapitalMixin, DatosLibro, TransactionTestCase):
+    def setUp(self):
+        firma = datetime(2026, 7, 1, 15, tzinfo=UTC)
+        with patch('financiacion_educativa.tests.test_dashboard_obligaciones.timezone.now', return_value=firma):
+            super().setUp()
+
     def test_movimiento_libro_al_corte_deriva_sin_mostrar_saldo_actual(self):
         ingreso = self.nuevo_ingreso()
         self.registrar(ingreso)

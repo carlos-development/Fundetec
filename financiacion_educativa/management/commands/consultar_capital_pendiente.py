@@ -16,7 +16,8 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument('--obligacion-id', required=True, type=UUID, help='UUID de las condiciones contractuales.')
-        parser.add_argument('--fecha-corte', required=True, type=date.fromisoformat, help='Fecha bancaria inclusiva (AAAA-MM-DD).')
+        parser.add_argument('--fecha-corte', required=True, type=date.fromisoformat,
+            help='Fecha bancaria inclusiva (AAAA-MM-DD), desde el día de autorización en Bogotá.')
 
     def handle(self, *args, obligacion_id, fecha_corte, **options):
         if connection.vendor != 'postgresql' or connection.in_atomic_block:
@@ -28,6 +29,10 @@ class Command(BaseCommand):
                 _, saldo = consultar_capital_pendiente(consulta, fecha_corte)
             except CondicionesFinancieras.DoesNotExist:
                 raise CommandError('No hay una obligacion autorizada con ese UUID.') from None
+        fecha_autorizacion = saldo.get('corte_anterior_a_autorizacion')
+        if fecha_autorizacion:
+            raise CommandError(f'La fecha de corte no puede ser anterior a la autorización efectiva del plan '
+                f'({fecha_autorizacion.isoformat()}, hora de Bogotá).')
         if saldo.get('libro_ingreso_id'):
             raise CommandError('La obligacion tiene movimientos de Libro 2B al corte. Consulte el libro ampliado.')
         if saldo.get('capital_inconsistente'):

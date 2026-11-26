@@ -2,6 +2,7 @@
 from contextlib import contextmanager
 from datetime import timedelta
 from decimal import Decimal
+from zoneinfo import ZoneInfo
 
 from django.db import connection, transaction
 from django.db.models import OuterRef, Subquery, Sum, Count, Value
@@ -15,6 +16,9 @@ from financiacion_educativa.models_libro import MovimientoLibroEducativo
 from financiacion_educativa.models_recaudos import AplicacionCuotaEducativa
 from financiacion_educativa.services.estado_publico import firmas_autorizadas_reales
 from .selectors import filtrar_solicitudes_operativas
+
+
+ZONA_BANCARIA = ZoneInfo('America/Bogota')
 
 
 def obligaciones_autorizadas():
@@ -117,6 +121,9 @@ def consultar_capital_pendiente(consulta, fecha_corte):
         interes_aplicado=Coalesce(Subquery(aplicaciones.values('interes')), Value(Decimal('0.00'))),
         libro_ingreso_id=Subquery(ingreso_libro),
     ).get()
+    fecha_autorizacion = timezone.localdate(fotografia.autorizada_en, ZONA_BANCARIA)
+    if fecha_corte < fecha_autorizacion:
+        return fotografia, {'corte_anterior_a_autorizacion': fecha_autorizacion}
     if fotografia.libro_ingreso_id:
         return fotografia, {'libro_ingreso_id': fotografia.libro_ingreso_id}
     if fotografia.capital_aplicado > fotografia.capital_financiado:

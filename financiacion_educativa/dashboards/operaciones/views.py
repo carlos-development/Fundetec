@@ -33,7 +33,7 @@ from .presenters import (
     presentar_obligacion,
 )
 from .cartera import (
-    consultar_capital_pendiente, expedientes_en_tramite, filtrar_obligaciones, indicadores_obligaciones,
+    ZONA_BANCARIA, consultar_capital_pendiente, expedientes_en_tramite, filtrar_obligaciones, indicadores_obligaciones,
     indicadores_tramite, lectura_capital_al_corte, obligaciones_autorizadas,
 )
 from .selectors import (
@@ -229,7 +229,9 @@ def obligaciones_view(request):
 def obligacion_detalle_view(request, application_id):
     from .seguimiento import FILTROS
 
-    datos = request.GET if 'fecha_corte' in request.GET else {'fecha_corte': timezone.localdate().isoformat()}
+    datos = request.GET if 'fecha_corte' in request.GET else {
+        'fecha_corte': timezone.localdate(timezone=ZONA_BANCARIA).isoformat(),
+    }
     formulario = FechaCorteObligacionForm(datos)
     valido = formulario.is_valid()
     fecha_corte = formulario.cleaned_data.get('fecha_corte')
@@ -246,12 +248,17 @@ def obligacion_detalle_view(request, application_id):
                 raise Http404 from None
         else:
             fotografia = get_object_or_404(consulta)
+        fecha_autorizacion = saldo.get('corte_anterior_a_autorizacion')
+        if fecha_autorizacion:
+            formulario.add_error('fecha_corte',
+                f'Elige el {fecha_autorizacion:%d/%m/%Y} o una fecha posterior. '
+                'Ese es el día de autorización efectiva del plan en hora de Bogotá.')
         return render(request, 'financiacion_educativa/dashboards/operaciones/obligacion_detalle.html',
             _contexto(request, seccion='obligaciones', obligacion=presentar_obligacion(fotografia),
                 fotografia=fotografia, cuotas=fotografia.cuotas.select_related('aplicacion_recaudo'),
                 formulario_corte=formulario, fecha_corte=fecha_corte, filtros_regreso=regreso,
                 mostrar_aplicaciones='capital_pendiente' in saldo, **saldo),
-            status=200 if valido else 400)
+            status=200 if formulario.is_valid() else 400)
 
 
 @never_cache
