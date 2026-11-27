@@ -236,7 +236,7 @@ class DashboardObligacionesTests(DatosObligacionesMixin, TestCase):
         self.assertEqual(respuesta.status_code, 200)
         self.assertFalse(any(q['sql'].lstrip().upper().startswith(('UPDATE ', 'INSERT ', 'DELETE ')) for q in consultas))
         self.assertEqual(list(respuesta.context['cuotas'].values_list('pk', flat=True)), list(f.cuotas.values_list('pk', flat=True)))
-        for texto in ('Originaci&oacute;n', 'IVA de originaci&oacute;n', 'Figarantias', 'SURA', 'Saldo final programado', 'No disponible'):
+        for texto in ('Originaci&oacute;n', 'IVA de originaci&oacute;n', 'Figarantias', 'SURA', 'Saldo final programado', 'Capital pendiente a fecha de corte'):
             self.assertContains(respuesta, texto)
         self.assertNotContains(respuesta, 'test-only/firmado.pdf')
         self.assertNotContains(respuesta, s.correo)

@@ -1,15 +1,24 @@
-"""Consulta de contratos y calendario pactado, sin contabilidad de pagos."""
+"""Consulta de contratos, calendario pactado y aplicaciones ordinarias."""
+from contextlib import contextmanager
 from datetime import timedelta
 from decimal import Decimal
+from zoneinfo import ZoneInfo
 
-from django.db.models import OuterRef, Subquery, Sum, Count
+from django.db import connection, transaction
+from django.db.models import OuterRef, Subquery, Sum, Count, Value
+from django.db.models.functions import Coalesce
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
 from financiacion_educativa.choices import EstadoSolicitudFinanciacion
 from financiacion_educativa.models import CondicionesFinancieras, CuotaAmortizacionEducativa
+from financiacion_educativa.models_libro import MovimientoLibroEducativo
+from financiacion_educativa.models_recaudos import AplicacionCuotaEducativa
 from financiacion_educativa.services.estado_publico import firmas_autorizadas_reales
 from .selectors import filtrar_solicitudes_operativas
+
+
+ZONA_BANCARIA = ZoneInfo('America/Bogota')
 
 
 def obligaciones_autorizadas():
@@ -84,4 +93,44 @@ def indicadores_tramite(consulta):
 def obtener_obligacion(application_id):
     return get_object_or_404(
         obligaciones_autorizadas().prefetch_related('cuotas'), solicitud_id=application_id,
+    )
+
+
+@contextmanager
+def lectura_capital_al_corte():
+    transaccion_propia = not connection.in_atomic_block
+    with transaction.atomic():
+        if connection.vendor == 'postgresql' and transaccion_propia:
+            with connection.cursor() as cursor:
+                cursor.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY')
+        yield
+
+
+def consultar_capital_pendiente(consulta, fecha_corte):
+    aplicaciones = (
+        AplicacionCuotaEducativa.objects
+        .filter(cuota__fotografia_id=OuterRef('pk'), cuota_verificada=True, fecha_efectiva__lte=fecha_corte)
+        .order_by().values('cuota__fotografia_id')
+        .annotate(capital=Sum('capital_aplicado'), interes=Sum('interes_aplicado'))
+    )
+    ingreso_libro = MovimientoLibroEducativo.objects.filter(
+        fotografia_id=OuterRef('pk'), fecha_bancaria__lte=fecha_corte,
+    ).order_by('-fecha_bancaria', '-secuencia').values('ingreso_id')[:1]
+    fotografia = consulta.annotate(
+        capital_aplicado=Coalesce(Subquery(aplicaciones.values('capital')), Value(Decimal('0.00'))),
+        interes_aplicado=Coalesce(Subquery(aplicaciones.values('interes')), Value(Decimal('0.00'))),
+        libro_ingreso_id=Subquery(ingreso_libro),
+    ).get()
+    fecha_autorizacion = timezone.localdate(fotografia.autorizada_en, ZONA_BANCARIA)
+    if fecha_corte < fecha_autorizacion:
+        return fotografia, {'corte_anterior_a_autorizacion': fecha_autorizacion}
+    if fotografia.libro_ingreso_id:
+        return fotografia, {'libro_ingreso_id': fotografia.libro_ingreso_id}
+    if fotografia.capital_aplicado > fotografia.capital_financiado:
+        return fotografia, {'capital_inconsistente': True}
+    return fotografia, dict(
+        capital_financiado=fotografia.capital_financiado,
+        capital_aplicado=fotografia.capital_aplicado,
+        interes_aplicado=fotografia.interes_aplicado,
+        capital_pendiente=fotografia.capital_financiado - fotografia.capital_aplicado,
     )
