@@ -205,3 +205,51 @@
 .payment-tracking .payment-icon { box-sizing: content-box; flex: none; margin: 0; padding: 6px; width: 18px; height: 18px; background: #e2eaee; color: #475b6b; border-radius: 50%; }
 .payment-tracking .is-recorded .payment-icon { background: #cfefed; color: #075d65; }
 .payment-tracking small { display: block; margin-top: 2px; color: #425b6a; }
+
+/* Student payment home. Keep the transfer and evidence forms server-rendered. */
+.student-payments-shell .edu-page-band { padding-block: clamp(24px, 4vw, 52px) 60px; background: #f0f5f7; }
+.student-payments-shell .edu-breb-student { width: min(calc(100% - 32px), 1120px); max-width: none; }
+.payments-heading { margin-bottom: 24px; }
+.payments-heading h1 { margin: 0; font-size: clamp(2rem, 3.6vw, 3rem); letter-spacing: -.045em; color: #102e43; }
+.payments-heading > p { margin: 3px 0 0; color: #445e6d; }
+.payments-overview { display: grid; gap: 16px; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); }
+.payments-installment, .payments-recent {
+    padding: clamp(22px, 3vw, 36px);
+    border-radius: 20px;
+    min-width: 0;
+}
+.payments-installment { background: #102e43; color: white; }
+.payments-hero-label { display: flex; align-items: center; gap: 8px; font-size: 1rem; font-weight: 600; }
+.payments-installment .payments-hero-label { color: #a4ebe6; }
+.payments-hero-label .payment-icon { margin: 0; }
+.payments-amount { display: block; margin-top: 12px; font-size: clamp(1.85rem, 3.8vw, 3.4rem); line-height: 1.15; letter-spacing: -.045em; font-variant-numeric: tabular-nums; }
+.payments-installment p { margin: 8px 0 0; color: #e0edf2; }
+.payments-installment details { margin-top: 18px; padding-top: 12px; border-top: 1px solid #506b7c; }
+.payments-installment summary { width: fit-content; color: #c5fff5; cursor: pointer; }
+.payments-recent { border: 1px solid #bad6d9; background: #e5f4f3; color: #103d46; }
+.payments-recent h2 { font-size: clamp(1.45rem, 2.3vw, 2rem); margin: 16px 0 4px; letter-spacing: -.03em; }
+.payments-recent p { margin: 0 0 14px; }
+.student-payments-shell .payments-action, .student-payments-shell .payments-nav a {
+    display: inline-flex; gap: 8px; align-items: center; min-height: 44px;
+    color: #084e62; font-weight: 700; text-underline-offset: .2em;
+}
+.payments-nav { display: flex; flex-wrap: wrap; gap: 4px 24px; margin: 12px 0; }
+.payments-nav .payment-icon { margin: 0; }
+.student-payments-shell .edu-breb-payment, .student-payments-shell .payments-history {
+    padding: clamp(18px, 3vw, 32px); border: 1px solid #cddde2; border-radius: 16px; background: #fff; scroll-margin-top: 16px;
+}
+.student-payments-shell .edu-breb-payment-grid { grid-template-columns: minmax(190px, .75fr) minmax(0, 1.35fr); gap: clamp(16px, 3vw, 40px); }
+.student-payments-shell .edu-breb-qr-area { padding: 16px; border-radius: 12px; background: #f1f7f8; align-self: start; }
+.student-payments-shell .edu-breb-qr-area img { max-width: 100%; height: auto; }
+.student-payments-shell .payments-history .edu-recaudos-list-item { display: flex; align-items: baseline; justify-content: space-between; gap: 8px 20px; flex-wrap: wrap; padding-block: 12px; }
+.student-payments-shell .payments-history a, .student-payments-shell .payments-history a:visited {
+    display: inline-flex; align-items: center; min-height: 44px; color: #07485c; font-weight: 700; font-variant-numeric: tabular-nums; text-underline-offset: .22em;
+}
+.student-payments-shell :is(.payments-nav, .payments-overview, .payments-history) :is(a, summary):focus-visible { outline: 3px solid #087286; outline-offset: 3px; }
+.student-payments-shell .payments-installment summary:focus-visible { outline-color: #ffe269; }
+@media (max-width: 700px) {
+    .payments-overview, .student-payments-shell .edu-breb-payment-grid { grid-template-columns: minmax(0, 1fr); }
+    .payments-overview { gap: 10px; }
+    .student-payments-shell .edu-breb-destination { grid-row: 1; }
+    .student-payments-shell .edu-breb-qr-area { width: 100%; box-sizing: border-box; }
+}

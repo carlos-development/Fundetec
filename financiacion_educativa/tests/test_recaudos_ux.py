@@ -31,6 +31,9 @@ class RecaudosUXTests(DatosRecaudosMixin, TestCase):
     def test_pagos_compacto_sin_identificadores_y_detalles_nativos(self):
         self.client.force_login(self.pagador)
         respuesta = self.client.get(reverse('financiacion_educativa_web:pagos', args=[self.solicitud.pk]))
+        self.assertContains(respuesta, '<h2 id="payment-last-title">Tu pago está en revisión</h2>', html=True)
+        seguimiento = reverse('financiacion_educativa_web:reporte-pago', args=[self.solicitud.pk, self.reporte.pk])
+        self.assertContains(respuesta, f'href="{seguimiento}"', count=2)
         self.assertContains(respuesta, 'Cuota pactada en el contrato')
         self.assertContains(respuesta, 'no un saldo real')
         self.assertContains(respuesta, 'id="reportar-transferencia">')

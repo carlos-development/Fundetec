@@ -1,21 +1,35 @@
 {% extends "financiacion_educativa/_base.html" %}
 {% load static financiacion_format recaudo_format %}
 {% block extra_head %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/financiacion_educativa_recaudos.css' %}">{% endblock %}
-{% block title %}Reportar un pago | Aprobado{% endblock %}
+{% block body_class %}student-payments-shell{% endblock %}
+{% block title %}Mis pagos | Aprobado{% endblock %}
 {% block content %}<section class="edu-page-band"><div class="edu-page-shell edu-recaudos-shell edu-breb-student">
-<header class="edu-page-heading"><h1>Mis pagos</h1><p>{{ solicitud.nombre_curso }}</p></header>
-<section class="edu-breb-contract" aria-label="Resumen contractual">
-    {% if cuota_pendiente %}
-    <dl><dt>{% include 'financiacion_educativa/recaudos/_icono.html' with icono='calendar3' only %} Próxima cuota · {{ cuota_pendiente.numero }}</dt><dd>{{ cuota_pendiente.valor_cuota|cop_recaudo }}</dd></dl>
-    <p>Vencimiento {{ cuota_pendiente.fecha_vencimiento|date:"d/m/Y" }}</p>
-    {% else %}<p>Sin cuotas pendientes en el calendario.</p>{% endif %}
-
-    {% if receptor %}<a class="edu-recaudos-button" href="#pagar-breb"><i class="bi bi-qr-code-scan" aria-hidden="true"></i> Pagar con BRE-B</a>{% endif %}
-    <details><summary>Ver datos del contrato</summary><p>Cuota pactada en el contrato: {{ fotografia.valor_cuota_estimada|cop }}. Importe contractual, no un saldo real.</p><p>Capital financiado contractual: <strong>{{ fotografia.capital_financiado|cop }}</strong>. Reportar una transferencia no actualiza tu deuda.</p></details>
-</section>
+<header class="payments-heading"><h1>Mis pagos</h1><p>{{ solicitud.nombre_curso }}</p></header>
+<div class="payments-overview">
+    <section class="payments-installment" aria-label="Resumen contractual">
+        <div class="payments-hero-label">{% include 'financiacion_educativa/recaudos/_icono.html' with icono='calendar3' only %} Próxima cuota</div>
+        {% if cuota_pendiente %}
+            <strong class="payments-amount">{{ cuota_pendiente.valor_cuota|cop_recaudo }}</strong>
+            <p>Cuota {{ cuota_pendiente.numero }} <span aria-hidden="true">·</span> Vencimiento <time datetime="{{ cuota_pendiente.fecha_vencimiento|date:'Y-m-d' }}">{{ cuota_pendiente.fecha_vencimiento|date:"d/m/Y" }}</time></p>
+        {% else %}<p>Sin cuotas pendientes en el calendario.</p>{% endif %}
+        <details><summary>Ver datos del contrato</summary><p>Cuota pactada en el contrato: {{ fotografia.valor_cuota_estimada|cop }}. Importe contractual, no un saldo real.</p><p>Capital financiado contractual: {{ fotografia.capital_financiado|cop }}.</p></details>
+    </section>
+    <section class="payments-recent" aria-labelledby="payment-last-title">
+        <div class="payments-hero-label">{% include 'financiacion_educativa/recaudos/_icono.html' with icono='inbox' only %} Último reporte</div>
+        {% with ultimo=reportes.0 %}{% if ultimo %}
+            <h2 id="payment-last-title">{% include 'financiacion_educativa/recaudos/_estado_portada.html' with reporte=ultimo only %}</h2>
+            <p>{{ ultimo.monto_reportado|cop_recaudo }} <span aria-hidden="true">·</span> {{ ultimo.creado_en|date:"d/m/Y" }}</p>
+            <a class="payments-action" href="{% url 'financiacion_educativa_web:reporte-pago' solicitud.pk ultimo.pk %}">Ver seguimiento {% include 'financiacion_educativa/recaudos/_icono.html' with icono='arrow-right' only %}</a>
+        {% else %}<h2 id="payment-last-title">Aún no hay reportes</h2><p>Aquí podrás consultar qué pasó con tu transferencia.</p>{% endif %}{% endwith %}
+    </section>
+</div>
+<nav aria-label="Secciones de Mis pagos" class="payments-nav">
+    {% if receptor %}<a href="#pagar-breb">{% include 'financiacion_educativa/recaudos/_icono.html' with icono='bank' only %} Pagar con BRE-B</a>{% endif %}
+    <a href="#historial-pagos">{% include 'financiacion_educativa/recaudos/_icono.html' with icono='list' only %} Historial</a>
+</nav>
 {% if receptor %}
 <section class="edu-recaudos-band edu-breb-payment" id="pagar-breb" tabindex="-1" aria-labelledby="titulo-pago">
-    <header><span class="edu-breb-eyebrow">1. Realiza la transferencia</span><h2 id="titulo-pago">Paga desde tu banco</h2><p>Abre tu banco, elige escanear QR y verifica el titular antes de confirmar.</p></header>
+    <header><h2 id="titulo-pago">Paga desde tu banco</h2><p>Abre tu banco, elige escanear QR y verifica el titular antes de confirmar.</p></header>
     <div class="edu-breb-payment-grid"><div class="edu-breb-qr-area">
     {% if receptor.qr.content_type == 'application/pdf' %}<a class="edu-recaudos-button is-secondary" target="_blank" rel="noopener" href="{% url 'financiacion_educativa_web:pago-qr' solicitud.pk receptor.pk %}">Ver QR oficial en PDF</a>
     {% else %}<img class="edu-recaudos-qr" src="{% url 'financiacion_educativa_web:pago-qr' solicitud.pk receptor.pk %}" alt="QR del receptor BRE-B para escanear desde tu banco">{% endif %}
@@ -30,7 +44,7 @@
 </section>
 <details class="edu-breb-report" id="reportar-transferencia"{% if form.is_bound %} open{% endif %}>
     <summary><span>Ya realic&eacute; la transferencia</span><i class="bi bi-chevron-down" aria-hidden="true"></i></summary>
-    <header class="edu-breb-report-heading"><span class="edu-breb-eyebrow">2. Env&iacute;a tu comprobante</span><h2>Reportar transferencia</h2><p>Indica lo que transferiste. Verificaremos el ingreso en el banco.</p></header>
+    <header class="edu-breb-report-heading"><h2>Reportar transferencia</h2><p>Indica lo que transferiste. Verificaremos el ingreso en el banco.</p></header>
     <form method="post" enctype="multipart/form-data" class="edu-recaudos-form" id="formulario-reporte" tabindex="-1" aria-label="Reportar transferencia">{% csrf_token %}
         {% include "financiacion_educativa/recaudos/_errores.html" %}
         {{ form.clave }}{{ form.receptor_id }}
@@ -43,6 +57,17 @@
 </details>
 {% elif receptor_cambio %}<section class="edu-recaudos-band" role="alert"><h2>El medio de pago cambi&oacute;</h2><p>Recarga la p&aacute;gina de pagos y verifica el receptor antes de continuar. No se ha creado un reporte nuevo. Si ya transferiste al receptor anterior, contacta a soporte antes de volver a transferir.</p><dl class="edu-recaudos-summary"><div><dt>Monto ingresado (COP)</dt><dd>{{ form.monto.value|default_if_none:"" }}</dd></div><div><dt>Fecha ingresada</dt><dd>{{ form.fecha.value|default_if_none:"" }}</dd></div><div><dt>Referencia declarada</dt><dd>{{ form.referencia.value|default_if_none:"" }}</dd></div></dl><p>Conserva estos datos antes de recargar. El comprobante debe seleccionarse nuevamente.</p><a href="{% url 'financiacion_educativa_web:pagos' solicitud.pk %}">Recargar datos de pago</a></section>
 {% else %}<section class="edu-recaudos-band"><h2>Canal de pago no disponible</h2><p>El receptor a&uacute;n no est&aacute; configurado o est&aacute; inactivo. Contacta a soporte antes de transferir. No se pueden registrar pagos por este canal todav&iacute;a.</p></section>{% endif %}
-<section class="edu-recaudos-band"><h2>Tus reportes e ingresos registrados</h2>{% for reporte in reportes %}<div class="edu-recaudos-list-item"><a href="{% url 'financiacion_educativa_web:reporte-pago' solicitud.pk reporte.pk %}">{{ reporte.monto_reportado|cop_recaudo }}</a><p>{{ reporte.creado_en|date:"d/m/Y H:i" }} &middot; {% if reporte.origen == 'OPERATIONS' %}Registrado por Operaciones &middot; {% endif %}{% if reporte.conciliacion.aplicacion %}Pago aplicado a cuota{% elif reporte.conciliacion %}Transferencia confirmada{% else %}{{ reporte.estado_publico }}{% endif %}</p></div>{% empty %}<p>No has reportado transferencias.</p>{% endfor %}</section>
+<section class="edu-recaudos-band payments-history" id="historial-pagos" tabindex="-1">
+    <h2>Tus reportes e ingresos registrados</h2>
+    {% for reporte in reportes %}
+        <div class="edu-recaudos-list-item">
+            <a href="{% url 'financiacion_educativa_web:reporte-pago' solicitud.pk reporte.pk %}">{{ reporte.monto_reportado|cop_recaudo }}</a>
+            <p>{{ reporte.creado_en|date:"d/m/Y H:i" }} &middot;
+                {% if reporte.origen == 'OPERATIONS' %}Registrado por Operaciones &middot; {% endif %}
+                {% include "financiacion_educativa/recaudos/_estado_portada.html" with reporte=reporte only %}
+            </p>
+        </div>
+    {% empty %}<p>No has reportado transferencias.</p>{% endfor %}
+</section>
 <p><a href="{% url 'financiacion_educativa_web:estado-solicitud' solicitud.pk %}">Volver a tu solicitud</a></p>
 </div></section><script src="{% static 'js/financiacion_educativa_recaudos.js' %}" defer></script>{% endblock %}

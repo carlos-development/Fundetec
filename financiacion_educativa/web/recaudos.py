@@ -85,7 +85,7 @@ def pagos_view(request, solicitud_id):
         receptor = None
     return render(request, 'financiacion_educativa/recaudos/reportar.html', {
         'fotografia': fotografia, 'solicitud': fotografia.solicitud, 'receptor': receptor, 'form': form,
-        'reportes': _reportes().filter(solicitud_id=solicitud_id),
+        'reportes': list(_reportes().filter(solicitud_id=solicitud_id)),
         'receptor_cambio': receptor_cambio, 'cuota_pendiente': pendiente,
     })
 

@@ -144,6 +144,8 @@ class TableroRecaudosTests(DatosTableroRecaudos, TestCase):
         otro = self.aplicado_ajeno.aplicacion.interes_aplicado
         posterior = siguiente.aplicacion.interes_aplicado
 
+        self.assertContains(respuesta, 'Base con convenio')
+        self.assertEqual(respuesta.context['interes_con_convenio'], primero + segundo + posterior)
         self.assertTrue(respuesta.context['varias_tasas'])
         self.assertIsNone(respuesta.context['tasa_aprobado'])
         filas = {ingreso.pk: ingreso for ingreso in respuesta.context['pagina']}

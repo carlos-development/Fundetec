@@ -128,4 +128,5 @@ def construir_tablero(consulta, datos, convenios=None):
     tasa = next(iter(tasas)) if len(tasas) == 1 else None
     return {'tasa_aprobado': tasa, 'tasa_institucion': 100 - tasa if tasa is not None else None,
             'varias_tasas': len(tasas) > 1, 'meses': meses, 'totales': totales, 'indicadores': indicadores, 'reparto_periodo': reparto_periodo,
+            'interes_con_convenio': sum(reparto_periodo.values(), CERO) if reparto_periodo else CERO,
             'interes_sin_convenio': sum((mes['interes_sin_convenio'] for mes in meses), CERO)}

@@ -15,3 +15,11 @@ def cop_recaudo(valor):
         return '$' + format(numero, ',.2f').replace(',', '_').replace('.', ',').replace('_', '.')
     except (InvalidOperation, TypeError, ValueError):
         return ''
+
+
+@register.filter
+def porcentaje_recaudo(valor):
+    """Los porcentajes de convenio son Decimal con hasta cuatro decimales."""
+    entero, _, fraccion = format(valor, 'f').partition('.')
+    fraccion = fraccion.rstrip('0')
+    return f'{entero},{fraccion}' if fraccion else entero

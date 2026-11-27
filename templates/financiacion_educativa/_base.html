@@ -48,19 +48,7 @@
     {% block content %}{% endblock %}
 </main>
 
-<footer class="edu-site-footer">
-    <div class="edu-footer-inner">
-        <div class="edu-footer-brand">
-            <img src="{% static education_brand.logo_inverse|default:'images/logo.png' %}" alt="Aprobado">
-            <p class="edu-footer-copy">&copy; {% now "Y" %} Aprobado. Financiaci&oacute;n educativa.</p>
-        </div>
-        <nav class="edu-footer-links" aria-label="Informaci&oacute;n legal">
-            <a href="{{ education_simulator_url }}">Simulador educativo</a>
-            <a href="{% url 'politica_privacidad' %}">Pol&iacute;tica de privacidad</a>
-            <a href="{% url 'terminos_condiciones' %}">T&eacute;rminos y condiciones</a>
-        </nav>
-    </div>
-</footer>
+{% block site_footer %}{% include "financiacion_educativa/_site_footer.html" %}{% endblock %}
 
 {% block extra_scripts %}{% endblock %}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lottie-web/5.12.2/lottie.min.js"></script>

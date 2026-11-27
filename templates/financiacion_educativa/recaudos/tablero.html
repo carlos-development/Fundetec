@@ -77,6 +77,7 @@
         <section class="collections-panel collections-distribution" aria-labelledby="interest-distribution-title">
             <h2 id="interest-distribution-title">{% include 'financiacion_educativa/recaudos/_icono.html' with icono='diagram-split' only %} Distribución de intereses</h2>
             <p class="distribution-base">Interés neto aplicado <strong>{{ totales.intereses|cop_recaudo }}</strong></p>
+            {% if reparto_periodo and interes_sin_convenio %}<p class="distribution-covered">Base con convenio <strong>{{ interes_con_convenio|cop_recaudo }}</strong></p>{% endif %}
             <dl>
                 {% include 'financiacion_educativa/recaudos/_partes_interes.html' with partes=reparto_periodo tasa_aprobado=tasa_aprobado tasa_institucion=tasa_institucion nombre_institucion=form.nombre_institucion only %}
             </dl>
@@ -267,4 +268,6 @@
     </section>
     {% endif %}
 </div>
+{% include "financiacion_educativa/_site_footer.html" %}
 {% endblock %}
+{% block site_footer %}{% endblock %}

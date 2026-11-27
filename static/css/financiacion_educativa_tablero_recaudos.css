@@ -796,3 +796,40 @@
 .collections-distribution a { display: inline-block; padding-block: 10px; color: #a1f0ec; }
 .collections-distribution a:focus-visible { outline: 2px solid #ffe269; outline-offset: 3px; }
 .collections-breakdown { align-self: stretch; border-radius: 16px; }
+
+/* Keep the brand and navigation stationary while the ledger scrolls. The
+   flex layout accounts for the actual banner height, including when zoomed. */
+@media screen and (min-width: 1081px) {
+    body.education-collections-shell {
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+        height: 100dvh;
+        min-height: 0;
+        overflow: hidden;
+    }
+    .education-collections-shell > :is(.edu-environment-banner, .collections-navbar) { flex: none; }
+    .education-collections-shell > main { flex: 1; min-height: 0; }
+    .education-collections-shell .edu-operations-layout {
+        height: 100%;
+        min-height: 0;
+        grid-template-rows: minmax(0, 1fr);
+        grid-template-columns: 228px minmax(0, 1fr);
+    }
+    .education-collections-shell .edu-operations-layout > :is(.edu-dashboard-sidebar, .edu-dashboard-content) {
+        min-height: 0;
+        overflow-y: auto;
+    }
+    .education-collections-shell .edu-operations-layout > .edu-dashboard-sidebar { padding: 20px 12px; }
+    .education-collections-shell .collections-navbar .edu-navbar-inner { padding-inline-start: 23px; }
+    .education-collections-shell .edu-dashboard-content { scrollbar-gutter: stable; }
+}
+.education-collections-shell .collections-distribution a,
+.education-collections-shell .collections-distribution a:visited {
+    color: #c5fff5;
+    text-decoration: underline;
+    text-underline-offset: .22em;
+}
+.education-collections-shell .collections-distribution a:hover { color: #fff; }
+.education-collections-shell .collections-distribution a:focus-visible { outline-color: #ffe269; }
+.collections-distribution .distribution-covered { margin-block: -8px 12px; }
