@@ -26,31 +26,36 @@ test('Tablero operativo: importes y respaldos bancarios sin JavaScript', async t
         assert.equal(aprobado.y, institucion.y);
     }
     async function capture(name) {
-        for (const width of [320, 375, 390, 1440]) {
+        for (const width of [320, 375, 390, 1440, 1858]) {
             await page.setViewportSize({ width, height: width > 700 ? 1000 : 844 });
-            await page.evaluate(() => window.scrollTo(0, 0));
+            await page.evaluate(() => window.scrollTo({top: 0, behavior: "instant"}));
             assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `${name}: overflow ${width}`);
             assert.equal(await page.locator('.edu-navbar-logo img').evaluate(img => img.complete && img.naturalWidth > 0), true);
             if (name === '01-tablero') {
                 assert.deepEqual(await distribution.locator('dd').allTextContents(), summaryShares);
                 await assertColumns(shares.first());
-                if (width === 1440) {
+                if (width >= 1440) {
                     const layout = await page.evaluate(() => {
                         const panel = document.querySelector('.edu-dashboard-content');
+                        const layout = document.querySelector('.edu-operations-layout').getBoundingClientRect();
                         const logo = document.querySelector('.edu-navbar-logo img');
-                        const icon = document.querySelector('.edu-operations-layout > aside nav a i');
+                        const icon = document.querySelector('.collections-masthead > aside nav a i');
                         const before = [logo, icon].map(el => el.getBoundingClientRect());
-                        panel.scrollTop = 700;
+                        window.scrollTo({top: 700, behavior: "instant"});
                         const after = [logo, icon].map(el => el.getBoundingClientRect());
-                        const distance = panel.scrollTop;
-                        panel.scrollTop = 0;
+                        const distance = window.scrollY;
+                        window.scrollTo({top: 0, behavior: "instant"});
                         return {
                             distance,
+                            usesViewport: layout.left === 0 && Math.abs(layout.right - document.documentElement.clientWidth) <= 1,
+                            panelOverflow: getComputedStyle(panel).overflowY,
                             alignment: Math.abs(before[0].left - before[1].left),
                             movement: after.map((rect, i) => Math.abs(rect.top - before[i].top)),
                         };
                     });
-                    assert.ok(layout.distance > 0, 'El contenido debe desplazarse');
+                    assert.ok(layout.distance > 0, 'Debe desplazarse el documento');
+                    assert.ok(layout.usesViewport, 'El tablero debe llegar a los dos bordes');
+                    assert.equal(layout.panelOverflow, 'visible');
                     assert.ok(layout.alignment <= 1, 'El logo y los iconos deben compartir el margen');
                     assert.ok(layout.movement.every(px => px <= 1), 'El encabezado y el menú deben permanecer fijos');
                 }

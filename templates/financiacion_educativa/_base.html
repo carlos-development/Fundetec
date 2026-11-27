@@ -21,6 +21,7 @@
 {% include 'base/loader_global.html' %}
 <a class="edu-skip-link" href="#contenido-principal">Ir al contenido principal</a>
 
+{% block page_header %}
 {% if is_non_production_environment %}
 <div class="edu-environment-banner" role="status">
     Ambiente {{ deployment_environment|upper }} &middot; Pruebas sin validez contractual ni productiva
@@ -29,6 +30,7 @@
 
 {% block navbar %}
     {% include "financiacion_educativa/_navbar.html" %}
+{% endblock %}
 {% endblock %}
 
 <main id="contenido-principal">
