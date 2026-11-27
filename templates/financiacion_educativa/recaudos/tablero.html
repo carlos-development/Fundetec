@@ -73,6 +73,39 @@
     </form>
 
     {% if not form.errors %}
+    <div class="collections-analysis">
+        <section class="collections-panel collections-distribution" aria-labelledby="interest-distribution-title">
+            <h2 id="interest-distribution-title">{% include 'financiacion_educativa/recaudos/_icono.html' with icono='diagram-split' only %} Distribución de intereses</h2>
+            <p class="distribution-base">Interés neto aplicado <strong>{{ totales.intereses|cop_recaudo }}</strong></p>
+            <dl>
+                {% include 'financiacion_educativa/recaudos/_partes_interes.html' with partes=reparto_periodo tasa_aprobado=tasa_aprobado tasa_institucion=tasa_institucion nombre_institucion=form.nombre_institucion only %}
+            </dl>
+            {% if varias_tasas %}<p>El período incluye distintos porcentajes de convenio. Consulta cada movimiento.</p>{% endif %}
+            {% if interes_sin_convenio %}<p>Intereses sin política aprobada {{ interes_sin_convenio|cop_recaudo }}</p>{% endif %}
+            {% for indicador in indicadores %}{% if indicador.codigo == 'APPLIED' %}
+                <a href="{{ indicador.url }}">Ver aplicaciones del período <span aria-hidden="true">↗</span></a>
+            {% endif %}{% endfor %}
+        </section>
+        <section class="collections-panel collections-breakdown" aria-labelledby="applied-split-title">
+            <div class="collections-section-heading">
+                <h2 id="applied-split-title">Desglose de lo aplicado</h2>
+                <p>Aplicaciones registradas</p>
+            </div>
+            {% if totales.aplicados > 0 and totales.capital >= 0 and totales.intereses >= 0 %}
+                {% widthratio totales.capital totales.aplicados 1000 as participacion_capital %}
+                <div class="collections-breakdown-bar" aria-hidden="true">
+                    <span style="--capital-permille: {{ participacion_capital }}"></span>
+                </div>
+            {% endif %}
+            <dl class="collections-breakdown-values">
+                <div><dt>Capital aplicado</dt><dd>{{ totales.capital|cop_recaudo }}</dd></div>
+                <div><dt>Intereses aplicados</dt><dd id="interes-aplicado-periodo">{{ totales.intereses|cop_recaudo }}</dd></div>
+            </dl>
+            <p class="collections-note">Los ingresos por aplicar a&uacute;n no tienen desglose de capital e intereses.</p>
+        </section>
+
+    </div>
+
     <section class="collections-overview" aria-labelledby="collections-overview-title">
         <div class="collections-section-heading">
             <h2 id="collections-overview-title">Resumen del periodo</h2>
@@ -99,35 +132,6 @@
             {% endfor %}
         </div>
     </section>
-
-    <div class="collections-analysis">
-        <section class="collections-panel collections-breakdown" aria-labelledby="applied-split-title">
-            <div class="collections-section-heading">
-                <h2 id="applied-split-title">Desglose de lo aplicado</h2>
-                <p>Aplicaciones registradas</p>
-            </div>
-            {% if totales.aplicados > 0 and totales.capital >= 0 and totales.intereses >= 0 %}
-                {% widthratio totales.capital totales.aplicados 1000 as participacion_capital %}
-                <div class="collections-breakdown-bar" aria-hidden="true">
-                    <span style="--capital-permille: {{ participacion_capital }}"></span>
-                </div>
-            {% endif %}
-            <dl class="collections-breakdown-values">
-                <div><dt>Capital aplicado</dt><dd>{{ totales.capital|cop_recaudo }}</dd></div>
-                <div><dt>Intereses aplicados</dt><dd id="interes-aplicado-periodo">{{ totales.intereses|cop_recaudo }}</dd></div>
-            </dl>
-            <p class="collections-note">Los ingresos por aplicar a&uacute;n no tienen desglose de capital e intereses.</p>
-        </section>
-        <section class="collections-panel collections-distribution" aria-labelledby="interest-distribution-title">
-            <h2 id="interest-distribution-title">Distribución de intereses</h2>
-            <dl>
-                {% include 'financiacion_educativa/recaudos/_partes_interes.html' with partes=reparto_periodo only %}
-            </dl>
-            {% if reparto_periodo and interes_sin_convenio %}
-                <p class="collections-note">Intereses sin política aprobada {{ interes_sin_convenio|cop_recaudo }}</p>
-            {% endif %}
-        </section>
-    </div>
 
     <details class="collections-panel collections-history">
         <summary>
@@ -223,7 +227,7 @@
                                         <span class="collections-status is-pending">Abono parcial &middot; Cuota {{ cuota.numero }}</span>
                                     {% endif %}
                                     <dl class="collections-installment-shares">
-                                        {% include 'financiacion_educativa/recaudos/_partes_interes.html' with partes=cuota.reparto only %}
+                                        {% include 'financiacion_educativa/recaudos/_partes_interes.html' with partes=cuota.reparto tasa_aprobado=ingreso.convenio_reparto.porcentaje_aprobado tasa_institucion=ingreso.convenio_reparto.porcentaje_institucion nombre_institucion=ingreso.reporte.solicitud.institucion.nombre_comercial only %}
                                     </dl>
                                 </div>
                             {% empty %}{% if ingreso.aplicado_neto %}
@@ -231,7 +235,7 @@
                             {% endif %}{% endfor %}
                             {% if ingreso.mostrar_reparto_sin_cuota %}
                                 <dl class="collections-installment-shares">
-                                    {% include 'financiacion_educativa/recaudos/_partes_interes.html' with partes=ingreso.reparto_sin_cuota only %}
+                                    {% include 'financiacion_educativa/recaudos/_partes_interes.html' with partes=ingreso.reparto_sin_cuota tasa_aprobado=ingreso.convenio_reparto.porcentaje_aprobado tasa_institucion=ingreso.convenio_reparto.porcentaje_institucion nombre_institucion=ingreso.reporte.solicitud.institucion.nombre_comercial only %}
                                 </dl>
                             {% endif %}
                             {% if ingreso.disponible_libro %}

@@ -769,3 +769,30 @@
     .collections-indicator-heading { flex-basis: 100%; }
     .collections-indicator strong { margin-left: 0; text-align: left; }
 }
+
+.collections-distribution {
+    padding: clamp(18px, 2vw, 32px);
+    border: 0;
+    border-radius: 16px;
+    color: #e2f1f5;
+    background: #102e43;
+}
+.collections-distribution h2 { color: white; font-size: clamp(1.25rem, 2vw, 1.65rem); }
+.collections-distribution .payment-icon { color: #8ee9e5; }
+.collections-distribution .distribution-base { margin: 12px 0 20px; }
+.collections-distribution .distribution-base strong { margin-inline-start: .4em; color: white; }
+.collections-distribution dl { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.collections-distribution dl > div {
+    display: block;
+    min-width: 0;
+    padding-block: 12px;
+    border-top: 4px solid #80e1e1;
+}
+.collections-distribution dl > div + div { border-color: #ffe269; }
+.collections-distribution dt { color: #d4e6ef; }
+.collections-distribution dd { margin-top: 7px; color: white; font-size: clamp(1.05rem, 2vw, 1.85rem); overflow-wrap: anywhere; }
+.distribution-rate { display: block; font-variant-numeric: tabular-nums; }
+.collections-distribution .distribution-rate { color: white; font-weight: 700; }
+.collections-distribution a { display: inline-block; padding-block: 10px; color: #a1f0ec; }
+.collections-distribution a:focus-visible { outline: 2px solid #ffe269; outline-offset: 3px; }
+.collections-breakdown { align-self: stretch; border-radius: 16px; }

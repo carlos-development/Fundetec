@@ -45,6 +45,7 @@ def tiene_aplicacion_registrada():
 
 def repartir_cuotas(ingreso, convenios):
     convenio = _convenio_aplicable(convenios, ingreso.reporte.solicitud.institucion_id, ingreso.fecha_efectiva)
+    ingreso.convenio_reparto = convenio
     cuotas = ingreso.cuotas_aplicadas
     neto = ingreso.interes_neto.quantize(CENTAVO)
     ingreso.mostrar_reparto_sin_cuota = not cuotas and bool(neto)
@@ -72,6 +73,7 @@ def acumular_reparto(mes, convenios, institucion_id, fecha, interes):
     if convenio is None:
         mes['interes_sin_convenio'] += interes
         return
+    mes['tasas_reparto'].add(convenio.porcentaje_aprobado)
     if mes['reparto'] is None:
         mes['reparto'] = _partes(CERO, CERO)
     aprobado = _parte_aprobado(interes, convenio)

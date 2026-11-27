@@ -179,3 +179,29 @@
     .edu-breb-status-summary { gap: 12px; }
     .edu-breb-status-summary .edu-recaudos-amount { font-size: 22px; }
 }
+
+.payment-icon { width: 1.25em; height: 1.25em; vertical-align: -.2em; fill: currentColor; margin-inline-end: .3em; }
+.edu-breb-student .edu-breb-status {
+    background: #102e43;
+    color: white;
+    border-radius: 16px;
+    border-top-color: #87dede;
+}
+.edu-breb-student .edu-breb-status.is-warning { border-top-color: #ffcd65; }
+.edu-breb-student .edu-breb-status.is-confirmed { border-top-color: #85dab3; }
+.edu-breb-status h1, .edu-breb-status .edu-recaudos-summary dd { color: white; }
+.edu-breb-status > p, .edu-breb-status .edu-recaudos-summary dt { color: #d5e9f0; }
+.edu-breb-status .edu-breb-eyebrow { color: #91e4e4; }
+.edu-breb-status-summary > div { background: transparent; }
+.payment-next { display: flex; gap: 12px; align-items: flex-start; padding: 20px; background: #fff; border: 1px solid var(--edu-line); border-inline-start: 4px solid #deb735; border-radius: 12px; }
+.payment-next > svg { color: #075d79; }
+.payment-next h2, .payment-next p { margin: 0; font-size: 1rem; }
+.payment-next strong { display: block; margin-block: 6px; font-size: 1.65rem; font-variant-numeric: tabular-nums; }
+.payment-tracking { padding: 20px 4px; }
+.payment-tracking h2 { margin: 0 0 16px; font-size: 1.2rem; }
+.payment-tracking ol { list-style: none; margin: 0; padding: 0; }
+.payment-tracking li { position: relative; display: flex; gap: 12px; padding-bottom: 16px; }
+.payment-tracking li:not(:last-child)::after { content: ""; position: absolute; inset: 30px auto 0 14px; width: 2px; background: var(--edu-line); }
+.payment-tracking .payment-icon { box-sizing: content-box; flex: none; margin: 0; padding: 6px; width: 18px; height: 18px; background: #e2eaee; color: #475b6b; border-radius: 50%; }
+.payment-tracking .is-recorded .payment-icon { background: #cfefed; color: #075d65; }
+.payment-tracking small { display: block; margin-top: 2px; color: #425b6a; }

@@ -3,12 +3,15 @@
 {% block extra_head %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/financiacion_educativa_recaudos.css' %}">{% endblock %}
 {% block title %}Reportar un pago | Aprobado{% endblock %}
 {% block content %}<section class="edu-page-band"><div class="edu-page-shell edu-recaudos-shell edu-breb-student">
-<header class="edu-page-heading"><h1>Pagos y transferencias</h1><p>{{ solicitud.nombre_curso }}</p></header>
+<header class="edu-page-heading"><h1>Mis pagos</h1><p>{{ solicitud.nombre_curso }}</p></header>
 <section class="edu-breb-contract" aria-label="Resumen contractual">
-    <dl><dt>Cuota pactada en el contrato</dt><dd>{{ fotografia.valor_cuota_estimada|cop }}</dd></dl>
-    <p>Importe contractual, no un saldo real.</p>
+    {% if cuota_pendiente %}
+    <dl><dt>{% include 'financiacion_educativa/recaudos/_icono.html' with icono='calendar3' only %} Próxima cuota · {{ cuota_pendiente.numero }}</dt><dd>{{ cuota_pendiente.valor_cuota|cop_recaudo }}</dd></dl>
+    <p>Vencimiento {{ cuota_pendiente.fecha_vencimiento|date:"d/m/Y" }}</p>
+    {% else %}<p>Sin cuotas pendientes en el calendario.</p>{% endif %}
+
     {% if receptor %}<a class="edu-recaudos-button" href="#pagar-breb"><i class="bi bi-qr-code-scan" aria-hidden="true"></i> Pagar con BRE-B</a>{% endif %}
-    <details><summary>Ver datos del contrato</summary><p>Capital financiado contractual: <strong>{{ fotografia.capital_financiado|cop }}</strong>. Reportar una transferencia no actualiza tu deuda.</p></details>
+    <details><summary>Ver datos del contrato</summary><p>Cuota pactada en el contrato: {{ fotografia.valor_cuota_estimada|cop }}. Importe contractual, no un saldo real.</p><p>Capital financiado contractual: <strong>{{ fotografia.capital_financiado|cop }}</strong>. Reportar una transferencia no actualiza tu deuda.</p></details>
 </section>
 {% if receptor %}
 <section class="edu-recaudos-band edu-breb-payment" id="pagar-breb" tabindex="-1" aria-labelledby="titulo-pago">
