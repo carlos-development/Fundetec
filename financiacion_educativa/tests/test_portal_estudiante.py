@@ -95,6 +95,9 @@ class PortalEstudianteTests(DatosIngresoOperaciones, TestCase):
         self.assertEqual(respuesta.context['cuotas_aplicadas'], 0)
         self.assertFalse(AplicacionCuotaEducativa.objects.exists())
         self.assertTrue(respuesta.context['hay_confirmadas_por_aplicar'])
+        pagos = reverse('financiacion_educativa_web:pagos', args=[self.solicitud.pk])
+        self.assertContains(respuesta, f'href="{pagos}#historial-pagos">Consultar mis pagos</a>')
+        self.assertNotContains(respuesta, 'Pagar y reportar transferencia')
         self.assertEqual(respuesta.context['historial_portal'][0]['estado'], 'Transferencia confirmada')
         for privado in (ingreso.referencia_verificada, str(self.banco.pk), self.banco.archivo.name, self.actor.username):
             self.assertNotContains(respuesta, privado)
@@ -126,6 +129,8 @@ class PortalEstudianteTests(DatosIngresoOperaciones, TestCase):
             self.aplicar(ingreso)
         respuesta = self.client.get(self.finanzas)
         self.assertIsNone(respuesta.context['primera_cuota_pendiente'])
+        pagos = reverse('financiacion_educativa_web:pagos', args=[self.solicitud.pk])
+        self.assertContains(respuesta, f'href="{pagos}#historial-pagos">Consultar mis pagos</a>')
         self.assertContains(respuesta, 'Esto no constituye paz y salvo')
         self.assertNotContains(respuesta, 'Pagar y reportar transferencia')
         self.solicitud.refresh_from_db()

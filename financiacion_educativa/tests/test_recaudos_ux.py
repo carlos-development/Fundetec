@@ -370,23 +370,35 @@ class RecaudosUXTests(DatosRecaudosMixin, TestCase):
             'financiacion_educativa_web:reporte-pago',
             args=[self.solicitud.pk, self.reporte.pk],
         )
+        historial = f'{pagos}#historial-pagos'
         en_revision = self.client.get(url)
         self.assertContains(en_revision, 'Reporte en revisi&oacute;n')
         self.assertContains(en_revision, f'href="{seguimiento}"')
-        self.assertNotContains(en_revision, f'href="{pagos}"')
+        self.assertContains(en_revision, f'href="{historial}">Consultar mis pagos</a>')
+        self.assertNotContains(en_revision, 'Pagar y reportar transferencia')
+        mis_pagos = self.client.get(pagos)
+        self.assertContains(mis_pagos, 'id="historial-pagos"')
+        self.assertContains(mis_pagos, f'href="{seguimiento}"')
+
+        with override_settings(FINANCIACION_EDUCATIVA_RECAUDOS_ENABLED=False):
+            deshabilitado = self.client.get(url)
+            self.assertNotContains(deshabilitado, f'href="{pagos}"')
+            self.assertNotContains(deshabilitado, f'href="{historial}"')
+            self.assertEqual(self.client.get(pagos).status_code, 404)
 
         servicios.rechazar_reporte(
             reporte_id=self.reporte.pk,
             actor=self.actor,
             motivo='El banco no confirmó el movimiento de prueba.',
         )
-        self.assertContains(self.client.get(url), f'href="{pagos}"')
-        with override_settings(FINANCIACION_EDUCATIVA_RECAUDOS_ENABLED=False):
-            self.assertNotContains(self.client.get(url), f'href="{pagos}"')
-            self.assertEqual(self.client.get(pagos).status_code, 404)
+        actualizado = self.client.get(url)
+        self.assertContains(actualizado, f'href="{pagos}">Pagar y reportar transferencia</a>')
+        self.assertNotContains(actualizado, f'href="{historial}"')
 
         ProcesoFirmaEducativa.objects.filter(solicitud=self.solicitud).update(estado='SENT')
-        self.assertNotContains(self.client.get(url), f'href="{pagos}"')
+        sin_firma = self.client.get(url)
+        self.assertNotContains(sin_firma, f'href="{pagos}"')
+        self.assertNotContains(sin_firma, f'href="{historial}"')
         self.assertEqual(self.client.get(pagos).status_code, 404)
 
     def test_finanzas_y_pagos_no_acceden_por_ser_operador_sin_propiedad(self):
