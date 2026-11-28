@@ -87,7 +87,7 @@ def resumir_meses(consulta, convenios):
         if inicio not in por_mes:
             por_mes[inicio] = dict(mes=inicio, confirmados=CERO, pendientes=CERO, aplicados=CERO,
                                    capital=CERO, intereses=CERO, cantidad_confirmados=0, cantidad_pendientes=0,
-                                   cantidad_aplicados=0, reparto=None, interes_sin_convenio=CERO)
+                                   cantidad_aplicados=0, reparto=None, tasas_reparto=set(), interes_sin_convenio=CERO)
         mes = por_mes[inicio]
         capital = capital.quantize(CENTAVO)
         interes = interes.quantize(CENTAVO)
@@ -124,5 +124,9 @@ def construir_tablero(consulta, datos, convenios=None):
     reparto_periodo = None
     if repartos:
         reparto_periodo = {campo: sum((r[campo] for r in repartos), CERO) for campo in ('aprobado', 'institucion')}
-    return {'meses': meses, 'totales': totales, 'indicadores': indicadores, 'reparto_periodo': reparto_periodo,
+    tasas = {tasa for mes in meses for tasa in mes['tasas_reparto']}
+    tasa = next(iter(tasas)) if len(tasas) == 1 else None
+    return {'tasa_aprobado': tasa, 'tasa_institucion': 100 - tasa if tasa is not None else None,
+            'varias_tasas': len(tasas) > 1, 'meses': meses, 'totales': totales, 'indicadores': indicadores, 'reparto_periodo': reparto_periodo,
+            'interes_con_convenio': sum(reparto_periodo.values(), CERO) if reparto_periodo else CERO,
             'interes_sin_convenio': sum((mes['interes_sin_convenio'] for mes in meses), CERO)}

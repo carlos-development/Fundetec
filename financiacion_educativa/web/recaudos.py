@@ -85,8 +85,8 @@ def pagos_view(request, solicitud_id):
         receptor = None
     return render(request, 'financiacion_educativa/recaudos/reportar.html', {
         'fotografia': fotografia, 'solicitud': fotografia.solicitud, 'receptor': receptor, 'form': form,
-        'reportes': _reportes().filter(solicitud_id=solicitud_id),
-        'receptor_cambio': receptor_cambio,
+        'reportes': list(_reportes().filter(solicitud_id=solicitud_id)),
+        'receptor_cambio': receptor_cambio, 'cuota_pendiente': pendiente,
     })
 
 
@@ -96,7 +96,10 @@ def pagos_view(request, solicitud_id):
 def reporte_view(request, solicitud_id, reporte_id):
     fotografia = _propiedad(request, solicitud_id)
     reporte = get_object_or_404(_reportes(), pk=reporte_id, solicitud_id=solicitud_id)
-    return render(request, 'financiacion_educativa/recaudos/estado.html', {'reporte': reporte, 'solicitud': fotografia.solicitud})
+    return render(request, 'financiacion_educativa/recaudos/estado.html', {
+        'reporte': reporte, 'solicitud': fotografia.solicitud,
+        'cuota_pendiente': calendario_del_portal(fotografia)['primera_cuota_pendiente'],
+    })
 
 
 def _archivo_response(archivo, descargar=False):

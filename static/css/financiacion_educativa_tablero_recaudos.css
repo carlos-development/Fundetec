@@ -23,7 +23,7 @@
 }
 
 .collections-navbar .edu-navbar-inner {
-    width: min(100%, 1680px);
+    width: 100%;
     min-height: 60px;
     padding-inline: clamp(16px, 2.1vw, 36px);
     gap: 20px;
@@ -132,20 +132,13 @@
 .collections-account button:hover { background: var(--edu-soft); }
 
 .education-collections-shell .edu-operations-layout {
-    width: min(100%, 1680px);
-    grid-template-columns: 213px minmax(0, 1fr);
+    width: 100%;
+    grid-template-columns: minmax(0, 1fr);
     gap: 0;
     padding: 0;
 }
 
-.education-collections-shell .edu-operations-layout > .edu-dashboard-sidebar {
-    position: relative;
-    top: auto;
-    align-self: stretch;
-    background: var(--edu-white);
-    border-right: 1px solid var(--edu-line);
-    padding: 27px 10px 28px;
-}
+.collections-masthead > .edu-dashboard-sidebar { display: none; }
 
 .education-collections-shell .edu-dashboard-sidebar nav {
     background: transparent;
@@ -665,10 +658,6 @@
 }
 
 @media (max-width: 1080px) {
-    .education-collections-shell .edu-operations-layout { grid-template-columns: minmax(0, 1fr); }
-
-    .education-collections-shell .edu-operations-layout > .edu-dashboard-sidebar { display: none; }
-
     .collections-mobile-nav {
         display: block;
         background: var(--edu-white);
@@ -769,3 +758,70 @@
     .collections-indicator-heading { flex-basis: 100%; }
     .collections-indicator strong { margin-left: 0; text-align: left; }
 }
+
+.collections-distribution {
+    padding: clamp(18px, 2vw, 32px);
+    border: 0;
+    border-radius: 16px;
+    color: #e2f1f5;
+    background: #102e43;
+}
+.collections-distribution h2 { color: white; font-size: clamp(1.25rem, 2vw, 1.65rem); }
+.collections-distribution .payment-icon { color: #8ee9e5; }
+.collections-distribution .distribution-base { margin: 12px 0 20px; }
+.collections-distribution .distribution-base strong { margin-inline-start: .4em; color: white; }
+.collections-distribution dl { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.collections-distribution dl > div {
+    display: block;
+    min-width: 0;
+    padding-block: 12px;
+    border-top: 4px solid #80e1e1;
+}
+.collections-distribution dl > div + div { border-color: #ffe269; }
+.collections-distribution dt { color: #d4e6ef; }
+.collections-distribution dd { margin-top: 7px; color: white; font-size: clamp(1.05rem, 2vw, 1.85rem); overflow-wrap: anywhere; }
+.distribution-rate { display: block; font-variant-numeric: tabular-nums; }
+.collections-distribution .distribution-rate { color: white; font-weight: 700; }
+.collections-distribution a { display: inline-block; padding-block: 10px; color: #a1f0ec; }
+.collections-distribution a:focus-visible { outline: 2px solid #ffe269; outline-offset: 3px; }
+.collections-breakdown { align-self: stretch; border-radius: 16px; }
+
+/* The document scrolls at the window edge. The rail is anchored to the
+   measured-by-layout masthead, including an optional environment banner. */
+@media screen and (min-width: 1081px) {
+    .education-collections-shell { --collections-rail-width: 228px; }
+    .collections-masthead {
+        position: sticky;
+        top: 0;
+        z-index: 1100;
+    }
+    .collections-masthead > .edu-dashboard-sidebar {
+        display: block;
+        position: absolute;
+        inset: 100% auto auto 0;
+        box-sizing: border-box;
+        width: var(--collections-rail-width);
+        height: calc(100vh - 100%);
+        height: calc(100dvh - 100%);
+        overflow-y: auto;
+        padding: 20px 12px;
+        background: var(--edu-white);
+        border-right: 1px solid var(--edu-line);
+    }
+    .education-collections-shell .collections-navbar .edu-navbar-inner { padding-inline-start: 23px; }
+    .education-collections-shell .edu-operations-layout {
+        box-sizing: border-box;
+        padding-inline-start: var(--collections-rail-width);
+    }
+    .collections-page { padding: 24px clamp(20px, 1.65vw, 32px) 40px; }
+    html:has(.education-collections-shell) { scroll-padding-top: 7rem; }
+}
+.education-collections-shell .collections-distribution a,
+.education-collections-shell .collections-distribution a:visited {
+    color: #c5fff5;
+    text-decoration: underline;
+    text-underline-offset: .22em;
+}
+.education-collections-shell .collections-distribution a:hover { color: #fff; }
+.education-collections-shell .collections-distribution a:focus-visible { outline-color: #ffe269; }
+.collections-distribution .distribution-covered { margin-block: -8px 12px; }

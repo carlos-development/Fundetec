@@ -124,6 +124,15 @@ class TableroRecaudosTests(DatosTableroRecaudos, TestCase):
         pendiente = self.consultar(institucion=self.institucion.pk, estado='TO_APPLY')
         self.assertNotContains(pendiente, 'class="collections-installment-shares"')
 
+    def test_porcentajes_del_convenio_en_el_resumen_y_el_movimiento(self):
+        self.crear_convenio(porcentaje_aprobado=Decimal('0'))
+        respuesta = self.consultar(institucion=self.institucion.pk, estado='APPLIED')
+        self.assertEqual(respuesta.context['tasa_aprobado'], Decimal('0'))
+        self.assertContains(respuesta, '0 %</span>')
+        self.assertContains(respuesta, '100 %</span>')
+        self.assertContains(respuesta, self.institucion.nombre_comercial)
+        self.assertFalse(respuesta.context['varias_tasas'])
+
     def test_reparte_por_institucion_y_vigencia_y_cuadra_cada_periodo(self):
         self.crear_convenio(vigente_hasta=date(2026, 9, 29), porcentaje_aprobado=Decimal('0'))
         self.crear_convenio(version='SYNTHETIC-NEXT', vigente_desde=date(2026, 9, 30),
@@ -135,6 +144,10 @@ class TableroRecaudosTests(DatosTableroRecaudos, TestCase):
         otro = self.aplicado_ajeno.aplicacion.interes_aplicado
         posterior = siguiente.aplicacion.interes_aplicado
 
+        self.assertContains(respuesta, 'Base con convenio')
+        self.assertEqual(respuesta.context['interes_con_convenio'], primero + segundo + posterior)
+        self.assertTrue(respuesta.context['varias_tasas'])
+        self.assertIsNone(respuesta.context['tasa_aprobado'])
         filas = {ingreso.pk: ingreso for ingreso in respuesta.context['pagina']}
         self.assertEqual(filas[self.aplicado.pk].cuotas_aplicadas[0]['reparto'],
             {'aprobado': Decimal('0'), 'institucion': primero})

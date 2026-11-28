@@ -5,9 +5,10 @@
 {% block content %}<section class="edu-page-band"><div class="edu-page-shell edu-recaudos-shell edu-breb-student">
 <p class="edu-breb-course">{{ solicitud.nombre_curso }}</p>
 <section class="edu-breb-status{% if reporte.conciliacion %} is-confirmed{% elif reporte.rechazo or reporte.comprobante.estado_escaneo == 'BLOCKED' %} is-warning{% endif %}" aria-labelledby="estado-reporte">
-    <span class="edu-breb-eyebrow">Tu reporte de transferencia</span>
-    <h1 id="estado-reporte">{% if reporte.conciliacion %}Transferencia confirmada{% else %}{{ reporte.estado_publico }}{% endif %}</h1>
+    <span class="edu-breb-eyebrow">{% if reporte.conciliacion %}{% include 'financiacion_educativa/recaudos/_icono.html' with icono='bank' only %}{% else %}{% include 'financiacion_educativa/recaudos/_icono.html' with icono='inbox' only %}{% endif %} Tu reporte de transferencia</span>
+    <h1 id="estado-reporte">{% if reporte.conciliacion %}Transferencia confirmada{% elif reporte.rechazo %}{{ reporte.estado_publico }}{% else %}Tu pago está en revisión{% endif %}</h1>
     {% if reporte.conciliacion.aplicacion %}<p>Pago aplicado a la cuota {{ reporte.conciliacion.aplicacion.cuota.numero }}.</p>
+    {% elif reporte.dinero_aplicado > 0 %}<p>{{ reporte.estado_publico }}</p>
     {% elif reporte.conciliacion %}<p>La aplicaci&oacute;n a tu cuota est&aacute; pendiente</p>
     {% elif reporte.rechazo %}<p>{{ reporte.rechazo.motivo_publico }}</p><p>Corrige el reporte, no tu solicitud de financiaci&oacute;n.</p>
     {% elif reporte.comprobante.estado_escaneo == 'BLOCKED' %}<p>Tu comprobante fue bloqueado por seguridad. Contacta a soporte antes de volver a reportar.</p>
@@ -17,6 +18,19 @@
     {% if reporte.rechazo %}<a class="edu-recaudos-button" href="{% url 'financiacion_educativa_web:pagos' solicitud.pk %}#formulario-reporte">Corregir con un nuevo reporte</a>
     {% elif not reporte.conciliacion %}<a class="edu-recaudos-button" href="{% url 'financiacion_educativa_web:reporte-pago' solicitud.pk reporte.pk %}"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i> Consultar nuevamente</a>{% endif %}
 </section>
+{% if reporte.origen != 'OPERATIONS' and not reporte.rechazo and reporte.comprobante.estado_escaneo != 'BLOCKED' and reporte.comprobante.estado_escaneo != 'ERROR' %}
+<section class="payment-tracking" aria-labelledby="seguimiento-pago">
+    <h2 id="seguimiento-pago">Seguimiento del pago</h2>
+    <ol>
+        <li class="is-recorded">{% include 'financiacion_educativa/recaudos/_icono.html' with icono='inbox' only %}
+            <div><strong>Reporte recibido</strong><small>{{ reporte.creado_en|date:"d/m/Y H:i" }}</small></div></li>
+        <li{% if reporte.conciliacion %} class="is-recorded"{% endif %}>{% include 'financiacion_educativa/recaudos/_icono.html' with icono='bank' only %}
+            <div><strong>Verificación bancaria</strong><small>{% if reporte.conciliacion %}Ingreso confirmado{% else %}Pendiente{% endif %}</small></div></li>
+        <li{% if reporte.dinero_aplicado > 0 %} class="is-recorded"{% endif %}>{% include 'financiacion_educativa/recaudos/_icono.html' with icono='check2-circle' only %}
+            <div><strong>Aplicación del ingreso</strong><small>{% if reporte.dinero_aplicado > 0 %}Aplicado neto {{ reporte.dinero_aplicado|cop_recaudo }}{% else %}Sin aplicación neta{% endif %}</small></div></li>
+    </ol>
+</section>
+{% endif %}
 <details class="edu-recaudos-disclosure edu-breb-report-details"><summary>Detalles del reporte y comprobante</summary>
     {% if reporte.origen == 'OPERATIONS' %}<p>Ingreso registrado por Operaciones. No se aporto un comprobante del pagador.</p>{% else %}
     <dl class="edu-recaudos-summary"><div><dt>Prop&oacute;sito declarado</dt><dd>{{ reporte.get_proposito_display }}</dd></div><div><dt>Receptor</dt><dd>{{ reporte.receptor.titular }}</dd></div><div><dt>Monto reportado</dt><dd>{{ reporte.monto_reportado|cop_recaudo }}</dd></div><div><dt>Fecha declarada</dt><dd>{{ reporte.fecha_declarada|date:"d/m/Y" }}</dd></div></dl>
@@ -28,5 +42,11 @@
     {% endif %}
     {% if not reporte.conciliacion %}<p>El reporte no acredita cuota pagada ni saldo actualizado.</p>{% endif %}
 </details>
+{% if cuota_pendiente %}
+<section class="payment-next" aria-label="Próxima cuota">
+    {% include 'financiacion_educativa/recaudos/_icono.html' with icono='calendar3' only %}
+    <div><h2>Próxima cuota · {{ cuota_pendiente.numero }}</h2><strong>{{ cuota_pendiente.valor_cuota|cop_recaudo }}</strong><p>Vencimiento {{ cuota_pendiente.fecha_vencimiento|date:"d/m/Y" }}</p></div>
+</section>
+{% endif %}
 <p><a href="{% url 'financiacion_educativa_web:pagos' solicitud.pk %}">Volver a pagos y reportes</a></p>
 </div></section>{% endblock %}

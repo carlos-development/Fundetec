@@ -112,6 +112,7 @@ class FiltrosRecaudosForm(forms.Form):
 
     def clean_institucion(self):
         institucion = self.cleaned_data['institucion']
+        self.nombre_institucion = institucion.nombre_comercial if institucion else ''
         return institucion.pk if institucion else None
 
     def clean(self):
