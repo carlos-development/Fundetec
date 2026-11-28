@@ -137,7 +137,7 @@ def listado_view(request):
     if institucion:
         gobierno.puede_consultar_politicas(request.user, institucion.pk)
         propuestas = PropuestaPoliticaLibro.objects.filter(institucion=institucion).prefetch_related('eventos').order_by('-pk')
-    return render(request, 'financiacion_educativa/recaudos/politicas.html', _contexto(request,
+    return render(request, 'financiacion_educativa/recaudos/politicas.html', _contexto(request, seccion_operativa='politicas-libro',
         selector=selector, form=form, propuestas=propuestas, control=ControlPilotoLibro.objects.get(pk=1)))
 
 
@@ -180,7 +180,7 @@ def detalle_view(request, propuesta_id):
     else:
         filas = [(REGLAS[k][0], dict(REGLAS[k][1])[v]) for k, v in propuesta.reglas.items()]
     return render(request, 'financiacion_educativa/recaudos/politica_detalle.html',
-        _contexto(request, propuesta=propuesta, reglas=filas, eventos=propuesta.eventos.select_related('actor').order_by('pk'), form=form))
+        _contexto(request, seccion_operativa='politicas-libro', propuesta=propuesta, reglas=filas, eventos=propuesta.eventos.select_related('actor').order_by('pk'), form=form))
 
 
 @never_cache
@@ -199,7 +199,7 @@ def control_view(request):
         else:
             return redirect('financiacion_educativa_web:operaciones:politicas-libro')
     return render(request, 'financiacion_educativa/recaudos/control_piloto.html',
-        _contexto(request, form=form, control=ControlPilotoLibro.objects.get(pk=1)))
+        _contexto(request, seccion_operativa='politicas-libro', form=form, control=ControlPilotoLibro.objects.get(pk=1)))
 
 
 @never_cache
@@ -213,4 +213,4 @@ def alcances_view(request):
         gobierno.asignar_alcance(institucion_id=datos.pop('institucion').pk,
             usuario_id=datos.pop('usuario').pk, actor=request.user, **datos)
         return redirect('financiacion_educativa_web:operaciones:politicas-libro')
-    return render(request, 'financiacion_educativa/recaudos/alcances_libro.html', _contexto(request, form=form))
+    return render(request, 'financiacion_educativa/recaudos/alcances_libro.html', _contexto(request, seccion_operativa='politicas-libro', form=form))

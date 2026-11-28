@@ -1,0 +1,11 @@
+<details class="edu-workspace-account">
+    <summary>
+        <span class="edu-workspace-account-icon" aria-hidden="true">{{ account_label|first|upper }}</span>
+        <span>{{ account_label }}</span>
+        <span class="edu-workspace-chevron" aria-hidden="true"></span>
+    </summary>
+    <form method="post" action="{% url 'account_logout' %}">
+        {% csrf_token %}
+        <button type="submit"><i class="bi bi-box-arrow-right" aria-hidden="true"></i> Cerrar sesión</button>
+    </form>
+</details>

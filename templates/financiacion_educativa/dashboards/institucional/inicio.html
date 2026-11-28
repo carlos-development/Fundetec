@@ -4,18 +4,23 @@
 {% block title %}Panel del programa | {{ education_brand.name|default:"Aprobado" }}{% endblock %}
 
 {% block dashboard_content %}
-<header class="edu-dashboard-heading">
-    <p class="edu-eyebrow">Financiaci&oacute;n educativa</p>
-    <h1>Resumen del programa</h1>
-    <p>Consulta el estado agregado y la actividad reciente del programa <strong>{{ institucion_activa.nombre_comercial }}</strong>.</p>
-    <a class="edu-dashboard-text-link" href="{% url 'financiacion_educativa_web:institucion:reportes' %}">Ver reportes por radicaci&oacute;n</a>
+<header class="edu-workspace-hero">
+    <div>
+        <p class="edu-eyebrow">{{ institucion_activa.nombre_comercial }}</p>
+        <h1>Resumen del programa</h1>
+        <p>Consulta las solicitudes y la actividad reciente de tu programa.</p>
+    </div>
+    <nav aria-label="Accesos del programa">
+        <a href="{% url 'financiacion_educativa_web:institucion:solicitudes' %}"><i class="bi bi-file-earmark-text" aria-hidden="true"></i> Ver solicitudes</a>
+        <a href="{% url 'financiacion_educativa_web:institucion:reportes' %}"><i class="bi bi-bar-chart" aria-hidden="true"></i> Ver reportes</a>
+    </nav>
 </header>
 
 {% include "financiacion_educativa/dashboards/institucional/_indicadores.html" %}
 
 <section class="edu-dashboard-panel" aria-labelledby="recent-applications-title">
     <div class="edu-dashboard-section-heading">
-        <div><p class="edu-eyebrow">Actividad reciente</p><h2 id="recent-applications-title">Solicitudes recientes</h2></div>
+        <h2 id="recent-applications-title">Solicitudes recientes</h2>
         <a class="edu-dashboard-text-link" href="{% url 'financiacion_educativa_web:institucion:solicitudes' %}">Ver todas</a>
     </div>
     {% if solicitudes_recientes %}
@@ -34,8 +39,4 @@
     {% endif %}
 </section>
 
-<section aria-labelledby="future-sections-title">
-    <div class="edu-dashboard-section-heading"><div><p class="edu-eyebrow">Pr&oacute;ximas secciones</p><h2 id="future-sections-title">Herramientas del programa</h2></div></div>
-    <div class="edu-dashboard-placeholder-grid">{% for seccion in secciones_proximas %}<article class="edu-dashboard-placeholder"><i class="bi {{ seccion.icono }}" aria-hidden="true"></i><div><span>Pr&oacute;ximamente</span><h3>{{ seccion.titulo }}</h3><p>{{ seccion.descripcion }}</p></div></article>{% endfor %}</div>
-</section>
 {% endblock %}
