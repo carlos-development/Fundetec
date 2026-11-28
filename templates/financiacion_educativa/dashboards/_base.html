@@ -1,22 +1,8 @@
-{% extends "financiacion_educativa/_base.html" %}
-{% load static %}
+{% extends "financiacion_educativa/dashboards/_workspace.html" %}
 
-{% block extra_head %}
-    {{ block.super }}
-    <link rel="stylesheet" href="{% static 'css/financiacion_educativa_dashboard.css' %}">
-{% endblock %}
-
-{% block body_class %}education-dashboard-shell{% endblock %}
-
-{% block navbar %}
-    {% include "financiacion_educativa/dashboards/_navbar_institucional.html" %}
-{% endblock %}
-
-{% block content %}
-<div class="edu-dashboard-layout">
-    {% include "financiacion_educativa/dashboards/_sidebar_institucional.html" %}
-    <section class="edu-dashboard-content" aria-label="Contenido del panel del programa">
-        {% block dashboard_content %}{% endblock %}
-    </section>
-</div>
-{% endblock %}
+{% block navbar %}{% include "financiacion_educativa/dashboards/_navbar_institucional.html" %}{% endblock %}
+{% block workspace_sidebar %}{% include "financiacion_educativa/dashboards/_sidebar_institucional.html" %}{% endblock %}
+{% block workspace_mobile_sidebar %}{% include "financiacion_educativa/dashboards/_sidebar_institucional.html" %}{% endblock %}
+{% block workspace_menu_label %}Menú del programa{% endblock %}
+{% block workspace_content_label %}Contenido del panel del programa{% endblock %}
+{% block workspace_content %}{% block dashboard_content %}{% endblock %}{% endblock %}

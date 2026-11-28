@@ -8,39 +8,6 @@
     <link rel="stylesheet" href="{% static 'css/financiacion_educativa_tablero_recaudos.css' %}">
 {% endblock %}
 {% block body_class %}{{ block.super }} education-collections-shell{% endblock %}
-{% block page_header %}
-<div class="collections-masthead">
-    {{ block.super }}
-    {% include "financiacion_educativa/dashboards/operaciones/_sidebar.html" %}
-</div>
-{% endblock %}
-{% block navbar %}
-<header class="edu-navbar collections-navbar">
-    <div class="edu-navbar-inner">
-        <a class="edu-navbar-logo" href="{% url 'financiacion_educativa_web:operaciones:inicio' %}" aria-label="Aprobado, panel operativo">
-            <img src="{% static education_brand.logo|default:'images/logo-dark.png' %}" alt="Aprobado">
-        </a>
-        <span class="collections-module">Operaciones Aprobado</span>
-        <details class="collections-account">
-            <summary>
-                <span class="collections-avatar" aria-hidden="true">{{ request.user.get_short_name|default:request.user.get_username|first|upper }}</span>
-                <span class="collections-account-name">{{ request.user.get_short_name|default:request.user.get_username }}</span>
-            </summary>
-            <form method="post" action="{% url 'account_logout' %}">
-                {% csrf_token %}
-                <button type="submit"><svg class="collections-icon" aria-hidden="true" focusable="false"><use href="{% static 'images/recaudos/tablero-iconos.svg' %}#box-arrow-right"></use></svg> Cerrar sesión</button>
-            </form>
-        </details>
-    </div>
-</header>
-{% endblock %}
-{% block operations_navigation %}
-    <details class="collections-mobile-nav">
-        <summary><svg class="collections-icon" aria-hidden="true" focusable="false"><use href="{% static 'images/recaudos/tablero-iconos.svg' %}#list"></use></svg> Menú de Operaciones</summary>
-        {% include "financiacion_educativa/dashboards/operaciones/_sidebar.html" %}
-    </details>
-{% endblock %}
-
 {% block operations_content %}
 <div class="collections-page">
     <header class="collections-heading">
@@ -273,6 +240,4 @@
     </section>
     {% endif %}
 </div>
-{% include "financiacion_educativa/_site_footer.html" %}
 {% endblock %}
-{% block site_footer %}{% endblock %}

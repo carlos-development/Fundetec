@@ -37,9 +37,9 @@ test('Tablero operativo: importes y respaldos bancarios sin JavaScript', async t
                 if (width >= 1440) {
                     const layout = await page.evaluate(() => {
                         const panel = document.querySelector('.edu-dashboard-content');
-                        const layout = document.querySelector('.edu-operations-layout').getBoundingClientRect();
+                        const layout = document.querySelector('.edu-workspace-layout').getBoundingClientRect();
                         const logo = document.querySelector('.edu-navbar-logo img');
-                        const icon = document.querySelector('.collections-masthead > aside nav a i');
+                        const icon = document.querySelector('.edu-workspace-masthead > aside nav a i');
                         const before = [logo, icon].map(el => el.getBoundingClientRect());
                         window.scrollTo({top: 700, behavior: "instant"});
                         const after = [logo, icon].map(el => el.getBoundingClientRect());

@@ -1,0 +1,29 @@
+{% extends "financiacion_educativa/_base.html" %}
+{% load static %}
+
+{% block extra_head %}
+    {{ block.super }}
+    <link rel="stylesheet" href="{% static 'css/financiacion_educativa_dashboard.css' %}">
+    <link rel="stylesheet" href="{% static 'css/financiacion_educativa_workspace.css' %}">
+{% endblock %}
+
+{% block body_class %}education-dashboard-shell education-workspace{% endblock %}
+
+{% block page_header %}
+<div class="edu-workspace-masthead">
+    {{ block.super }}
+    {% block workspace_sidebar %}{% endblock %}
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="edu-dashboard-layout edu-workspace-layout">
+    <details class="edu-workspace-mobile-nav">
+        <summary><i class="bi bi-list" aria-hidden="true"></i> {% block workspace_menu_label %}Menú{% endblock %}</summary>
+        {% block workspace_mobile_sidebar %}{% endblock %}
+    </details>
+    <section class="edu-dashboard-content" aria-label="{% block workspace_content_label %}Contenido del panel{% endblock %}">
+        {% block workspace_content %}{% endblock %}
+    </section>
+</div>
+{% endblock %}

@@ -1,7 +1,7 @@
 {% load financiacion_format %}
 <section class="edu-page-band"><div class="edu-page-shell edu-student">
     <a class="edu-student-back" href="{% url 'financiacion_educativa_web:reanudar-solicitudes' %}?seccion=financiaciones">Volver a mis financiaciones</a>
-    <header class="edu-page-heading"><p class="edu-eyebrow">{{ solicitud.institucion.nombre_comercial }}</p><h1>{{ solicitud.nombre_curso }}</h1><span class="edu-student-status is-applied">Curso autorizado</span></header>
+    <header class="edu-page-heading edu-student-banner"><p class="edu-eyebrow">{{ solicitud.institucion.nombre_comercial }}</p><h1>{{ solicitud.nombre_curso }}</h1><span class="edu-student-status is-applied">Curso autorizado</span></header>
     <dl class="edu-student-metrics">
         <div><dt>{% if plan_libro_modificado %}Primera cuota proyectada{% else %}Primera cuota sin aplicar{% endif %}</dt><dd>{% if primera_cuota_pendiente %}{{ primera_cuota_pendiente.valor_cuota|cop }}{% else %}Ninguna{% endif %}</dd>{% if primera_cuota_pendiente %}<span>Cuota {{ primera_cuota_pendiente.numero }}{% if not plan_libro_modificado %} de {{ cuotas_portal|length }}{% endif %}</span>{% endif %}</div>
         <div><dt>{% if plan_libro_modificado %}Vencimiento proyectado{% else %}Vencimiento contractual{% endif %}</dt><dd>{% if primera_cuota_pendiente %}<time datetime="{{ primera_cuota_pendiente.fecha_vencimiento|date:'Y-m-d' }}">{{ primera_cuota_pendiente.fecha_vencimiento|date:"d M" }}</time>{% else %}No corresponde{% endif %}</dd>{% if primera_cuota_pendiente %}<span>{{ primera_cuota_pendiente.fecha_vencimiento|date:"Y" }}</span>{% endif %}</div>

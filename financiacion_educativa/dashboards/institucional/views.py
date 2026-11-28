@@ -28,15 +28,6 @@ from .selectors import (
 )
 
 
-SECCIONES_PROXIMAS = (
-    {
-        'titulo': 'Integracion',
-        'descripcion': 'Gestion de integracion disponible en una fase posterior.',
-        'icono': 'bi-braces',
-    },
-)
-
-
 def _contexto_dashboard(request, *, seccion_dashboard='inicio', **adicional):
     return {
         'membresia_institucional': getattr(
@@ -76,7 +67,6 @@ def inicio_view(request):
                 institucion=institucion
             ),
             solicitudes_recientes=recientes,
-            secciones_proximas=SECCIONES_PROXIMAS,
         ),
     )
 
